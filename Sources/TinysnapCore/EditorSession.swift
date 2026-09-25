@@ -116,6 +116,15 @@ public struct EditorSession {
         if typingID == nil { history.commit(display, mergeKey: merging ? "style \(id)" : nil) }
     }
 
+    // MARK: Backdrop
+
+    /// Sets or clears the backdrop as one undoable step. `merging` is for the colour
+    /// panel's stream of changes, which undoes as one.
+    public mutating func setBackdrop(_ backdrop: Backdrop?, merging: Bool = false) {
+        display.backdrop = backdrop
+        history.commit(display, mergeKey: merging ? "backdrop" : nil)
+    }
+
     // MARK: Magnifier
 
     /// The topmost magnifier under `point`, which the scroll wheel zooms.
@@ -406,7 +415,12 @@ public struct EditorSession {
         let rect = CGRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
                           width: size.width, height: size.height)
 
-        let annotation = Annotation(kind: .image(rect, image), style: style(for: .image))
+        // Corners carry over from the last image; see-through and difference do not, so
+        // a new paste is never a faint or inverted surprise.
+        var style = style(for: .image)
+        style.opacity = 1
+        style.difference = false
+        let annotation = Annotation(kind: .image(rect, image), style: style)
         display.annotations.append(annotation)
         history.commit(display)
         selection = annotation.id

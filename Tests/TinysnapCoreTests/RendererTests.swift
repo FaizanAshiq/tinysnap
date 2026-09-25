@@ -3,6 +3,26 @@ import Testing
 @testable import TinysnapCore
 
 struct RendererTests {
+    @Test func aHalfSeeThroughOverlayLandsHalfwayBetweenItAndTheCapture() {
+        let capture = Fixture.capture(width: 100, height: 100)
+        let black = PastedImage(Fixture.capture(width: 10, height: 10, fill: Fixture.black).image)
+        let overlay = Annotation(kind: .image(CGRect(x: 10, y: 10, width: 40, height: 40), black),
+                                 style: Style(colorHex: Palette.red, corners: .square, opacity: 0.5))
+        let image = render(capture, [overlay])
+        #expect(Fixture.isClose(Fixture.pixel(image, 30, 30), (128, 128, 128), within: 4))
+        #expect(Fixture.isClose(Fixture.pixel(image, 80, 80), (255, 255, 255)))
+    }
+
+    @Test func aDifferenceOverlayMatchingTheCaptureRendersBlack() {
+        let capture = Fixture.capture(width: 100, height: 100, fill: Fixture.blue)
+        let same = PastedImage(Fixture.capture(width: 10, height: 10, fill: Fixture.blue).image)
+        let overlay = Annotation(kind: .image(CGRect(x: 10, y: 10, width: 40, height: 40), same),
+                                 style: Style(colorHex: Palette.red, corners: .square, difference: true))
+        let image = render(capture, [overlay])
+        #expect(Fixture.isClose(Fixture.pixel(image, 30, 30), (0, 0, 0)))
+        #expect(Fixture.isClose(Fixture.pixel(image, 80, 80), (0, 0, 255)))
+    }
+
     @Test func aGrownCanvasTakesTheColourMostOfTheCaptureBorderHas() throws {
         let slate = CGColor(srgbRed: 0.2, green: 0.3, blue: 0.4, alpha: 1)
         // A white patch on the top edge, which the fill must not pick up.

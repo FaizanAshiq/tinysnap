@@ -8,6 +8,7 @@ public struct ArchivedEdits {
     public var scale: CGFloat
     public var crop: CGRect?
     public var annotations: [Annotation]
+    public var backdrop: Backdrop?
 }
 
 /// A document to and from `edits.json`, plus one PNG per pasted image. Coordinates stay
@@ -50,8 +51,15 @@ public enum DocumentArchive {
             }
             return item
         }
+        var backdrop = document.backdrop.map { StoredBackdrop(settings: $0, file: nil) }
+        if let wallpaper = document.backdrop?.wallpaper, document.backdrop?.fill == .wallpaper {
+            // Named for the wallpaper, whose pixels never change, so it is written once.
+            let name = "backdrop-\(wallpaper.id.uuidString).png"
+            images[name] = wallpaper.image.image
+            backdrop?.file = name
+        }
         let file = File(version: version, captured: captured, scale: document.scale,
-                        crop: document.crop.map(Box.init), annotations: items)
+                        crop: document.crop.map(Box.init), annotations: items, backdrop: backdrop)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -71,7 +79,22 @@ public enum DocumentArchive {
         let annotations = try file.annotations.map { item in
             Annotation(id: item.id, kind: try kind(of: item, image: image), style: item.style)
         }
-        return ArchivedEdits(captured: file.captured, scale: file.scale, crop: file.crop?.rect, annotations: annotations)
+        return ArchivedEdits(captured: file.captured, scale: file.scale, crop: file.crop?.rect, annotations: annotations,
+                             backdrop: file.backdrop.map { backdrop(from: $0, image: image) })
+    }
+
+    /// A wallpaper whose file is gone turns the fill into the gradient, rather than
+    /// losing the entry over one picture.
+    private static func backdrop(from stored: StoredBackdrop, image: (String) -> CGImage?) -> Backdrop {
+        var backdrop = stored.settings
+        guard backdrop.fill == .wallpaper else { return backdrop }
+        guard let name = stored.file, let pixels = image(name) else {
+            backdrop.fill = .gradient
+            return backdrop
+        }
+        let id = UUID(uuidString: String(name.dropFirst("backdrop-".count).dropLast(".png".count))) ?? UUID()
+        backdrop.wallpaper = Backdrop.Wallpaper(id: id, image: PastedImage(pixels))
+        return backdrop
     }
 
     private static func kind(of item: Item, image: (String) -> CGImage?) throws -> Annotation.Kind {
@@ -121,6 +144,54 @@ public enum DocumentArchive {
         var scale: CGFloat
         var crop: Box?
         var annotations: [Item]
+        var backdrop: StoredBackdrop?
+
+        init(version: Int, captured: Date, scale: CGFloat, crop: Box?, annotations: [Item], backdrop: StoredBackdrop?) {
+            (self.version, self.captured, self.scale, self.crop, self.annotations, self.backdrop) =
+                (version, captured, scale, crop, annotations, backdrop)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case version, captured, scale, crop, annotations, backdrop
+        }
+
+        /// Strict for everything the document needs, lenient for the backdrop: one that
+        /// can not be read is left off, and the rest of the entry opens as it was.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            version = try container.decode(Int.self, forKey: .version)
+            captured = try container.decode(Date.self, forKey: .captured)
+            scale = try container.decode(CGFloat.self, forKey: .scale)
+            crop = try container.decodeIfPresent(Box.self, forKey: .crop)
+            annotations = try container.decode([Item].self, forKey: .annotations)
+            backdrop = (try? container.decodeIfPresent(StoredBackdrop.self, forKey: .backdrop)) ?? nil
+        }
+    }
+
+    /// The backdrop's settings with, for a wallpaper fill, the name of its picture's file.
+    private struct StoredBackdrop: Codable {
+        var settings: Backdrop
+        var file: String?
+
+        init(settings: Backdrop, file: String?) {
+            self.settings = settings
+            self.file = file
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case file
+        }
+
+        init(from decoder: Decoder) throws {
+            settings = try Backdrop(from: decoder)
+            file = (try? decoder.container(keyedBy: CodingKeys.self).decodeIfPresent(String.self, forKey: .file)) ?? nil
+        }
+
+        func encode(to encoder: Encoder) throws {
+            try settings.encode(to: encoder)
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(file, forKey: .file)
+        }
     }
 
     /// A rectangle as `{"x", "y", "width", "height"}`, which reads better by hand than

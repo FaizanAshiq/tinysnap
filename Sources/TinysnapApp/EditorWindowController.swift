@@ -28,6 +28,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private let onStylesChange: ([Tool: Style], String) -> Void
     private let onClose: (EditorWindowController) -> Void
     private let onPin: (CGImage, CGFloat, LibraryEntry?) -> Void
+    /// A backdrop setting was picked, so it can be remembered for the next capture.
+    private let onBackdropChange: (Backdrop) -> Void
+    /// Set while the style panel shows the backdrop, with the tool and selection it was
+    /// opened over: picking another tool, or selecting something, puts the panel back.
+    private var backdropPanel: (tool: Tool, selection: Annotation.ID?)?
+    private weak var backdropItem: NSToolbarItem?
     /// The library entry this editor keeps up to date. Nil for a file opened from disk,
     /// a damaged entry opened flat, or any capture while the library is off.
     let entry: LibraryEntry?
@@ -51,6 +57,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private static let dragItem = NSToolbarItem.Identifier("drag")
     private static let pinItem = NSToolbarItem.Identifier("pin")
     private static let textItem = NSToolbarItem.Identifier("text")
+    private static let backdropItemIdentifier = NSToolbarItem.Identifier("backdrop")
     /// One toolbar item per tool, not one group of them: the toolbar draws hover and
     /// selection per item, so a group lit up as one block under the pointer.
     nonisolated private static func toolItem(_ tool: Tool) -> NSToolbarItem.Identifier {
@@ -62,10 +69,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     init(document: Document, entry: LibraryEntry?, library: LibraryStore, screen: NSScreen?, title: String,
          preferences: @escaping () -> Preferences, onStylesChange: @escaping ([Tool: Style], String) -> Void,
-         onPin: @escaping (CGImage, CGFloat, LibraryEntry?) -> Void, onClose: @escaping (EditorWindowController) -> Void) {
+         onPin: @escaping (CGImage, CGFloat, LibraryEntry?) -> Void, onBackdropChange: @escaping (Backdrop) -> Void,
+         onClose: @escaping (EditorWindowController) -> Void) {
         self.preferences = preferences
         self.onStylesChange = onStylesChange
         self.onPin = onPin
+        self.onBackdropChange = onBackdropChange
         self.onClose = onClose
         self.entry = entry
         self.library = library
@@ -121,7 +130,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         window?.contentView = container
         scrollView.frame = container.bounds
         styleBar.onChange = { [weak self] merging, change in self?.canvas.session.restyle(merging: merging, change) }
-        styleBar.onCommit = { [weak self] in self?.rememberStyles() }
+        styleBar.onCommit = { [weak self] in
+            self?.rememberStyles()
+            if let backdrop = self?.canvas.session.display.backdrop { self?.onBackdropChange(backdrop) }
+        }
+        styleBar.onBackdrop = { [weak self] merging, backdrop in
+            guard let self else { return }
+            self.canvas.session.setBackdrop(backdrop, merging: merging)
+            if !merging, let backdrop { self.onBackdropChange(backdrop) }
+        }
+        styleBar.readWallpaper = { [weak self] in WallpaperReader.softened(for: self?.window?.screen) }
 
         canvas.onChange = { [weak self] in
             self?.refreshToolbar()
@@ -170,7 +188,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         let tools = Tool.toolbarGroups.map { $0.map(Self.toolItem) }.joined(separator: [.space])
-        return [Self.copyItem, Self.saveItem, Self.dragItem, Self.textItem, Self.pinItem, .space] + tools
+        return [Self.copyItem, Self.saveItem, Self.dragItem, Self.textItem, Self.pinItem, Self.backdropItemIdentifier, .space] + tools
             + [.flexibleSpace, Self.colorItem]
     }
 
@@ -212,6 +230,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             return item
         case Self.textItem:
             return button(identifier, symbol: "text.viewfinder", tooltip: "Copy the text or QR code (⌘⇧C)", action: #selector(copyText(_:)))
+        case Self.backdropItemIdentifier:
+            let item = button(identifier, symbol: "rectangle.dashed", tooltip: "Backdrop", action: #selector(showBackdropPanel(_:)))
+            backdropItem = item
+            return item
         case Self.pinItem:
             return button(identifier, symbol: "pin", tooltip: "Pin on top of every app and close (⌘P)", action: #selector(pinImage(_:)))
         case Self.colorItem:
@@ -277,18 +299,40 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     private func refreshToolbar() {
-        window?.toolbar?.selectedItemIdentifier = Self.toolItem(canvas.session.tool)
+        let session = canvas.session
+        window?.toolbar?.selectedItemIdentifier = Self.toolItem(session.tool)
+        // Filled while a backdrop is on, dashed while there is none.
+        backdropItem?.image = NSImage(systemSymbolName: session.display.backdrop == nil ? "rectangle.dashed" : "rectangle.inset.filled",
+                                      accessibilityDescription: "Backdrop")
+        if let panel = backdropPanel, panel.tool != session.tool || panel.selection != session.selection { backdropPanel = nil }
+        if backdropPanel != nil {
+            styleBar.isHidden = false
+            styleBar.showBackdrop(session.display.backdrop, remembered: preferences().backdrop)
+            placeStyleBar()
+            return
+        }
         let target = styleTarget
-        // Shown only for a tool with something to set, and placed 12 points in from the
-        // canvas's top right corner.
-        styleBar.isHidden = !StyleBar.shows(target.tool) || canvas.session.phase != .idle && canvas.session.typingID == nil
+        // Shown only for a tool with something to set.
+        styleBar.isHidden = !StyleBar.shows(target.tool) || session.phase != .idle && session.typingID == nil
         if !styleBar.isHidden {
             styleBar.show(tool: target.tool, style: target.style)
-            if let bounds = window?.contentView?.bounds {
-                styleBar.setFrameOrigin(NSPoint(x: bounds.maxX - styleBar.frame.width - 12,
-                                                y: bounds.maxY - styleBar.frame.height - 12))
-            }
+            placeStyleBar()
         }
+    }
+
+    /// 12 points in from the canvas's top right corner.
+    private func placeStyleBar() {
+        guard let bounds = window?.contentView?.bounds else { return }
+        styleBar.setFrameOrigin(NSPoint(x: bounds.maxX - styleBar.frame.width - 12, y: bounds.maxY - styleBar.frame.height - 12))
+    }
+
+    /// The panel shows the backdrop until another tool is picked or something selected.
+    @objc func showBackdropPanel(_ sender: Any?) {
+        // The crop tool hides the backdrop, so a backdrop turned on from it would seem to
+        // do nothing.
+        if canvas.session.tool == .crop { canvas.choose(.select) }
+        backdropPanel = (canvas.session.tool, canvas.session.selection)
+        refreshToolbar()
     }
 
     /// Written when a change is finished, not on every tick of the colour panel, each of

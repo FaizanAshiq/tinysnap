@@ -9,47 +9,16 @@ public final class Capture: Equatable, Sendable {
     /// The colour most of the capture's border has. A canvas grown past the capture is
     /// filled with it, so the screenshot looks as if it simply goes on.
     public let edgeColor: CGColor
+    /// A backdrop gradient's two colours: the capture's commonest colour, then the
+    /// commonest one clearly different from it, or a shade of the first when there is none.
+    public let gradientColors: [CGColor]
 
     public init(image: CGImage, scale: CGFloat) {
         self.image = image
         self.scale = scale
-        edgeColor = Self.dominantEdgeColor(of: image)
-    }
-
-    /// Read from a small copy, so a 5K capture costs one quick downsample. Border pixels
-    /// are grouped by colour and the biggest group wins, which ignores a toolbar or a
-    /// photo touching one edge. Transparent pixels, such as a window's rounded corners,
-    /// are left out.
-    private static func dominantEdgeColor(of image: CGImage) -> CGColor {
-        let side = 64
-        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
-                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
-              let data = context.data else { return CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1) }
-        context.interpolationQuality = .medium
-        context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
-        let bytes = data.bindMemory(to: UInt8.self, capacity: side * side * 4)
-
-        var groups: [Int: (count: Int, red: Int, green: Int, blue: Int)] = [:]
-        for y in 0..<side {
-            for x in 0..<side where y == 0 || y == side - 1 || x == 0 || x == side - 1 {
-                let at = (y * side + x) * 4
-                let alpha = Int(bytes[at + 3])
-                guard alpha >= 128 else { continue }
-                // Premultiplied, so each channel is divided back out before grouping.
-                let (red, green, blue) = (Int(bytes[at]) * 255 / alpha, Int(bytes[at + 1]) * 255 / alpha,
-                                          Int(bytes[at + 2]) * 255 / alpha)
-                let key = (red >> 4) << 8 | (green >> 4) << 4 | blue >> 4
-                let group = groups[key, default: (0, 0, 0, 0)]
-                groups[key] = (group.count + 1, group.red + red, group.green + green, group.blue + blue)
-            }
-        }
-        guard let biggest = groups.values.max(by: { $0.count < $1.count }) else {
-            return CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
-        }
-        let count = CGFloat(biggest.count) * 255
-        return CGColor(srgbRed: CGFloat(biggest.red) / count, green: CGFloat(biggest.green) / count,
-                       blue: CGFloat(biggest.blue) / count, alpha: 1)
+        let colors = ColorSample(image)
+        edgeColor = colors.edge
+        gradientColors = colors.gradient
     }
 
     public var pixelSize: CGSize { CGSize(width: image.width, height: image.height) }
@@ -78,16 +47,35 @@ public struct Document: Equatable {
     public var crop: CGRect?
     /// Drawn bottom to top, in creation order.
     public var annotations: [Annotation]
+    /// Nil while there is no backdrop.
+    public var backdrop: Backdrop?
 
-    public init(capture: Capture, crop: CGRect? = nil, annotations: [Annotation] = []) {
+    public init(capture: Capture, crop: CGRect? = nil, annotations: [Annotation] = [], backdrop: Backdrop? = nil) {
         self.capture = capture
         self.crop = crop
         self.annotations = annotations
+        self.backdrop = backdrop
     }
 
     public var scale: CGFloat { capture.scale }
     /// What is exported: the crop, or the whole extent.
     public var outputRect: CGRect { crop ?? extent }
+
+    /// The output on whole pixels, rounded inwards, which is what an export cuts.
+    public var outputPixelRect: CGRect {
+        let rect = outputRect
+        let left = rect.minX.rounded(.up), top = rect.minY.rounded(.up)
+        return CGRect(x: left, y: top, width: max(1, rect.maxX.rounded(.down) - left),
+                      height: max(1, rect.maxY.rounded(.down) - top))
+    }
+
+    /// The framed output in capture pixels: the output with the backdrop's padding on
+    /// every side. Nil without a backdrop.
+    public var framedRect: CGRect? {
+        guard let backdrop else { return nil }
+        let padding = backdrop.padding.points * scale
+        return outputPixelRect.insetBy(dx: -padding, dy: -padding)
+    }
 
     /// Points of margin kept around a shape drawn past the capture's edge.
     static let growthMargin: CGFloat = 16

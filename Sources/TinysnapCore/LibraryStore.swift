@@ -59,9 +59,9 @@ public struct LibraryStore: Sendable {
         return entry
     }
 
-    /// Rewrites `edits.json`, writes any pasted image not yet on disk, and removes those
-    /// no annotation uses any more. A pasted image's pixels never change, so one already
-    /// written is left alone.
+    /// Rewrites `edits.json`, writes any pasted image or backdrop wallpaper not yet on
+    /// disk, and removes those nothing uses any more. Their pixels never change, so one
+    /// already written is left alone.
     public func saveEdits(_ document: Document, to entry: LibraryEntry) throws {
         let (json, images) = try DocumentArchive.encode(document, captured: entry.captured)
         for (name, image) in images where !FileManager.default.fileExists(atPath: entry.folder.appendingPathComponent(name).path) {
@@ -69,7 +69,7 @@ public struct LibraryStore: Sendable {
         }
         try json.write(to: entry.editsURL, options: .atomic)
         let files = (try? FileManager.default.contentsOfDirectory(atPath: entry.folder.path)) ?? []
-        for file in files where file.hasPrefix("pasted-") && images[file] == nil {
+        for file in files where (file.hasPrefix("pasted-") || file.hasPrefix("backdrop-")) && images[file] == nil {
             try? FileManager.default.removeItem(at: entry.folder.appendingPathComponent(file))
         }
     }
@@ -104,7 +104,8 @@ public struct LibraryStore: Sendable {
            let json = try? Data(contentsOf: entry.editsURL),
            let edits = try? DocumentArchive.decode(json, image: { Self.readImage(entry.folder.appendingPathComponent($0))?.image }) {
             let capture = Capture(image: original.image, scale: edits.scale)
-            return OpenedEntry(document: Document(capture: capture, crop: edits.crop, annotations: edits.annotations),
+            return OpenedEntry(document: Document(capture: capture, crop: edits.crop, annotations: edits.annotations,
+                                                  backdrop: edits.backdrop),
                                isEditable: true)
         }
         guard let flat = Self.readImage(entry.imageURL) ?? Self.readImage(entry.originalURL) else { return nil }

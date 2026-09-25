@@ -37,16 +37,26 @@ public struct Style: Equatable, Codable, Sendable {
     public var filled: Bool
     /// Rectangles, spotlights, blurs, pixelates and pasted images.
     public var corners: CornerSize
+    /// Pasted images only: 0.1 to 1, for lining one up against the capture.
+    public var opacity: CGFloat
+    /// Pasted images only: drawn with the difference blend, so where the image matches
+    /// what is under it the result is black and changes stand out.
+    public var difference: Bool
 
-    public init(colorHex: String, size: StyleSize = .medium, filled: Bool = false, corners: CornerSize = .medium) {
+    public static let opacityRange: ClosedRange<CGFloat> = 0.1...1
+
+    public init(colorHex: String, size: StyleSize = .medium, filled: Bool = false, corners: CornerSize = .medium,
+                opacity: CGFloat = 1, difference: Bool = false) {
         self.colorHex = colorHex
         self.size = size
         self.filled = filled
         self.corners = corners
+        self.opacity = min(max(opacity, Self.opacityRange.lowerBound), Self.opacityRange.upperBound)
+        self.difference = difference
     }
 
     private enum CodingKeys: String, CodingKey {
-        case colorHex, size, filled, corners
+        case colorHex, size, filled, corners, opacity, difference
         /// Read only: the square corner switch this replaced.
         case sharpCorners
     }
@@ -57,6 +67,8 @@ public struct Style: Equatable, Codable, Sendable {
         try container.encode(size, forKey: .size)
         try container.encode(filled, forKey: .filled)
         try container.encode(corners, forKey: .corners)
+        try container.encode(opacity, forKey: .opacity)
+        try container.encode(difference, forKey: .difference)
     }
 
     /// Every key is optional and a bad value falls back on its own, so one hand edited
@@ -69,6 +81,10 @@ public struct Style: Equatable, Codable, Sendable {
         filled = (try? container.decodeIfPresent(Bool.self, forKey: .filled)) ?? false
         let wasSquare = (try? container.decodeIfPresent(Bool.self, forKey: .sharpCorners)) ?? false
         corners = (try? container.decodeIfPresent(CornerSize.self, forKey: .corners)) ?? (wasSquare == true ? .square : .medium)
+        let opacity = (try? container.decodeIfPresent(CGFloat.self, forKey: .opacity)) ?? nil
+        // Out of range means a hand edit gone wrong, which is read as fully solid.
+        self.opacity = opacity.flatMap { $0 > 1 ? nil : max($0, Self.opacityRange.lowerBound) } ?? 1
+        difference = (try? container.decodeIfPresent(Bool.self, forKey: .difference)) ?? false
     }
 }
 

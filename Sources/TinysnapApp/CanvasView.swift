@@ -26,16 +26,20 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     private var rendered: CGImage?
     private var renderedDocument: Document?
     private var renderedHidden: Annotation.ID?
+    private var renderedFramed = false
+    /// The last render was the output drawn over an earlier frame, so it wants a fresh one.
+    private var renderedOver = false
     private var textView: NSTextView?
-    /// The document's extent, in capture pixels, kept here because working it out
-    /// measures text. The view's top left corner is its origin, which moves left of or
-    /// above the capture once a shape is drawn past the edge.
-    private var extent: CGRect
+    /// What the canvas shows, in capture pixels: the framed output with a backdrop on,
+    /// otherwise the whole extent. Kept here because working it out measures text. The
+    /// view's top left corner is its origin, which moves left of or above the capture
+    /// once a shape is drawn past the edge, or a backdrop's padding goes round it.
+    private var shown: CGRect
 
     init(session: EditorSession) {
         self.session = session
-        extent = session.display.extent
-        super.init(frame: NSRect(x: 0, y: 0, width: extent.width / session.scale, height: extent.height / session.scale))
+        shown = Self.shownRect(of: session)
+        super.init(frame: NSRect(x: 0, y: 0, width: shown.width / session.scale, height: shown.height / session.scale))
         registerForDraggedTypes([.fileURL, .png, .tiff])
     }
 
@@ -58,7 +62,7 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     /// Reads what is shown, annotations included, the way the readout should.
     private func reportColor(at point: CGPoint) {
         guard let rendered else { return }
-        onPointerColor?(ColorProbe.hex(of: rendered, x: Int(point.x - extent.minX), y: Int(point.y - extent.minY)))
+        onPointerColor?(ColorProbe.hex(of: rendered, x: Int(point.x - shown.minX), y: Int(point.y - shown.minY)))
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -136,11 +140,11 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
 
     private func pixelPoint(_ event: NSEvent) -> CGPoint {
         let point = convert(event.locationInWindow, from: nil)
-        return CGPoint(x: point.x * scale + extent.minX, y: point.y * scale + extent.minY)
+        return CGPoint(x: point.x * scale + shown.minX, y: point.y * scale + shown.minY)
     }
 
     private func viewRect(_ pixels: CGRect) -> CGRect {
-        CGRect(x: (pixels.minX - extent.minX) / scale, y: (pixels.minY - extent.minY) / scale,
+        CGRect(x: (pixels.minX - shown.minX) / scale, y: (pixels.minY - shown.minY) / scale,
                width: pixels.width / scale, height: pixels.height / scale)
     }
 
@@ -151,30 +155,51 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         onChange?()
     }
 
-    /// Grows and shrinks with the document's extent. Mid gesture the capture holds its
+    /// A backdrop shows round the output, except while the crop tool is out, when the
+    /// whole capture shows so the crop can be changed.
+    private var framed: Bool { Self.isFramed(session) }
+
+    private static func isFramed(_ session: EditorSession) -> Bool {
+        session.display.backdrop != nil && session.tool != .crop
+    }
+
+    private static func shownRect(of session: EditorSession) -> CGRect {
+        (isFramed(session) ? session.display.framedRect : nil) ?? session.display.extent
+    }
+
+    /// Grows and shrinks with what is shown. Mid gesture the capture holds its
     /// place on screen: growing left or up moves it within the view, so the scroll
     /// position moves by as much, and centring waits. Once the gesture ends, the canvas
     /// glides back to the centre.
     private func fitExtent() {
         let clip = enclosingScrollView?.contentView as? CenteringClipView
         let gesture = session.phase != .idle
-        let new = session.display.extent
-        if new != extent {
+        let new = Self.shownRect(of: session)
+        if new != shown {
             if gesture { clip?.isHoldingPlace = true }
-            let shift = NSPoint(x: (extent.minX - new.minX) / scale, y: (extent.minY - new.minY) / scale)
-            extent = new
+            let shift = NSPoint(x: (shown.minX - new.minX) / scale, y: (shown.minY - new.minY) / scale)
+            shown = new
             setFrameSize(NSSize(width: new.width / scale, height: new.height / scale))
             if let clip, shift != .zero {
                 clip.scroll(to: NSPoint(x: clip.bounds.origin.x + shift.x, y: clip.bounds.origin.y + shift.y))
                 enclosingScrollView?.reflectScrolledClipView(clip)
             }
         }
-        guard !gesture, let clip, clip.isHoldingPlace else { return }
+        // Outside a gesture the canvas settles: centred when it is smaller than the
+        // window, which a switch to or from the backdrop also needs. After a gesture it
+        // glides there; otherwise it goes at once.
+        guard !gesture, let clip else { return }
+        let glides = clip.isHoldingPlace
         clip.isHoldingPlace = false
         let settled = clip.constrainBoundsRect(clip.bounds).origin
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2
-            clip.animator().setBoundsOrigin(settled)
+        guard settled != clip.bounds.origin else { return }
+        if glides {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2
+                clip.animator().setBoundsOrigin(settled)
+            }
+        } else {
+            clip.setBoundsOrigin(settled)
         }
         enclosingScrollView?.reflectScrolledClipView(clip)
     }
@@ -222,10 +247,21 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         let hidden = session.typingID
         // ponytail: renders the whole document on every change. Fine at Retina laptop
         // sizes; cache the annotations below the one being dragged if 5K captures lag.
-        if rendered == nil || renderedDocument != session.display || renderedHidden != hidden {
-            rendered = Renderer.render(session.display, hiding: hidden.map { [$0] } ?? [])
+        let framed = self.framed
+        let gesture = session.phase != .idle
+        if rendered == nil || renderedDocument != session.display || renderedHidden != hidden || renderedFramed != framed
+            || renderedOver && !gesture {
+            let hiding: Set<Annotation.ID> = hidden.map { [$0] } ?? []
+            // Mid gesture only the output changes, so it goes over the last frame, and the
+            // frame is drawn afresh once the gesture ends.
+            let over = framed && renderedFramed && gesture
+                ? rendered.flatMap { Renderer.reframe(session.display, over: $0, hiding: hiding) } : nil
+            // With a backdrop, the canvas shows exactly what an export gives.
+            rendered = over ?? (framed ? Renderer.renderFramed(session.display, hiding: hiding) : Renderer.render(session.display, hiding: hiding))
             renderedDocument = session.display
             renderedHidden = hidden
+            renderedFramed = framed
+            renderedOver = over != nil
         }
 
         if let rendered {
@@ -244,7 +280,8 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     }
 
     private func drawCrop(in context: CGContext) {
-        guard session.tool == .crop || session.display.crop != nil else { return }
+        // Framed, only the crop shows, so there is nothing outside it to dim.
+        guard session.tool == .crop || session.display.crop != nil && !framed else { return }
         let crop = viewRect(session.display.outputRect)
         context.saveGState()
         context.setFillColor(NSColor.black.withAlphaComponent(0.55).cgColor)
@@ -276,7 +313,7 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         context.setStrokeColor(NSColor.controlAccentColor.cgColor)
         context.setLineWidth(1 / magnification)
         for point in points {
-            let box = CGRect(x: (point.x - extent.minX) / scale - size / 2, y: (point.y - extent.minY) / scale - size / 2,
+            let box = CGRect(x: (point.x - shown.minX) / scale - size / 2, y: (point.y - shown.minY) / scale - size / 2,
                              width: size, height: size)
             context.fill(box)
             context.stroke(box)
@@ -405,6 +442,14 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         }
 
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.shift, .capsLock])
+        // Digits set a selected pasted image's opacity, 1 to 9 for 10% to 90% and 0 for
+        // solid, as on pins.
+        if flags.isEmpty, session.selectedAnnotation?.tool == .image,
+           let digit = event.charactersIgnoringModifiers.flatMap(Int.init), (0...9).contains(digit) {
+            session.restyle { $0.opacity = digit == 0 ? 1 : CGFloat(digit) / 10 }
+            onStylesCommitted?()
+            return
+        }
         if flags.isEmpty, let character = event.charactersIgnoringModifiers?.first, let tool = Tool.forKey(character) {
             choose(tool)
             return
@@ -466,7 +511,7 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         field.textColor = NSColor(cgColor: Palette.color(hex: annotation.style.colorHex))
         field.insertionPointColor = field.textColor ?? .labelColor
         if field.string != string { field.string = string }
-        field.setFrameOrigin(CGPoint(x: (origin.x - extent.minX) / scale, y: (origin.y - extent.minY) / scale))
+        field.setFrameOrigin(CGPoint(x: (origin.x - shown.minX) / scale, y: (origin.y - shown.minY) / scale))
         field.sizeToFit()
         if field.frame.width < fontSize { field.setFrameSize(NSSize(width: fontSize, height: field.frame.height)) }
         if window?.firstResponder !== field { window?.makeFirstResponder(field) }

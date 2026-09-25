@@ -3,6 +3,12 @@ import Testing
 @testable import TinysnapCore
 
 struct StyleTests {
+    @Test func anOverlaysOpacityAndDifferenceSurviveSaving() throws {
+        let style = Style(colorHex: "#FF3B30", corners: .square, opacity: 0.5, difference: true)
+        let saved = try JSONEncoder().encode(style)
+        #expect(try JSONDecoder().decode(Style.self, from: saved) == style)
+    }
+
     @Test func readsHexColours() {
         #expect(Palette.components(of: "#FF8000")?.red == 1)
         #expect(Palette.components(of: "00FF00")?.green == 1)
@@ -57,6 +63,14 @@ struct StyleTests {
     }
 
     @Test func aBadStyleValueFallsBackOnItsOwn() throws {
+        // The overlay settings join the rest: missing or bad, each falls back alone.
+        let old = try JSONDecoder().decode(Style.self, from: Data(##"{"colorHex": "#FF3B30"}"##.utf8))
+        #expect(old.opacity == 1 && !old.difference)
+        let bad = try JSONDecoder().decode(Style.self, from: Data(#"{"opacity": 7, "difference": "yes"}"#.utf8))
+        #expect(bad.opacity == 1 && !bad.difference)
+        let faint = try JSONDecoder().decode(Style.self, from: Data(#"{"opacity": 0.01}"#.utf8))
+        #expect(faint.opacity == 0.1)
+
         let json = #"{"colorHex": "red", "size": "huge", "filled": true}"#
         let style = try JSONDecoder().decode(Style.self, from: Data(json.utf8))
         #expect(style == Style(colorHex: Palette.red, size: .medium, filled: true))

@@ -143,6 +143,33 @@ struct PreferencesTests {
         #expect(!loaded.keepLibrary)
     }
 
+    @Test func theLastBackdropSettingsAreRememberedAndFallBackAlone() throws {
+        #expect(Preferences.defaults.backdrop == .defaults)
+        let bad = try Preferences.load(from: temporaryFile(containing: #"{"backdrop": {"fill": "clear", "shadow": 3}, "delaySeconds": 5}"#))
+        #expect(bad.backdrop.fill == .clear)
+        #expect(bad.backdrop.shadow == Backdrop.defaults.shadow)
+        #expect(bad.delaySeconds == 5)
+    }
+
+    @Test func theRememberedBackdropNeverHoldsOnToAWallpaper() {
+        var backdrop = Backdrop.defaults
+        backdrop.fill = .wallpaper
+        backdrop.wallpaper = Backdrop.Wallpaper(image: PastedImage(Fixture.capture(width: 4, height: 4).image))
+        var preferences = Preferences.defaults
+        preferences.backdrop = backdrop
+        // Kept, it would stand in for the desktop picture of another screen, or of a
+        // desktop changed since.
+        #expect(preferences.backdrop.wallpaper == nil)
+        #expect(preferences.backdrop.fill == .wallpaper)
+        let made = Preferences.defaults
+        let copy = Preferences(hotkeys: made.hotkeys, saveFolder: made.saveFolder, exportScale: made.exportScale,
+                               delaySeconds: made.delaySeconds, showMenuBarIcon: made.showMenuBarIcon,
+                               showDockIconWhileCapturing: made.showDockIconWhileCapturing, colorHex: made.colorHex,
+                               toolStyles: made.toolStyles, afterCapture: made.afterCapture, keepLibrary: made.keepLibrary,
+                               backdrop: backdrop)
+        #expect(copy.backdrop.wallpaper == nil)
+    }
+
     @Test func printsHotkeysTheWayMacOSDoes() {
         #expect(HotKeys.defaults.area?.displayString == "⇧⌘2")
     }

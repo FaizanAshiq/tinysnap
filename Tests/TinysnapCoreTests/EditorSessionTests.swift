@@ -3,6 +3,16 @@ import Testing
 @testable import TinysnapCore
 
 struct EditorSessionTests {
+    @Test func aNewPasteStartsSolidEvenAfterAnOverlayWasFaded() {
+        var editor = session()
+        let pasted = PastedImage(Fixture.capture(width: 20, height: 20).image)
+        editor.insert(pasted, pointSize: CGSize(width: 20, height: 20))
+        editor.restyle { $0.opacity = 0.5; $0.difference = true }
+        editor.insert(pasted, pointSize: CGSize(width: 20, height: 20))
+        let style = editor.display.annotations[1].style
+        #expect(style.opacity == 1 && !style.difference)
+    }
+
     @Test func aDrawingToolPicksUpAShapeByItsBorderWithoutCommand() {
         var editor = session(.blur)
         drag(&editor, from: CGPoint(x: 100, y: 100), to: CGPoint(x: 200, y: 160))

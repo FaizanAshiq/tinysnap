@@ -271,6 +271,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         if let onDisk = try? Preferences.load(from: Preferences.defaultFileURL) {
             preferences.toolStyles = onDisk.toolStyles
             preferences.colorHex = onDisk.colorHex
+            preferences.backdrop = onDisk.backdrop
         }
         try? preferences.save(to: Preferences.defaultFileURL)
         loadValues(taken: onChange(preferences))

@@ -132,6 +132,8 @@ struct Canvas {
             let corner = radius(annotation.style.corners, for: rect)
             context.addPath(CGPath(roundedRect: rect, cornerWidth: corner, cornerHeight: corner, transform: nil))
             context.clip()
+            context.setAlpha(annotation.style.opacity)
+            if annotation.style.difference { context.setBlendMode(.difference) }
             draw(pasted.image, in: rect)
         case let .magnifier(center, radius, zoom):
             magnify(center: center, radius: radius, zoom: zoom)

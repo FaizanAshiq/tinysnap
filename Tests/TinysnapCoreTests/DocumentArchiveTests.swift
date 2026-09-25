@@ -6,6 +6,40 @@ import Testing
 struct DocumentArchiveTests {
     private let captured = Date(timeIntervalSince1970: 1_790_300_530)
 
+    private func wallpaperBackdrop() -> Backdrop {
+        var backdrop = Backdrop(fill: .wallpaper, colorHex: "#007AFF", padding: .large, corners: .square, shadow: .strong)
+        backdrop.wallpaper = Backdrop.Wallpaper(image: PastedImage(Fixture.capture(width: 8, height: 4, fill: Fixture.green).image))
+        return backdrop
+    }
+
+    @Test func aBackdropAndItsWallpaperComeBack() throws {
+        let backdrop = wallpaperBackdrop()
+        let document = Document(capture: Fixture.capture(width: 40, height: 30), backdrop: backdrop)
+        let (json, images) = try DocumentArchive.encode(document, captured: captured)
+        let name = "backdrop-\(backdrop.wallpaper!.id.uuidString).png"
+        #expect(Array(images.keys) == [name])
+
+        let edits = try DocumentArchive.decode(json) { images[$0] }
+        #expect(edits.backdrop == backdrop)
+        #expect(edits.backdrop?.wallpaper?.image.image.width == 8)
+    }
+
+    @Test func aMissingWallpaperFileTurnsTheFillIntoAGradient() throws {
+        let document = Document(capture: Fixture.capture(width: 40, height: 30), backdrop: wallpaperBackdrop())
+        let (json, _) = try DocumentArchive.encode(document, captured: captured)
+        let edits = try DocumentArchive.decode(json) { _ in nil }
+        #expect(edits.backdrop?.fill == .gradient)
+        #expect(edits.backdrop?.wallpaper == nil)
+        #expect(edits.backdrop?.padding == .large)
+    }
+
+    @Test func anUnreadableBackdropLeavesItOffAndTheRestIntact() throws {
+        let json = #"{"version": 1, "captured": "2026-09-25T07:42:10Z", "scale": 2, "annotations": [], "backdrop": 7}"#
+        let edits = try DocumentArchive.decode(Data(json.utf8)) { _ in nil }
+        #expect(edits.backdrop == nil)
+        #expect(edits.scale == 2)
+    }
+
     private func everyKind(pasted: PastedImage) -> [Annotation] {
         let blue = Style(colorHex: "#007AFF", size: .large, filled: true, corners: .full)
         return [

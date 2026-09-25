@@ -4,6 +4,26 @@ import Testing
 @testable import TinysnapCore
 
 struct LibraryStoreTests {
+    @Test func aWallpaperIsKeptBesideTheEditsAndGoesWhenTheBackdropDoes() throws {
+        let library = LibraryStore(root: FileManager.default.temporaryDirectory.appendingPathComponent("tinysnap-library-\(UUID().uuidString)"))
+        let entry = try library.add(Fixture.capture(width: 40, height: 30, scale: 2), captured: Date(timeIntervalSince1970: 1_790_304_130),
+                                    timeZone: TimeZone(identifier: "UTC")!)
+        var document = try #require(library.open(entry)).document
+        var backdrop = Backdrop(fill: .wallpaper, colorHex: "#007AFF", padding: .small, corners: .medium, shadow: .soft)
+        let wallpaper = Backdrop.Wallpaper(image: PastedImage(Fixture.capture(width: 8, height: 4).image))
+        backdrop.wallpaper = wallpaper
+        document.backdrop = backdrop
+        try library.saveEdits(document, to: entry)
+        let file = entry.folder.appendingPathComponent("backdrop-\(wallpaper.id.uuidString).png")
+        #expect(FileManager.default.fileExists(atPath: file.path))
+        #expect(try #require(library.open(entry)).document.backdrop == backdrop)
+
+        document.backdrop = nil
+        try library.saveEdits(document, to: entry)
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        #expect(try #require(library.open(entry)).document.backdrop == nil)
+    }
+
     private let utc = TimeZone(identifier: "UTC")!
     /// 2026-09-25 02:42:10 UTC.
     private let captured = Date(timeIntervalSince1970: 1_790_304_130)

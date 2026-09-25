@@ -179,6 +179,11 @@ public struct Preferences: Equatable, Sendable, Codable {
     public var afterCapture: AfterCapture
     /// Every capture kept in the library for 30 days, annotations and all.
     public var keepLibrary: Bool
+    /// The backdrop last used, brought back when a capture's backdrop is turned on. The
+    /// settings only: a wallpaper is read again for each capture, from its own screen.
+    public var backdrop: Backdrop {
+        didSet { if backdrop.wallpaper != nil { backdrop.wallpaper = nil } }
+    }
 
     public static let defaults = Preferences(
         hotkeys: .defaults,
@@ -190,14 +195,15 @@ public struct Preferences: Equatable, Sendable, Codable {
         colorHex: Palette.red,
         toolStyles: [:],
         afterCapture: .editor,
-        keepLibrary: true
+        keepLibrary: true,
+        backdrop: .defaults
     )
 
     public static let delayRange = 1...60
 
     public init(hotkeys: HotKeys, saveFolder: String, exportScale: ExportScale, delaySeconds: Int,
                 showMenuBarIcon: Bool, showDockIconWhileCapturing: Bool, colorHex: String, toolStyles: [String: Style],
-                afterCapture: AfterCapture, keepLibrary: Bool) {
+                afterCapture: AfterCapture, keepLibrary: Bool, backdrop: Backdrop) {
         self.hotkeys = hotkeys
         self.saveFolder = saveFolder
         self.exportScale = exportScale
@@ -208,6 +214,9 @@ public struct Preferences: Equatable, Sendable, Codable {
         self.toolStyles = toolStyles
         self.afterCapture = afterCapture
         self.keepLibrary = keepLibrary
+        self.backdrop = backdrop
+        // An observer does not run in init.
+        self.backdrop.wallpaper = nil
     }
 
     /// Every key is optional and a bad value falls back on its own, so a file written
@@ -228,6 +237,7 @@ public struct Preferences: Equatable, Sendable, Codable {
         toolStyles = (try? container.decodeIfPresent([String: Style].self, forKey: .toolStyles)) ?? fallback.toolStyles
         afterCapture = (try? container.decodeIfPresent(AfterCapture.self, forKey: .afterCapture)) ?? fallback.afterCapture
         keepLibrary = (try? container.decodeIfPresent(Bool.self, forKey: .keepLibrary)) ?? fallback.keepLibrary
+        backdrop = (try? container.decodeIfPresent(Backdrop.self, forKey: .backdrop)) ?? fallback.backdrop
     }
 
     public var saveFolderURL: URL {

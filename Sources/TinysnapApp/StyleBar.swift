@@ -44,11 +44,26 @@ final class StyleBar: NSVisualEffectView {
     var onChange: ((_ merging: Bool, _ change: (inout Style) -> Void) -> Void)?
     /// A change is finished, so the remembered styles can be written once.
     var onCommit: (() -> Void)?
+    /// The backdrop as it now is, nil for none. `merging` is true for the colour panel's
+    /// stream of changes.
+    var onBackdrop: ((_ merging: Bool, _ backdrop: Backdrop?) -> Void)?
+    /// Reads the desktop picture when the wallpaper fill is picked.
+    var readWallpaper: (() -> Backdrop.Wallpaper?)?
 
     private let row = NSStackView()
     private var style = Style(colorHex: Palette.red)
     private var tool = Tool.arrow
     private var palette: NSPopover?
+
+    /// The bar shows either the tool's style or the capture's backdrop.
+    private enum Mode {
+        case tool, backdrop
+    }
+
+    private var mode = Mode.tool
+    private var backdrop: Backdrop?
+    /// The settings a backdrop starts from when it is turned on.
+    private var remembered = Backdrop.defaults
 
     init() {
         super.init(frame: .zero)
@@ -77,21 +92,39 @@ final class StyleBar: NSVisualEffectView {
     }
 
     /// Whether this tool has anything to set, and so whether the bar shows at all.
-    static func shows(_ tool: Tool) -> Bool { tool.hasColor || tool.hasSize || tool.hasFill || tool.hasCorners }
+    static func shows(_ tool: Tool) -> Bool { tool.hasColor || tool.hasSize || tool.hasFill || tool.hasCorners || tool.hasOverlay }
 
     func show(tool: Tool, style: Style) {
-        guard tool != self.tool || style != self.style || row.arrangedSubviews.isEmpty else { return }
+        guard mode != .tool || tool != self.tool || style != self.style || row.arrangedSubviews.isEmpty else { return }
+        mode = .tool
         self.tool = tool
         self.style = style
         rebuild()
     }
 
+    func showBackdrop(_ backdrop: Backdrop?, remembered: Backdrop) {
+        guard mode != .backdrop || backdrop != self.backdrop || remembered != self.remembered || row.arrangedSubviews.isEmpty else { return }
+        mode = .backdrop
+        self.backdrop = backdrop
+        self.remembered = remembered
+        rebuild()
+    }
+
     private func rebuild() {
         row.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        guard mode == .tool else {
+            buildBackdrop()
+            setFrameSize(fittingSize)
+            return
+        }
         if tool.hasColor { row.addArrangedSubview(colorButton()) }
         if tool.hasSize { row.addArrangedSubview(group(sizeChips())) }
         if tool.hasFill { row.addArrangedSubview(group(fillChips())) }
         if tool.hasCorners { row.addArrangedSubview(group(cornerChips())) }
+        if tool.hasOverlay {
+            row.addArrangedSubview(group(opacityChips()))
+            row.addArrangedSubview(group([differenceChip()]))
+        }
         setFrameSize(fittingSize)
     }
 
@@ -111,7 +144,7 @@ final class StyleBar: NSVisualEffectView {
     // MARK: Colour
 
     private func colorButton() -> NSView {
-        let hex = style.colorHex
+        let hex = mode == .backdrop ? (backdrop ?? remembered).colorHex : style.colorHex
         let button = ChipButton(label: "Colour \(hex)") { box, _ in
             let swatch = NSBezierPath(roundedRect: box.insetBy(dx: 3, dy: 2), xRadius: 6, yRadius: 6)
             NSColor(cgColor: Palette.color(hex: hex))?.setFill()
@@ -127,8 +160,14 @@ final class StyleBar: NSVisualEffectView {
 
     @objc private func showPalette(_ sender: NSButton) {
         palette?.close()
-        let controller = ColorPaletteController(chosen: style.colorHex) { [weak self] hex, merging in
-            self?.change(merging: merging) { $0.colorHex = hex }
+        let chosen = mode == .backdrop ? (backdrop ?? remembered).colorHex : style.colorHex
+        let controller = ColorPaletteController(chosen: chosen) { [weak self] hex, merging in
+            guard let self else { return }
+            if self.mode == .backdrop {
+                self.changeBackdrop(merging: merging) { $0.colorHex = hex }
+            } else {
+                self.change(merging: merging) { $0.colorHex = hex }
+            }
         }
         let popover = NSPopover()
         popover.contentViewController = controller
@@ -251,6 +290,222 @@ final class StyleBar: NSVisualEffectView {
         let corners = CornerSize.allCases
         guard corners.indices.contains(sender.tag) else { return }
         change { $0.corners = corners[sender.tag] }
+    }
+
+    // MARK: Backdrop
+
+    /// Fill first, None among them; padding, corners and shadow once there is a backdrop.
+    private func buildBackdrop() {
+        row.addArrangedSubview(group(backdropFillChips()))
+        guard let backdrop else { return }
+        if backdrop.fill == .solid { row.addArrangedSubview(colorButton()) }
+        if backdrop.fill == .wallpaper, backdrop.wallpaper == nil {
+            let note = NSTextField(labelWithString: "Using the gradient")
+            note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            note.textColor = .secondaryLabelColor
+            note.toolTip = "The desktop picture could not be read, so the gradient stands in"
+            row.addArrangedSubview(note)
+        }
+        row.addArrangedSubview(group(paddingChips(backdrop)))
+        row.addArrangedSubview(group(backdropCornerChips(backdrop)))
+        row.addArrangedSubview(group(shadowChips(backdrop)))
+    }
+
+    /// Rebuilt before the editor hears of it, so the bar is placed at its new width.
+    private func changeBackdrop(merging: Bool = false, _ change: (inout Backdrop) -> Void) {
+        var next = backdrop ?? remembered
+        change(&next)
+        backdrop = next
+        rebuild()
+        onBackdrop?(merging, next)
+    }
+
+    private static let fillLabels = ["No backdrop", "Gradient from the capture", "Solid colour", "Desktop wallpaper", "Clear, see-through"]
+
+    private func backdropFillChips() -> [NSView] {
+        let fills: [Backdrop.Fill?] = [nil] + Backdrop.Fill.allCases
+        return fills.enumerated().map { index, fill in
+            let chip = ChipButton(label: Self.fillLabels[index]) { box, color in
+                let frame = box.insetBy(dx: 7, dy: 6)
+                let square = NSBezierPath(roundedRect: frame, xRadius: 2, yRadius: 2)
+                square.lineWidth = 1.4
+                color.setStroke()
+                color.setFill()
+                switch fill {
+                case nil:
+                    square.stroke()
+                    let slash = NSBezierPath()
+                    slash.move(to: NSPoint(x: frame.minX, y: frame.minY))
+                    slash.line(to: NSPoint(x: frame.maxX, y: frame.maxY))
+                    slash.lineWidth = 1.4
+                    slash.stroke()
+                case .gradient:
+                    NSGradient(starting: color, ending: color.withAlphaComponent(0.15))?.draw(in: square, angle: -45)
+                case .solid:
+                    square.fill()
+                case .wallpaper:
+                    square.stroke()
+                    let hill = NSBezierPath()
+                    hill.move(to: NSPoint(x: frame.minX + 1, y: frame.minY + 1))
+                    hill.line(to: NSPoint(x: frame.midX - 1, y: frame.maxY - 5))
+                    hill.line(to: NSPoint(x: frame.maxX - 1, y: frame.minY + 1))
+                    hill.close()
+                    hill.fill()
+                case .clear:
+                    let cell = frame.width / 3
+                    for column in 0..<3 {
+                        for line in 0..<3 where (column + line) % 2 == 0 {
+                            NSRect(x: frame.minX + CGFloat(column) * cell, y: frame.minY + CGFloat(line) * frame.height / 3,
+                                   width: cell, height: frame.height / 3).fill()
+                        }
+                    }
+                }
+            }
+            chip.isChosen = backdrop?.fill == fill
+            chip.target = self
+            chip.action = #selector(pickBackdropFill(_:))
+            chip.tag = index
+            return chip
+        }
+    }
+
+    @objc private func pickBackdropFill(_ sender: NSButton) {
+        guard sender.tag > 0 else {
+            backdrop = nil
+            rebuild()
+            onBackdrop?(false, nil)
+            return
+        }
+        let fill = Backdrop.Fill.allCases[sender.tag - 1]
+        changeBackdrop { backdrop in
+            backdrop.fill = fill
+            if fill == .wallpaper, backdrop.wallpaper == nil { backdrop.wallpaper = readWallpaper?() }
+        }
+    }
+
+    /// Each drawn as a frame round a smaller and smaller middle.
+    private func paddingChips(_ backdrop: Backdrop) -> [NSView] {
+        Backdrop.Padding.allCases.enumerated().map { index, padding in
+            let chip = ChipButton(label: ["Small padding", "Medium padding", "Large padding"][index]) { box, color in
+                let frame = box.insetBy(dx: 7, dy: 5)
+                let outline = NSBezierPath(roundedRect: frame, xRadius: 2, yRadius: 2)
+                outline.lineWidth = 1
+                color.setStroke()
+                outline.stroke()
+                color.setFill()
+                let inset = 2 + CGFloat(index) * 1.6
+                NSBezierPath(rect: frame.insetBy(dx: inset, dy: inset)).fill()
+            }
+            chip.isChosen = backdrop.padding == padding
+            chip.target = self
+            chip.action = #selector(pickPadding(_:))
+            chip.tag = index
+            return chip
+        }
+    }
+
+    @objc private func pickPadding(_ sender: NSButton) {
+        let paddings = Backdrop.Padding.allCases
+        guard paddings.indices.contains(sender.tag) else { return }
+        changeBackdrop { $0.padding = paddings[sender.tag] }
+    }
+
+    private func backdropCornerChips(_ backdrop: Backdrop) -> [NSView] {
+        Backdrop.cornerChoices.enumerated().map { index, corner in
+            let chip = ChipButton(label: ["Square capture corners", "Round capture corners", "Rounder capture corners"][index]) { box, color in
+                let frame = box.insetBy(dx: 7, dy: 6)
+                let radius: CGFloat = [0, 3, 5.5][index]
+                let path = NSBezierPath(roundedRect: frame, xRadius: radius, yRadius: radius)
+                path.lineWidth = 1.6
+                color.setStroke()
+                path.stroke()
+            }
+            chip.isChosen = backdrop.corners == corner
+            chip.target = self
+            chip.action = #selector(pickBackdropCorners(_:))
+            chip.tag = index
+            return chip
+        }
+    }
+
+    @objc private func pickBackdropCorners(_ sender: NSButton) {
+        guard Backdrop.cornerChoices.indices.contains(sender.tag) else { return }
+        changeBackdrop { $0.corners = Backdrop.cornerChoices[sender.tag] }
+    }
+
+    /// A square with no shadow, a faint one, and a dark one.
+    private func shadowChips(_ backdrop: Backdrop) -> [NSView] {
+        Backdrop.Shadow.allCases.enumerated().map { index, shadow in
+            let chip = ChipButton(label: ["No shadow", "Soft shadow", "Strong shadow"][index]) { box, color in
+                let frame = box.insetBy(dx: 8, dy: 7).offsetBy(dx: -1, dy: 1)
+                if index > 0 {
+                    color.withAlphaComponent(index == 1 ? 0.3 : 0.6).setFill()
+                    NSBezierPath(roundedRect: frame.offsetBy(dx: 2, dy: -2), xRadius: 2, yRadius: 2).fill()
+                }
+                let square = NSBezierPath(roundedRect: frame, xRadius: 2, yRadius: 2)
+                square.lineWidth = 1.4
+                color.setStroke()
+                square.stroke()
+            }
+            chip.isChosen = backdrop.shadow == shadow
+            chip.target = self
+            chip.action = #selector(pickShadow(_:))
+            chip.tag = index
+            return chip
+        }
+    }
+
+    @objc private func pickShadow(_ sender: NSButton) {
+        let shadows = Backdrop.Shadow.allCases
+        guard shadows.indices.contains(sender.tag) else { return }
+        changeBackdrop { $0.shadow = shadows[sender.tag] }
+    }
+
+    // MARK: Overlay
+
+    private static let opacities: [CGFloat] = [0.25, 0.5, 0.75, 1]
+
+    /// How see-through a pasted image is, each chip drawn at its own opacity. Keys 1 to
+    /// 9 and 0 set the steps between.
+    private func opacityChips() -> [NSView] {
+        Self.opacities.enumerated().map { index, opacity in
+            let chip = ChipButton(label: "Opacity \(Int(opacity * 100))%, or keys 1 to 9 and 0") { box, color in
+                color.withAlphaComponent(opacity).setFill()
+                NSBezierPath(roundedRect: box.insetBy(dx: 8, dy: 6), xRadius: 2, yRadius: 2).fill()
+            }
+            chip.isChosen = abs(style.opacity - opacity) < 0.01
+            chip.target = self
+            chip.action = #selector(pickOpacity(_:))
+            chip.tag = index
+            return chip
+        }
+    }
+
+    @objc private func pickOpacity(_ sender: NSButton) {
+        guard Self.opacities.indices.contains(sender.tag) else { return }
+        change { $0.opacity = Self.opacities[sender.tag] }
+    }
+
+    /// Two overlapping squares whose overlap is cut out, the difference blend's look.
+    private func differenceChip() -> NSView {
+        let chip = ChipButton(label: "Difference: what matches goes black") { box, color in
+            let frame = box.insetBy(dx: 7, dy: 6)
+            let back = NSRect(x: frame.minX, y: frame.minY + 3, width: frame.width - 5, height: frame.height - 3)
+            let front = NSRect(x: frame.minX + 5, y: frame.minY, width: frame.width - 5, height: frame.height - 3)
+            let shape = NSBezierPath(rect: back)
+            shape.append(NSBezierPath(rect: front))
+            shape.windingRule = .evenOdd
+            color.setFill()
+            shape.fill()
+        }
+        chip.isChosen = style.difference
+        chip.target = self
+        chip.action = #selector(toggleDifference)
+        return chip
+    }
+
+    @objc private func toggleDifference() {
+        change { $0.difference.toggle() }
     }
 }
 

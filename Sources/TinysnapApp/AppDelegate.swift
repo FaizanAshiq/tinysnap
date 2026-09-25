@@ -446,6 +446,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             preferences: { [weak self] in self?.preferences ?? .defaults },
             onStylesChange: { [weak self] styles, colorHex in self?.remember(styles, colorHex: colorHex) },
             onPin: { [weak self] image, scale, entry in self?.pin(image, scale: scale, entry: entry) },
+            onBackdropChange: { [weak self] backdrop in self?.remember(backdrop) },
             onClose: { [weak self] closed in
                 self?.editors.removeAll { $0 === closed }
                 self?.updateDockIcon()
@@ -500,6 +501,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var current = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? preferences
         for (tool, style) in styles { current.toolStyles[tool.rawValue] = style }
         current.colorHex = colorHex
+        preferences = current
+        try? current.save(to: Preferences.defaultFileURL)
+    }
+
+    /// Merged into what is on disk, as the styles are, so Settings is not written over.
+    private func remember(_ backdrop: Backdrop) {
+        var current = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? preferences
+        current.backdrop = backdrop
         preferences = current
         try? current.save(to: Preferences.defaultFileURL)
     }

@@ -80,6 +80,9 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
 
     public var hasFill: Bool { self == .rectangle || self == .oval }
 
+    /// Pasted images: opacity and the difference blend, for comparing against the capture.
+    public var hasOverlay: Bool { self == .image }
+
     /// Boxes whose corner radius can be set. Not erase: rounding it would leave the
     /// corners of what it hides showing.
     public var hasCorners: Bool {
