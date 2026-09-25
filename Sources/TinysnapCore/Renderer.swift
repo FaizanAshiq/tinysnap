@@ -6,10 +6,11 @@ import Foundation
 /// you see is exactly what you copy.
 public enum Renderer {
     /// Draws `region` of the document, in capture pixels, at `outputScale` output pixels
-    /// per capture pixel. `hidden` leaves out annotations, used for the text being typed.
+    /// per capture pixel, the whole extent unless told otherwise. `hidden` leaves out
+    /// annotations, used for the text being typed.
     public static func render(_ document: Document, region: CGRect? = nil, outputScale: CGFloat = 1,
                               hiding hidden: Set<Annotation.ID> = []) -> CGImage? {
-        let region = region ?? document.capture.bounds
+        let region = region ?? document.extent
         // Rounded down: rounding 400.5 up gave a last column only half covered by the
         // capture, which came out half transparent.
         let width = max(1, Int((region.width * outputScale).rounded(.down)))
@@ -26,6 +27,11 @@ public enum Renderer {
 
         let canvas = Canvas(context: context, region: region, outputScale: outputScale,
                             deviceSize: CGSize(width: width, height: height), scale: document.scale)
+        // Past the capture, the canvas carries on in the capture's edge colour.
+        if !document.capture.bounds.contains(region) {
+            context.setFillColor(document.capture.edgeColor)
+            context.fill(region)
+        }
         canvas.draw(document.capture.image, in: document.capture.bounds)
 
         let visible = document.annotations.filter { !hidden.contains($0.id) }

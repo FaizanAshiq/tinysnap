@@ -24,8 +24,11 @@ public enum Exporter {
         // The whole capture is drawn and the crop cut out afterwards. Drawing only the
         // crop left a redaction or magnifier at its edge less to read back than the
         // canvas had, so the export came out different from what was on screen.
-        guard let full = Renderer.render(document, outputScale: outputScale) else { return nil }
-        let rect = document.outputRect
+        let region = document.extent
+        guard let full = Renderer.render(document, region: region, outputScale: outputScale) else { return nil }
+        // The render starts at the extent's corner, which is left of or above the
+        // capture once the canvas has grown.
+        let rect = document.outputRect.offsetBy(dx: -region.minX, dy: -region.minY)
         // Whole output pixels, rounded inward, so no edge pixel is only partly inside.
         let left = (rect.minX * outputScale).rounded(.up)
         let top = (rect.minY * outputScale).rounded(.up)

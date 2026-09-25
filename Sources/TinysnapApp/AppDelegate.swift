@@ -1,6 +1,11 @@
 import AppKit
 import TinysnapCore
 
+extension Notification.Name {
+    /// An entry was added, rendered again, trashed or swept, so the library window reloads.
+    static let libraryChanged = Notification.Name("TinysnapLibraryChanged")
+}
+
 /// The menu bar item, the hotkeys, and the way from a capture request to an editor.
 /// Everything here touches AppKit, which is main thread only. Swift 6 does not infer
 /// that from the delegate conformance, so it is stated once on the class.
@@ -11,6 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var takenHotKeys: Set<HotKeyAction> = []
     private var preferences: Preferences = .defaults
     private var editors: [EditorWindowController] = []
+    private let library = LibraryStore()
+    /// Why the last capture could not be kept, shown in Settings until one can.
+    private(set) var libraryError: String?
+    private var sweepTimer: Timer?
+    private var pins: [PinWindowController] = []
+    private var libraryWindow: LibraryWindowController?
+    private var thumbnail: CaptureThumbnail?
     private var overlay: AreaOverlayController?
     private var settings: SettingsWindowController?
     private var lastArea: (displayID: CGDirectDisplayID, rect: CGRect)?
@@ -37,6 +49,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotKeys = center
 
         Task { await ScreenReader.warmUp() }
+
+        sweepLibrary()
+        sweepTimer = Timer.scheduledTimer(withTimeInterval: 86_400, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.sweepLibrary() }
+        }
     }
 
     /// `open -a Tinysnap picture.png`, or a file dropped on the app, opens in an editor.
@@ -47,8 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let image = NSImage(contentsOf: url),
                   let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
                   image.size.width > 0 else { continue }
-            openEditor(Capture(image: cgImage, scale: CGFloat(cgImage.width) / image.size.width), on: nil,
-                       title: url.lastPathComponent)
+            let capture = Capture(image: cgImage, scale: CGFloat(cgImage.width) / image.size.width)
+            openEditor(Document(capture: capture), entry: nil, on: nil, title: url.lastPathComponent)
         }
     }
 
@@ -123,10 +140,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func perform(_ action: HotKeyAction) {
         switch action {
-        case .area: captureArea()
+        case .area: captureArea(for: .image)
         case .fullscreen: captureFullscreen()
         case .repeatArea: repeatLastArea()
         case .delayed: startDelayedCapture()
+        case .text: captureArea(for: .text)
+        case .library: showLibrary()
         }
     }
 
@@ -184,8 +203,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if alert.runModal() == .alertFirstButtonReturn { ScreenAccess.openSettings() }
     }
 
+    /// An area or window picked on the frozen screen becomes an image to edit, or text
+    /// on the clipboard.
+    private enum Purpose {
+        case image, text
+    }
+
     /// Freezes the screen, then puts the area overlay on the frozen image.
-    private func captureArea() {
+    private func captureArea(for purpose: Purpose) {
         guard overlay == nil, !isFreezing, ensureScreenAccess() else { return }
         isFreezing = true
         Task { [weak self] in
@@ -197,25 +222,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return
             }
             let controller = AreaOverlayController(displays: frozen.displays, pickable: frozen.windows) { [weak self] result in
-                self?.finishArea(result)
+                self?.finishArea(result, for: purpose)
             }
             self.overlay = controller
             controller.show()
         }
     }
 
-    private func finishArea(_ result: AreaResult) {
+    private func finishArea(_ result: AreaResult, for purpose: Purpose) {
         overlay = nil
         switch result {
         case .cancelled:
             return
         case let .area(display, rect):
-            lastArea = (display.displayID, rect)
+            // Repeat Last Area repeats pictures, not text grabs.
+            if purpose == .image { lastArea = (display.displayID, rect) }
             guard let capture = display.capture(of: rect) else {
                 showCaptureFailed()
                 return
             }
-            openEditor(capture, on: display.displayID)
+            take(capture, on: display.displayID, for: purpose)
         case let .window(picked):
             Task {
                 guard let capture = await ScreenReader.capture(picked) else {
@@ -223,8 +249,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     return
                 }
                 let screen = NSScreen.screens.first { $0.frame.intersects(picked.frame) }
-                openEditor(capture, on: screen?.displayID)
+                take(capture, on: screen?.displayID, for: purpose)
             }
+        }
+    }
+
+    private func take(_ capture: Capture, on displayID: CGDirectDisplayID?, for purpose: Purpose) {
+        switch purpose {
+        case .image: deliver(capture, on: displayID)
+        case .text: TextCopy.read(capture.image, on: NSScreen.screens.first { $0.displayID == displayID })
         }
     }
 
@@ -241,7 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 showCaptureFailed()
                 return
             }
-            openEditor(Capture(image: display.image, scale: display.scale), on: displayID)
+            deliver(Capture(image: display.image, scale: display.scale), on: displayID)
         }
     }
 
@@ -249,7 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// gone, the overlay opens instead.
     private func repeatLastArea() {
         guard let lastArea else {
-            captureArea()
+            captureArea(for: .image)
             return
         }
         guard !isFreezing, ensureScreenAccess() else { return }
@@ -258,10 +291,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let frozen = await ScreenReader.freeze(onlyDisplay: lastArea.displayID)
             isFreezing = false
             guard let display = frozen.displays.first, let capture = display.capture(of: lastArea.rect) else {
-                captureArea()
+                captureArea(for: .image)
                 return
             }
-            openEditor(capture, on: display.displayID)
+            deliver(capture, on: display.displayID)
         }
     }
 
@@ -277,22 +310,142 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             secondsLeft = nil
             statusItem?.button?.title = ""
-            captureArea()
+            captureArea(for: .image)
         }
+    }
+
+    /// Where every capture goes once it is taken: into the library, then to an editor or
+    /// the thumbnail, as Settings says.
+    private func deliver(_ capture: Capture, on displayID: CGDirectDisplayID?) {
+        var entry: LibraryEntry?
+        if preferences.keepLibrary {
+            do {
+                entry = try library.add(capture, captured: Date())
+                libraryError = nil
+                NotificationCenter.default.post(name: .libraryChanged, object: nil)
+            } catch {
+                // The capture still opens; Settings says why it was not kept.
+                libraryError = error.localizedDescription
+            }
+        }
+        switch preferences.afterCapture {
+        case .editor: openEditor(Document(capture: capture), entry: entry, on: displayID)
+        case .thumbnail: showThumbnail(Document(capture: capture), entry: entry, on: displayID)
+        }
+    }
+
+    /// One thumbnail at a time: a new capture sends the last one away, as a time out would.
+    private func showThumbnail(_ document: Document, entry: LibraryEntry?, on displayID: CGDirectDisplayID?) {
+        thumbnail?.dismiss(copying: true)
+        thumbnail = CaptureThumbnail(
+            document: document, entry: entry,
+            screen: NSScreen.screens.first { $0.displayID == displayID } ?? NSScreen.main,
+            preferences: { [weak self] in self?.preferences ?? .defaults },
+            onOpen: { [weak self] shown in self?.openEditor(shown.document, entry: shown.entry, on: displayID) },
+            onPin: { [weak self] shown in
+                guard let exported = Exporter.export(shown.document, scale: .native) else { return }
+                self?.pin(exported.image, scale: shown.document.scale, entry: shown.entry)
+            },
+            onGone: { [weak self] gone in
+                if self?.thumbnail === gone { self?.thumbnail = nil }
+            }
+        )
+    }
+
+    /// Opens a library entry, or brings its editor forward when it is already open.
+    func open(_ entry: LibraryEntry) {
+        if let editor = editors.first(where: { $0.entry == entry }) {
+            editor.showWindow(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        guard let opened = library.open(entry) else {
+            NSSound.beep()
+            return
+        }
+        // A damaged entry opens flat and on its own, so nothing is written over it.
+        openEditor(opened.document, entry: opened.isEditable ? entry : nil, on: nil, title: Self.title(for: entry.captured))
+    }
+
+    private static func title(for date: Date) -> String {
+        let day: DateFormatter.Style = Calendar.current.isDateInToday(date) ? .none : .medium
+        return "Capture at \(DateFormatter.localizedString(from: date, dateStyle: day, timeStyle: .medium))"
+    }
+
+    func showLibrary() {
+        if libraryWindow == nil {
+            libraryWindow = LibraryWindowController(
+                library: library,
+                preferences: { [weak self] in self?.preferences ?? .defaults },
+                keeping: { [weak self] in self?.openEntryNames ?? [] },
+                onOpen: { [weak self] entry in self?.open(entry) },
+                onPin: { [weak self] entry in self?.pin(entry) },
+                flush: { [weak self] entry in self?.flush(entry) }
+            )
+        }
+        libraryWindow?.show()
+    }
+
+    // MARK: Pins
+
+    func pin(_ image: CGImage, scale: CGFloat, entry: LibraryEntry?) {
+        let pin = PinWindowController(
+            image: image, scale: scale, entry: entry,
+            preferences: { [weak self] in self?.preferences ?? .defaults },
+            onOpen: { [weak self] pin in self?.openPinned(pin) },
+            onClose: { [weak self] pin in self?.pins.removeAll { $0 === pin } }
+        )
+        pins.append(pin)
+        pin.showWindow(nil)
+    }
+
+    /// An entry still open in an editor has that editor render it first.
+    private func flush(_ entry: LibraryEntry) {
+        editors.first { $0.entry == entry }?.keep(renderingImage: true)
+    }
+
+    /// The entry's rendered image, brought up to date with any editor still open on it.
+    func pin(_ entry: LibraryEntry) {
+        flush(entry)
+        guard let flat = LibraryStore.readImage(entry.imageURL) else {
+            NSSound.beep()
+            return
+        }
+        pin(flat.image, scale: flat.scale, entry: entry)
+    }
+
+    /// Back into the editor: the library entry, editable, when there is one.
+    private func openPinned(_ pin: PinWindowController) {
+        if let entry = pin.entry {
+            open(entry)
+        } else {
+            openEditor(Document(capture: Capture(image: pin.image, scale: pin.scale)), entry: nil, on: nil)
+        }
+    }
+
+    /// Entries open in an editor are never swept or cleared out from under it.
+    var openEntryNames: Set<String> { Set(editors.compactMap { $0.entry?.name }) }
+
+    private func sweepLibrary() {
+        guard !library.sweep(keeping: openEntryNames).isEmpty else { return }
+        NotificationCenter.default.post(name: .libraryChanged, object: nil)
     }
 
     /// Every capture gets its own window, named for the time it was taken, which is how
     /// it is told apart in the Window menu, the Dock and Mission Control.
-    private func openEditor(_ capture: Capture, on displayID: CGDirectDisplayID?,
-                            title: String = "Capture at \(DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium))") {
+    private func openEditor(_ document: Document, entry: LibraryEntry?, on displayID: CGDirectDisplayID?,
+                            title: String = AppDelegate.title(for: Date())) {
         let screen = NSScreen.screens.first { $0.displayID == displayID } ?? NSScreen.main
         let previous = editors.last { $0.window?.isVisible == true }?.window
         let editor = EditorWindowController(
-            capture: capture,
+            document: document,
+            entry: entry,
+            library: library,
             screen: screen,
             title: title,
             preferences: { [weak self] in self?.preferences ?? .defaults },
             onStylesChange: { [weak self] styles, colorHex in self?.remember(styles, colorHex: colorHex) },
+            onPin: { [weak self] image, scale, entry in self?.pin(image, scale: scale, entry: entry) },
             onClose: { [weak self] closed in
                 self?.editors.removeAll { $0 === closed }
                 self?.updateDockIcon()
@@ -355,7 +508,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func showSettings(_ sender: Any?) {
         if settings == nil {
-            settings = SettingsWindowController(preferences: preferences, taken: takenHotKeys, onChange: { [weak self] updated in
+            settings = SettingsWindowController(preferences: preferences, taken: takenHotKeys, library: SettingsWindowController.Library(
+                size: { [weak self] in self?.library.size() ?? 0 },
+                problem: { [weak self] in self?.libraryError },
+                clear: { [weak self] in
+                    guard let self else { return }
+                    self.library.clear(keeping: self.openEntryNames)
+                    NotificationCenter.default.post(name: .libraryChanged, object: nil)
+                }
+            ), onChange: { [weak self] updated in
                 guard let self else { return [] }
                 self.preferences = updated
                 self.statusItem?.isVisible = updated.showMenuBarIcon

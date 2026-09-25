@@ -5,6 +5,24 @@ import Testing
 @testable import TinysnapCore
 
 struct ExportTests {
+    @Test func anExportTakesInShapesDrawnPastTheCapture() throws {
+        let box = Fixture.annotation(.rectangle(CGRect(x: -40, y: 10, width: 60, height: 20)))
+        let document = Document(capture: Fixture.capture(width: 100, height: 60, scale: 2), annotations: [box])
+        let exported = try #require(Exporter.export(document, scale: .native))
+        #expect(exported.image.width == Int(document.extent.width))
+        #expect(exported.image.height == Int(document.extent.height))
+        #expect(document.extent.minX < 0)
+    }
+
+    @Test func aCropOnAGrownCanvasCutsFromTheRightPlace() throws {
+        let box = Fixture.annotation(.rectangle(CGRect(x: -40, y: 10, width: 60, height: 20)))
+        var document = Document(capture: Fixture.capture(width: 100, height: 60, fill: Fixture.blue), annotations: [box])
+        document.crop = CGRect(x: 60, y: 30, width: 20, height: 20)
+        let exported = try #require(Exporter.export(document, scale: .native))
+        #expect(exported.image.width == 20 && exported.image.height == 20)
+        #expect(Fixture.isClose(Fixture.pixel(exported.image, 10, 10), (0, 0, 255)))
+    }
+
     @Test func nativeExportKeepsEveryPixelAndTagsRetinaDPI() throws {
         let document = Document(capture: Fixture.capture(width: 800, height: 600, scale: 2))
         let exported = try #require(Exporter.export(document, scale: .native))

@@ -27,11 +27,15 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     private var renderedDocument: Document?
     private var renderedHidden: Annotation.ID?
     private var textView: NSTextView?
+    /// The document's extent, in capture pixels, kept here because working it out
+    /// measures text. The view's top left corner is its origin, which moves left of or
+    /// above the capture once a shape is drawn past the edge.
+    private var extent: CGRect
 
     init(session: EditorSession) {
         self.session = session
-        let size = session.display.capture.pointSize
-        super.init(frame: NSRect(origin: .zero, size: size))
+        extent = session.display.extent
+        super.init(frame: NSRect(x: 0, y: 0, width: extent.width / session.scale, height: extent.height / session.scale))
         registerForDraggedTypes([.fileURL, .png, .tiff])
     }
 
@@ -54,7 +58,7 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     /// Reads what is shown, annotations included, the way the readout should.
     private func reportColor(at point: CGPoint) {
         guard let rendered else { return }
-        onPointerColor?(ColorProbe.hex(of: rendered, x: Int(point.x), y: Int(point.y)))
+        onPointerColor?(ColorProbe.hex(of: rendered, x: Int(point.x - extent.minX), y: Int(point.y - extent.minY)))
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -91,14 +95,21 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         }
     }
 
+    /// Over something a click picks up with any tool: an annotation that changes its
+    /// middle, a stroke, or a hover border.
+    private var overPickUp = false {
+        didSet { if overPickUp != oldValue { updateCursor() } }
+    }
+
     /// An open hand over anything a click would pick up.
     private func updateCursor() {
-        let picksUp = commandHeld || session.tool == .select || session.tool == .image
+        let picksUp = commandHeld || overPickUp || session.tool == .select || session.tool == .image
         (picksUp && hovered != nil ? NSCursor.openHand : NSCursor.arrow).set()
     }
 
     private func hover(at point: CGPoint) {
-        hovered = session.hovered(at: point)
+        hovered = session.hovered(at: point, reach: reach)
+        overPickUp = session.phase == .idle && session.tool != .crop && session.display.pickUp(at: point, reach: reach) != nil
     }
 
     private func drawBorders(in context: CGContext) {
@@ -125,17 +136,83 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
 
     private func pixelPoint(_ event: NSEvent) -> CGPoint {
         let point = convert(event.locationInWindow, from: nil)
-        return CGPoint(x: point.x * scale, y: point.y * scale)
+        return CGPoint(x: point.x * scale + extent.minX, y: point.y * scale + extent.minY)
     }
 
     private func viewRect(_ pixels: CGRect) -> CGRect {
-        CGRect(x: pixels.minX / scale, y: pixels.minY / scale, width: pixels.width / scale, height: pixels.height / scale)
+        CGRect(x: (pixels.minX - extent.minX) / scale, y: (pixels.minY - extent.minY) / scale,
+               width: pixels.width / scale, height: pixels.height / scale)
     }
 
     private func sessionChanged(from old: EditorSession) {
+        fitExtent()
         needsDisplay = true
         syncTextView()
         onChange?()
+    }
+
+    /// Grows and shrinks with the document's extent. Mid gesture the capture holds its
+    /// place on screen: growing left or up moves it within the view, so the scroll
+    /// position moves by as much, and centring waits. Once the gesture ends, the canvas
+    /// glides back to the centre.
+    private func fitExtent() {
+        let clip = enclosingScrollView?.contentView as? CenteringClipView
+        let gesture = session.phase != .idle
+        let new = session.display.extent
+        if new != extent {
+            if gesture { clip?.isHoldingPlace = true }
+            let shift = NSPoint(x: (extent.minX - new.minX) / scale, y: (extent.minY - new.minY) / scale)
+            extent = new
+            setFrameSize(NSSize(width: new.width / scale, height: new.height / scale))
+            if let clip, shift != .zero {
+                clip.scroll(to: NSPoint(x: clip.bounds.origin.x + shift.x, y: clip.bounds.origin.y + shift.y))
+                enclosingScrollView?.reflectScrolledClipView(clip)
+            }
+        }
+        guard !gesture, let clip, clip.isHoldingPlace else { return }
+        clip.isHoldingPlace = false
+        let settled = clip.constrainBoundsRect(clip.bounds).origin
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2
+            clip.animator().setBoundsOrigin(settled)
+        }
+        enclosingScrollView?.reflectScrolledClipView(clip)
+    }
+
+    // MARK: Ground
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        paintGround()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        paintGround()
+    }
+
+    /// Outside the canvas the window shows a checkerboard, as image editors do, so where
+    /// the image ends is plain whatever colour the capture is. A solid ground next to a
+    /// dark capture read as part of it.
+    private func paintGround() {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        enclosingScrollView?.backgroundColor = Self.checkerboard(dark: dark)
+        enclosingScrollView?.drawsBackground = true
+    }
+
+    private static func checkerboard(dark: Bool) -> NSColor {
+        let side: CGFloat = 8
+        let base = NSColor(white: dark ? 0.16 : 0.90, alpha: 1)
+        let square = NSColor(white: dark ? 0.22 : 0.97, alpha: 1)
+        let tile = NSImage(size: NSSize(width: side * 2, height: side * 2), flipped: false) { rect in
+            base.setFill()
+            rect.fill()
+            square.setFill()
+            NSRect(x: 0, y: 0, width: side, height: side).fill()
+            NSRect(x: side, y: side, width: side, height: side).fill()
+            return true
+        }
+        return NSColor(patternImage: tile)
     }
 
     // MARK: Drawing
@@ -199,7 +276,8 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         context.setStrokeColor(NSColor.controlAccentColor.cgColor)
         context.setLineWidth(1 / magnification)
         for point in points {
-            let box = CGRect(x: point.x / scale - size / 2, y: point.y / scale - size / 2, width: size, height: size)
+            let box = CGRect(x: (point.x - extent.minX) / scale - size / 2, y: (point.y - extent.minY) / scale - size / 2,
+                             width: size, height: size)
             context.fill(box)
             context.stroke(box)
         }
@@ -388,7 +466,7 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         field.textColor = NSColor(cgColor: Palette.color(hex: annotation.style.colorHex))
         field.insertionPointColor = field.textColor ?? .labelColor
         if field.string != string { field.string = string }
-        field.setFrameOrigin(CGPoint(x: origin.x / scale, y: origin.y / scale))
+        field.setFrameOrigin(CGPoint(x: (origin.x - extent.minX) / scale, y: (origin.y - extent.minY) / scale))
         field.sizeToFit()
         if field.frame.width < fontSize { field.setFrameSize(NSSize(width: fontSize, height: field.frame.height)) }
         if window?.firstResponder !== field { window?.makeFirstResponder(field) }

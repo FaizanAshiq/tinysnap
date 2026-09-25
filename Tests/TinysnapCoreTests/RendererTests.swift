@@ -3,6 +3,26 @@ import Testing
 @testable import TinysnapCore
 
 struct RendererTests {
+    @Test func aGrownCanvasTakesTheColourMostOfTheCaptureBorderHas() throws {
+        let slate = CGColor(srgbRed: 0.2, green: 0.3, blue: 0.4, alpha: 1)
+        // A white patch on the top edge, which the fill must not pick up.
+        let capture = Fixture.capture(width: 100, height: 60, fill: slate) { context in
+            context.setFillColor(Fixture.white)
+            context.fill(CGRect(x: 0, y: 0, width: 20, height: 10))
+        }
+        let box = Fixture.annotation(.rectangle(CGRect(x: 80, y: 20, width: 60, height: 20)))
+        let document = Document(capture: capture, annotations: [box])
+        let image = try #require(Renderer.render(document))
+
+        #expect(image.width == Int(document.extent.width) && image.height == Int(document.extent.height))
+        // Past the capture's right edge and clear of the rectangle.
+        #expect(Fixture.isClose(Fixture.pixel(image, image.width - 3, 3), (51, 77, 102)))
+        #expect(Fixture.isClose(Fixture.pixel(image, image.width - 3, image.height - 3), (51, 77, 102)))
+        // The capture itself is untouched, white patch and all.
+        #expect(Fixture.isClose(Fixture.pixel(image, 5, 5), (255, 255, 255)))
+        #expect(Fixture.isClose(Fixture.pixel(image, 50, 50), (51, 77, 102)))
+    }
+
     private let white = (r: 255, g: 255, b: 255)
 
     private func render(_ capture: Capture, _ annotations: [Annotation], hiding hidden: Set<Annotation.ID> = []) -> CGImage {
@@ -130,14 +150,17 @@ struct RendererTests {
 
     @Test func redactionsPastTheEdgeOfTheCaptureDoNotCrash() {
         let capture = Fixture.capture(width: 50, height: 50)
-        let image = render(capture, [
+        let annotations = [
             Fixture.annotation(.blur(CGRect(x: -20, y: -20, width: 40, height: 40))),
             Fixture.annotation(.pixelate(CGRect(x: 30, y: 30, width: 100, height: 100))),
             Fixture.annotation(.erase(CGRect(x: -10, y: 45, width: 100, height: 100))),
             Fixture.annotation(.erase(CGRect(x: 60, y: 60, width: 10, height: 10))),
             Fixture.annotation(.magnifier(center: .zero, radius: 30, zoom: 2)),
-        ])
-        #expect(image.width == 50 && image.height == 50)
+        ]
+        let image = render(capture, annotations)
+        // The canvas grows to take them all in.
+        let extent = Document(capture: capture, annotations: annotations).extent
+        #expect(image.width == Int(extent.width) && image.height == Int(extent.height))
     }
 
     @Test func theMagnifierEnlargesWhatIsUnderIt() {

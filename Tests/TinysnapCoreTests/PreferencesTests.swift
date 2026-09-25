@@ -90,6 +90,59 @@ struct PreferencesTests {
         #expect(try !Preferences.load(from: url).showDockIconWhileCapturing)
     }
 
+    @Test func captureTextDefaultsToCommandShiftOAndOpenLibraryHasNoHotkey() {
+        #expect(HotKeys.defaults.text == HotKeyBinding(keyCode: 31, modifiers: [.command, .shift]))
+        #expect(HotKeys.defaults.text?.displayString == "⇧⌘O")
+        #expect(HotKeys.defaults.library == nil)
+    }
+
+    @Test func theMenuListsCaptureTextThirdAndOpenLibraryLast() {
+        #expect(HotKeyAction.allCases.map(\.title) == [
+            "Capture Area", "Capture Fullscreen", "Capture Text", "Repeat Last Area", "Delayed Capture", "Open Library",
+        ])
+    }
+
+    @Test func aFileFromBeforeTheNewHotkeysGetsTheirDefaults() throws {
+        let json = #"{"hotkeys": {"area": null, "fullscreen": null, "repeatArea": null, "delayed": null}}"#
+        let preferences = try Preferences.load(from: temporaryFile(containing: json))
+        #expect(preferences.hotkeys.area == nil)
+        #expect(preferences.hotkeys.text == HotKeys.defaults.text)
+        #expect(preferences.hotkeys.library == nil)
+    }
+
+    @Test func theNewHotkeysSurviveSavingAndAClearedOneStaysCleared() throws {
+        var saved = Preferences.defaults
+        saved.hotkeys.text = nil
+        saved.hotkeys.library = HotKeyBinding(keyCode: 37, modifiers: [.command, .option])
+        let url = try temporaryFile()
+        try saved.save(to: url)
+        let loaded = try Preferences.load(from: url)
+        #expect(loaded.hotkeys.text == nil)
+        #expect(loaded.hotkeys.library == saved.hotkeys.library)
+        #expect(loaded.hotkeys.action(using: HotKeyBinding(keyCode: 37, modifiers: [.option, .command])) == .library)
+    }
+
+    @Test func aCaptureOpensTheEditorAndTheLibraryKeepsItByDefault() {
+        #expect(Preferences.defaults.afterCapture == .editor)
+        #expect(Preferences.defaults.keepLibrary)
+    }
+
+    @Test func afterCaptureAndKeepLibraryFallBackAloneAndSurviveSaving() throws {
+        let bad = try Preferences.load(from: temporaryFile(containing: #"{"afterCapture": "popup", "keepLibrary": "yes", "delaySeconds": 5}"#))
+        #expect(bad.afterCapture == .editor)
+        #expect(bad.keepLibrary)
+        #expect(bad.delaySeconds == 5)
+
+        var saved = Preferences.defaults
+        saved.afterCapture = .thumbnail
+        saved.keepLibrary = false
+        let url = try temporaryFile()
+        try saved.save(to: url)
+        let loaded = try Preferences.load(from: url)
+        #expect(loaded.afterCapture == .thumbnail)
+        #expect(!loaded.keepLibrary)
+    }
+
     @Test func printsHotkeysTheWayMacOSDoes() {
         #expect(HotKeys.defaults.area?.displayString == "⇧⌘2")
     }

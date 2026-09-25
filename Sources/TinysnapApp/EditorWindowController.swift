@@ -4,7 +4,12 @@ import UniformTypeIdentifiers
 
 /// Keeps a smaller capture centred in the window instead of pinned to a corner.
 final class CenteringClipView: NSClipView {
+    /// Set while a shape is being drawn past the capture. The canvas then grows without
+    /// being centred again under the pointer, and settles back to the centre after.
+    var isHoldingPlace = false
+
     override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
+        guard !isHoldingPlace else { return proposedBounds }
         var rect = super.constrainBoundsRect(proposedBounds)
         guard let document = documentView else { return rect }
         if rect.width > document.frame.width { rect.origin.x = (document.frame.width - rect.width) / 2 }
@@ -22,12 +27,20 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private let preferences: () -> Preferences
     private let onStylesChange: ([Tool: Style], String) -> Void
     private let onClose: (EditorWindowController) -> Void
+    private let onPin: (CGImage, CGFloat, LibraryEntry?) -> Void
+    /// The library entry this editor keeps up to date. Nil for a file opened from disk,
+    /// a damaged entry opened flat, or any capture while the library is off.
+    let entry: LibraryEntry?
+    private let library: LibraryStore
+    /// What `edits.json` holds now, so an edit is written once and a no-op never.
+    private var keptDocument: Document
+    /// What `image.png` was last rendered from, so a close right after a save renders once.
+    private var renderedDocument: Document?
+    private var pendingKeep: Task<Void, Never>?
 
     private let styleBar = StyleBar()
     private let colorWell = NSView()
     private let colorLabel = NSTextField(labelWithString: "")
-    private let sizeLabel = NSTextField(labelWithString: "")
-    private let zoomLabel = NSTextField(labelWithString: "")
     /// The colour under the pointer, which Tab copies.
     private var pointerColor: String?
     private var magnifyObserver: NSObjectProtocol?
@@ -36,6 +49,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private static let copyItem = NSToolbarItem.Identifier("copy")
     private static let saveItem = NSToolbarItem.Identifier("save")
     private static let dragItem = NSToolbarItem.Identifier("drag")
+    private static let pinItem = NSToolbarItem.Identifier("pin")
+    private static let textItem = NSToolbarItem.Identifier("text")
     /// One toolbar item per tool, not one group of them: the toolbar draws hover and
     /// selection per item, so a group lit up as one block under the pointer.
     nonisolated private static func toolItem(_ tool: Tool) -> NSToolbarItem.Identifier {
@@ -44,15 +59,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     private static let toolItems = Tool.allCases.map(toolItem)
     private static let colorItem = NSToolbarItem.Identifier("colour")
-    private static let sizeItem = NSToolbarItem.Identifier("size")
-    private static let zoomItem = NSToolbarItem.Identifier("zoom")
 
-    init(capture: Capture, screen: NSScreen?, title: String, preferences: @escaping () -> Preferences,
-         onStylesChange: @escaping ([Tool: Style], String) -> Void, onClose: @escaping (EditorWindowController) -> Void) {
+    init(document: Document, entry: LibraryEntry?, library: LibraryStore, screen: NSScreen?, title: String,
+         preferences: @escaping () -> Preferences, onStylesChange: @escaping ([Tool: Style], String) -> Void,
+         onPin: @escaping (CGImage, CGFloat, LibraryEntry?) -> Void, onClose: @escaping (EditorWindowController) -> Void) {
         self.preferences = preferences
         self.onStylesChange = onStylesChange
+        self.onPin = onPin
         self.onClose = onClose
-        canvas = CanvasView(session: EditorSession(document: Document(capture: capture), styles: preferences().styles,
+        self.entry = entry
+        self.library = library
+        keptDocument = document
+        canvas = CanvasView(session: EditorSession(document: document, styles: preferences().styles,
                                                    colorHex: preferences().colorHex))
 
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 500),
@@ -73,7 +91,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
         buildCanvas()
         buildToolbar()
-        place(on: screen ?? NSScreen.main, capture: capture)
+        place(on: screen ?? NSScreen.main, capture: document.capture)
         refreshToolbar()
     }
 
@@ -90,7 +108,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         scrollView.allowsMagnification = true
         scrollView.minMagnification = 0.1
         scrollView.maxMagnification = 16
-        scrollView.backgroundColor = .underPageBackgroundColor
         scrollView.drawsBackground = true
 
         // The style bar floats over the canvas's top right corner, outside the scroll
@@ -106,7 +123,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         styleBar.onChange = { [weak self] merging, change in self?.canvas.session.restyle(merging: merging, change) }
         styleBar.onCommit = { [weak self] in self?.rememberStyles() }
 
-        canvas.onChange = { [weak self] in self?.refreshToolbar() }
+        canvas.onChange = { [weak self] in
+            self?.refreshToolbar()
+            self?.documentChanged()
+        }
         canvas.onStylesCommitted = { [weak self] in self?.rememberStyles() }
         canvas.onPointerColor = { [weak self] hex in self?.showPointerColor(hex) }
         canvas.onCopyColor = { [weak self] in self?.copyPointerColor() }
@@ -150,8 +170,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         let tools = Tool.toolbarGroups.map { $0.map(Self.toolItem) }.joined(separator: [.space])
-        return [Self.copyItem, Self.saveItem, Self.dragItem, .space] + tools
-            + [.flexibleSpace, Self.colorItem, Self.sizeItem, Self.zoomItem]
+        return [Self.copyItem, Self.saveItem, Self.dragItem, Self.textItem, Self.pinItem, .space] + tools
+            + [.flexibleSpace, Self.colorItem]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -190,6 +210,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             // The toolbar reads this label to accessibility, not the view's own.
             item.label = "Drag out the capture"
             return item
+        case Self.textItem:
+            return button(identifier, symbol: "text.viewfinder", tooltip: "Copy the text or QR code (⌘⇧C)", action: #selector(copyText(_:)))
+        case Self.pinItem:
+            return button(identifier, symbol: "pin", tooltip: "Pin on top of every app and close (⌘P)", action: #selector(pinImage(_:)))
         case Self.colorItem:
             colorWell.wantsLayer = true
             colorWell.layer?.cornerRadius = 6
@@ -200,10 +224,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             let stack = NSStackView(views: [colorWell, readout(colorLabel, caption: "Tab to copy")])
             stack.spacing = 8
             return infoItem(identifier, view: stack, label: "Colour under the pointer")
-        case Self.sizeItem:
-            return infoItem(identifier, view: readout(sizeLabel, caption: "Image size"), label: "Image size")
-        case Self.zoomItem:
-            return infoItem(identifier, view: readout(zoomLabel, caption: "Zoom"), label: "Zoom")
         default:
             return nil
         }
@@ -269,14 +289,58 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
                                                 y: bounds.maxY - styleBar.frame.height - 12))
             }
         }
-        let pixels = canvas.session.display.outputRect.size
-        sizeLabel.stringValue = "\(Int(pixels.width))×\(Int(pixels.height))px"
     }
 
     /// Written when a change is finished, not on every tick of the colour panel, each of
     /// which would rewrite preferences.json.
     private func rememberStyles() {
         onStylesChange(canvas.session.styles, canvas.session.colorHex)
+    }
+
+    // MARK: Library
+
+    /// An edit is written one second after the last one, so a burst of nudges or a colour
+    /// drag writes once, and a crash loses at most that second.
+    private func documentChanged() {
+        guard entry != nil, canvas.session.history.document != keptDocument else { return }
+        pendingKeep?.cancel()
+        pendingKeep = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            self?.keep(renderingImage: false)
+        }
+    }
+
+    /// Writes the edits now, and with `renderingImage` the image too, which Quick Look,
+    /// drag and pin show. The image is rendered on close, copy, save and pin, not on
+    /// every edit, because a Retina capture takes a moment to encode.
+    ///
+    /// It never ends typing: the timer fires mid-word, and every caller that needs the
+    /// text committed ends it first. False when the library could not be written, so
+    /// closing and quitting ask instead of trusting a copy that is not there.
+    // ponytail: writes on the main thread; move to a background queue if 5K captures stutter on close.
+    @discardableResult
+    func keep(renderingImage: Bool) -> Bool {
+        pendingKeep?.cancel()
+        pendingKeep = nil
+        guard let entry else { return true }
+        let document = canvas.session.history.document
+        do {
+            if document != keptDocument {
+                try library.saveEdits(document, to: entry)
+                keptDocument = document
+            }
+            if renderingImage, document != renderedDocument {
+                try library.saveImage(document, to: entry)
+                renderedDocument = document
+                // Posted after this turn, so a library drag that asked for the render
+                // is under way before the grid reloads.
+                DispatchQueue.main.async { NotificationCenter.default.post(name: .libraryChanged, object: nil) }
+            }
+            return true
+        } catch {
+            return false
+        }
     }
 
     // MARK: Colour readout
@@ -305,8 +369,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     // MARK: Zoom
 
+    /// Handles and borders are drawn a fixed number of screen points, so a new zoom
+    /// draws them again.
     private func magnificationChanged() {
-        zoomLabel.stringValue = "\(Int((scrollView.magnification * 100).rounded()))%"
         canvas.needsDisplay = true
     }
 
@@ -341,17 +406,35 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             showError("Tinysnap could not make an image from this capture.")
             return
         }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setData(png, forType: .png)
-        // TIFF too, sized in points, for apps that read only that.
-        let representation = NSBitmapImageRep(cgImage: exported.image)
-        representation.size = exported.pointSize
-        if let tiff = representation.tiffRepresentation { pasteboard.setData(tiff, forType: .tiff) }
-
+        Output.copy(exported, png: png)
         canvas.session.markSaved()
         isClosingForGood = true
         window?.close()
+    }
+
+    /// Pins the result at full resolution and closes, as Copy does: the pin is where the
+    /// capture lives now, and the library still has it editable.
+    @objc func pinImage(_ sender: Any?) {
+        canvas.finishTyping()
+        guard let exported = Exporter.export(canvas.session.display, scale: .native) else {
+            showError("Tinysnap could not make an image from this capture.")
+            return
+        }
+        onPin(exported.image, canvas.session.display.scale, entry)
+        canvas.session.markSaved()
+        isClosingForGood = true
+        window?.close()
+    }
+
+    /// Reads what an export would hold, so text under a blur, pixelate or erase is never
+    /// read back out.
+    @objc func copyText(_ sender: Any?) {
+        canvas.finishTyping()
+        guard let exported = Exporter.export(canvas.session.display, scale: .native) else {
+            NSSound.beep()
+            return
+        }
+        TextCopy.read(exported.image, on: window?.screen)
     }
 
     @objc func paste(_ sender: Any?) {
@@ -366,9 +449,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         _ = saveToFolder()
     }
 
-    /// For quitting: ends any typing, then says whether there are edits to lose.
+    /// For quitting: ends any typing, then says whether there are edits to lose. An
+    /// editor whose library entry took them has nothing to lose.
     func hasUnsavedEdits() -> Bool {
         canvas.finishTyping()
+        if entry != nil, keep(renderingImage: true) { return false }
         return canvas.session.isUnsaved
     }
 
@@ -400,6 +485,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         do {
             try png.write(to: url, options: .atomic)
             canvas.session.markSaved()
+            keep(renderingImage: true)
             return true
         } catch {
             showError("Tinysnap could not save to \(url.deletingLastPathComponent().path). \(error.localizedDescription)")
@@ -456,14 +542,20 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     // MARK: Closing
 
-    /// Asks once when there are edits not yet copied, saved or dragged out.
+    /// Asks once when there are edits not yet copied, saved or dragged out, unless the
+    /// library took them. When writing the library fails, it asks as it would with no
+    /// library, so a full disk never loses the edits.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         canvas.finishTyping()
-        guard canvas.session.isUnsaved, !isClosingForGood else { return true }
+        if isClosingForGood { return true }
+        if entry != nil, keep(renderingImage: true) { return true }
+        guard canvas.session.isUnsaved else { return true }
 
         let alert = NSAlert()
         alert.messageText = "Save this capture before closing?"
-        alert.informativeText = "Its annotations and crop are lost if you do not."
+        alert.informativeText = entry == nil
+            ? "Its annotations and crop are lost if you do not."
+            : "Tinysnap could not keep it in the library, so its annotations and crop are lost if you do not."
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Discard")
         alert.addButton(withTitle: "Cancel")
@@ -484,6 +576,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     func windowWillClose(_ notification: Notification) {
+        keep(renderingImage: true)
         styleBar.closePalette()
         rememberStyles()
         if let magnifyObserver { NotificationCenter.default.removeObserver(magnifyObserver) }

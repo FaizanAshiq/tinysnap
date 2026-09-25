@@ -47,15 +47,18 @@ public struct HotKeyBinding: Equatable, Sendable, Codable {
     }
 }
 
+/// In the order the menu bar menu and Settings list them.
 public enum HotKeyAction: String, CaseIterable, Sendable {
-    case area, fullscreen, repeatArea, delayed
+    case area, fullscreen, text, repeatArea, delayed, library
 
     public var title: String {
         switch self {
         case .area: "Capture Area"
         case .fullscreen: "Capture Fullscreen"
+        case .text: "Capture Text"
         case .repeatArea: "Repeat Last Area"
         case .delayed: "Delayed Capture"
+        case .library: "Open Library"
         }
     }
 }
@@ -63,21 +66,29 @@ public enum HotKeyAction: String, CaseIterable, Sendable {
 public struct HotKeys: Equatable, Sendable, Codable {
     public var area: HotKeyBinding?
     public var fullscreen: HotKeyBinding?
+    public var text: HotKeyBinding?
     public var repeatArea: HotKeyBinding?
     public var delayed: HotKeyBinding?
+    public var library: HotKeyBinding?
 
+    /// 31 is the O key, O for OCR.
     public static let defaults = HotKeys(
         area: HotKeyBinding(keyCode: 19, modifiers: [.command, .shift]),
         fullscreen: HotKeyBinding(keyCode: 18, modifiers: [.command, .shift]),
+        text: HotKeyBinding(keyCode: 31, modifiers: [.command, .shift]),
         repeatArea: nil,
-        delayed: nil
+        delayed: nil,
+        library: nil
     )
 
-    public init(area: HotKeyBinding?, fullscreen: HotKeyBinding?, repeatArea: HotKeyBinding?, delayed: HotKeyBinding?) {
+    public init(area: HotKeyBinding?, fullscreen: HotKeyBinding?, text: HotKeyBinding?, repeatArea: HotKeyBinding?,
+                delayed: HotKeyBinding?, library: HotKeyBinding?) {
         self.area = area
         self.fullscreen = fullscreen
+        self.text = text
         self.repeatArea = repeatArea
         self.delayed = delayed
+        self.library = library
     }
 
     public subscript(action: HotKeyAction) -> HotKeyBinding? {
@@ -85,16 +96,20 @@ public struct HotKeys: Equatable, Sendable, Codable {
             switch action {
             case .area: area
             case .fullscreen: fullscreen
+            case .text: text
             case .repeatArea: repeatArea
             case .delayed: delayed
+            case .library: library
             }
         }
         set {
             switch action {
             case .area: area = newValue
             case .fullscreen: fullscreen = newValue
+            case .text: text = newValue
             case .repeatArea: repeatArea = newValue
             case .delayed: delayed = newValue
+            case .library: library = newValue
             }
         }
     }
@@ -108,7 +123,7 @@ public struct HotKeys: Equatable, Sendable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case area, fullscreen, repeatArea, delayed
+        case area, fullscreen, text, repeatArea, delayed, library
     }
 
     /// A key that is there but null means no hotkey. A key that is missing, or holds
@@ -122,18 +137,27 @@ public struct HotKeys: Equatable, Sendable, Codable {
         }
         area = binding(.area, Self.defaults.area)
         fullscreen = binding(.fullscreen, Self.defaults.fullscreen)
+        text = binding(.text, Self.defaults.text)
         repeatArea = binding(.repeatArea, Self.defaults.repeatArea)
         delayed = binding(.delayed, Self.defaults.delayed)
+        library = binding(.library, Self.defaults.library)
     }
 
     /// Nil is written as null, not left out. Left out, a hotkey the user cleared would
     /// read back as the default on the next launch.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        for (key, value) in [(CodingKeys.area, area), (.fullscreen, fullscreen), (.repeatArea, repeatArea), (.delayed, delayed)] {
+        let pairs = [(CodingKeys.area, area), (.fullscreen, fullscreen), (.text, text), (.repeatArea, repeatArea),
+                     (.delayed, delayed), (.library, library)]
+        for (key, value) in pairs {
             if let value { try container.encode(value, forKey: key) } else { try container.encodeNil(forKey: key) }
         }
     }
+}
+
+/// What a capture turns into once it is taken.
+public enum AfterCapture: String, Codable, Sendable, CaseIterable {
+    case editor, thumbnail
 }
 
 public struct Preferences: Equatable, Sendable, Codable {
@@ -152,6 +176,9 @@ public struct Preferences: Equatable, Sendable, Codable {
     /// The last style used per tool, keyed by the tool's raw value. Only the size and the
     /// box shape count; the colour is `colorHex`.
     public var toolStyles: [String: Style]
+    public var afterCapture: AfterCapture
+    /// Every capture kept in the library for 30 days, annotations and all.
+    public var keepLibrary: Bool
 
     public static let defaults = Preferences(
         hotkeys: .defaults,
@@ -161,13 +188,16 @@ public struct Preferences: Equatable, Sendable, Codable {
         showMenuBarIcon: true,
         showDockIconWhileCapturing: true,
         colorHex: Palette.red,
-        toolStyles: [:]
+        toolStyles: [:],
+        afterCapture: .editor,
+        keepLibrary: true
     )
 
     public static let delayRange = 1...60
 
     public init(hotkeys: HotKeys, saveFolder: String, exportScale: ExportScale, delaySeconds: Int,
-                showMenuBarIcon: Bool, showDockIconWhileCapturing: Bool, colorHex: String, toolStyles: [String: Style]) {
+                showMenuBarIcon: Bool, showDockIconWhileCapturing: Bool, colorHex: String, toolStyles: [String: Style],
+                afterCapture: AfterCapture, keepLibrary: Bool) {
         self.hotkeys = hotkeys
         self.saveFolder = saveFolder
         self.exportScale = exportScale
@@ -176,6 +206,8 @@ public struct Preferences: Equatable, Sendable, Codable {
         self.showDockIconWhileCapturing = showDockIconWhileCapturing
         self.colorHex = colorHex
         self.toolStyles = toolStyles
+        self.afterCapture = afterCapture
+        self.keepLibrary = keepLibrary
     }
 
     /// Every key is optional and a bad value falls back on its own, so a file written
@@ -194,6 +226,8 @@ public struct Preferences: Equatable, Sendable, Codable {
         let hex = (try? container.decodeIfPresent(String.self, forKey: .colorHex)) ?? nil
         colorHex = hex.flatMap { Palette.components(of: $0) == nil ? nil : $0 } ?? fallback.colorHex
         toolStyles = (try? container.decodeIfPresent([String: Style].self, forKey: .toolStyles)) ?? fallback.toolStyles
+        afterCapture = (try? container.decodeIfPresent(AfterCapture.self, forKey: .afterCapture)) ?? fallback.afterCapture
+        keepLibrary = (try? container.decodeIfPresent(Bool.self, forKey: .keepLibrary)) ?? fallback.keepLibrary
     }
 
     public var saveFolderURL: URL {

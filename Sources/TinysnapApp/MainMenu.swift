@@ -34,6 +34,9 @@ enum MainMenu {
             item("Paste", "paste:", "v"),
             item("Delete", "delete:", ""),
             item("Select All", "selectAll:", "a"),
+            .separator(),
+            item("Copy Text", "copyText:", "C"),
+            item("Pin", "pinImage:", "p"),
         ]))
         menu.addItem(submenu("View", [
             item("Zoom In", "zoomIn:", "="),

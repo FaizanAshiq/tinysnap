@@ -3,6 +3,52 @@ import Testing
 @testable import TinysnapCore
 
 struct EditorSessionTests {
+    @Test func aDrawingToolPicksUpAShapeByItsBorderWithoutCommand() {
+        var editor = session(.blur)
+        drag(&editor, from: CGPoint(x: 100, y: 100), to: CGPoint(x: 200, y: 160))
+        let blur = editor.display.annotations[0]
+        let bounds = blur.bounds(scale: editor.scale)
+        editor.choose(.arrow)
+        // The hover border is drawn half a reach outside the shape, here 4 pixels.
+        let onBorder = CGPoint(x: bounds.minX - 4, y: bounds.midY)
+        #expect(editor.hovered(at: onBorder, reach: 8) == blur.id)
+
+        drag(&editor, from: onBorder, to: CGPoint(x: onBorder.x + 30, y: onBorder.y + 20))
+        #expect(editor.display.annotations.count == 1)
+        #expect(editor.selection == blur.id)
+        #expect(editor.display.annotations[0].bounds(scale: editor.scale).minX == bounds.minX + 30)
+    }
+
+    @Test func aDrawingToolPicksUpABlurFromItsMiddleAndMovesIt() {
+        var editor = session(.blur)
+        drag(&editor, from: CGPoint(x: 100, y: 100), to: CGPoint(x: 200, y: 160))
+        let blur = editor.display.annotations[0]
+        editor.choose(.arrow)
+        drag(&editor, from: CGPoint(x: 150, y: 130), to: CGPoint(x: 180, y: 150))
+        #expect(editor.display.annotations.count == 1)
+        #expect(editor.selection == blur.id)
+        #expect(editor.display.annotations[0].bounds(scale: editor.scale).minX == blur.bounds(scale: editor.scale).minX + 30)
+    }
+
+    @Test func insideAnOutlinedBoxOrASpotlightADrawingToolStillDraws() {
+        for tool in [Tool.rectangle, .spotlight] {
+            var editor = session(tool)
+            drag(&editor, from: CGPoint(x: 100, y: 100), to: CGPoint(x: 300, y: 250))
+            editor.choose(.arrow)
+            drag(&editor, from: CGPoint(x: 200, y: 175), to: CGPoint(x: 260, y: 220))
+            #expect(editor.display.annotations.count == 2, "inside a \(tool)")
+        }
+    }
+
+    @Test func aCropCanReachAShapeDrawnPastTheCapture() {
+        var editor = session(.rectangle)
+        drag(&editor, from: CGPoint(x: 350, y: 100), to: CGPoint(x: 500, y: 200))
+        #expect(editor.display.extent.maxX > 500)
+        editor.choose(.crop)
+        drag(&editor, from: CGPoint(x: 300, y: 50), to: CGPoint(x: 510, y: 250))
+        #expect(editor.display.crop == CGRect(x: 300, y: 50, width: 210, height: 200))
+    }
+
     private func session(_ tool: Tool = .arrow, width: Int = 400, height: Int = 300, scale: CGFloat = 2) -> EditorSession {
         EditorSession(document: Document(capture: Fixture.capture(width: width, height: height, scale: scale)), tool: tool)
     }
@@ -108,11 +154,16 @@ struct EditorSessionTests {
         #expect(editor.display.crop == CGRect(x: 150, y: 130, width: 100, height: 40))
     }
 
-    @Test func aDrawingToolDrawsOverWhatIsAlreadyThere() {
+    @Test func aDrawingToolPicksUpALineByItsStrokeAndDrawsBesideIt() {
         var editor = session(.line)
         drag(&editor, from: CGPoint(x: 10, y: 100), to: CGPoint(x: 300, y: 100))
+        let line = editor.display.annotations[0]
         editor.choose(.arrow)
-        drag(&editor, from: CGPoint(x: 150, y: 101), to: CGPoint(x: 150, y: 160))
+        drag(&editor, from: CGPoint(x: 150, y: 101), to: CGPoint(x: 150, y: 121))
+        #expect(editor.display.annotations.count == 1)
+        #expect(editor.selection == line.id)
+
+        drag(&editor, from: CGPoint(x: 150, y: 180), to: CGPoint(x: 150, y: 240))
         #expect(editor.display.annotations.count == 2)
     }
 

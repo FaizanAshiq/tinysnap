@@ -3,6 +3,30 @@ import Testing
 @testable import TinysnapCore
 
 struct DocumentTests {
+    @Test func theExtentIsTheCaptureWhileEverythingIsInsideIt() {
+        let box = Fixture.annotation(.rectangle(CGRect(x: 40, y: 20, width: 50, height: 30)))
+        let document = Document(capture: Fixture.capture(width: 200, height: 100, scale: 2), annotations: [box])
+        #expect(document.extent == CGRect(x: 0, y: 0, width: 200, height: 100))
+        #expect(document.outputRect == document.extent)
+    }
+
+    @Test func aShapePastTheEdgeGrowsTheExtentByItsBoundsAndAMargin() {
+        let box = Fixture.annotation(.rectangle(CGRect(x: -50, y: 60, width: 100, height: 80)))
+        let document = Document(capture: Fixture.capture(width: 200, height: 100, scale: 2), annotations: [box])
+        // 16 points of margin is 32 pixels on a 2x capture.
+        let grown = box.bounds(scale: 2).insetBy(dx: -32, dy: -32)
+        #expect(document.extent == CGRect(x: 0, y: 0, width: 200, height: 100).union(grown).integral)
+        #expect(document.extent.minX < 0 && document.extent.maxY > 100)
+        #expect(document.extent.maxX == 200 && document.extent.minY == 0)
+    }
+
+    @Test func aCropStillDecidesWhatIsOutputOnAGrownCanvas() {
+        let box = Fixture.annotation(.rectangle(CGRect(x: 150, y: 10, width: 100, height: 20)))
+        var document = Document(capture: Fixture.capture(width: 200, height: 100), annotations: [box])
+        document.crop = CGRect(x: 10, y: 10, width: 50, height: 50)
+        #expect(document.outputRect == CGRect(x: 10, y: 10, width: 50, height: 50))
+    }
+
     @Test func stepsNumberThemselvesInOrderAndRenumberOnDelete() {
         var document = Document(capture: Fixture.capture(width: 200, height: 100))
         let steps = (0..<3).map { Fixture.annotation(.step(center: CGPoint(x: $0 * 20, y: 10))) }

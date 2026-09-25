@@ -6,7 +6,20 @@ import TinysnapCore
 /// preferences.json, which is why this window stays small on purpose.
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
+    /// What Settings shows and does about the library, which the app delegate owns.
+    struct Library {
+        let size: () -> Int64
+        /// Why captures are not being kept, when the last one could not be.
+        let problem: () -> String?
+        let clear: () -> Void
+    }
+
     private var preferences: Preferences
+    private let library: Library
+    private let afterCapturePopUp = NSPopUpButton()
+    private let keepLibraryCheckbox = NSButton(checkboxWithTitle: "Keep captures in the library for 30 days", target: nil, action: nil)
+    private let librarySizeLabel = NSTextField(labelWithString: "")
+    private let libraryProblemLabel = NSTextField(wrappingLabelWithString: "")
     private let onChange: (Preferences) -> Set<HotKeyAction>
     private let onRecordingChange: (Bool) -> Void
     private var recorders: [HotKeyAction: HotKeyRecorderView] = [:]
@@ -21,9 +34,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     /// `onChange` applies the new preferences and returns the hotkeys another app holds.
     /// `onRecordingChange` pauses the hotkeys while a field is recording.
-    init(preferences: Preferences, taken: Set<HotKeyAction>, onChange: @escaping (Preferences) -> Set<HotKeyAction>,
+    init(preferences: Preferences, taken: Set<HotKeyAction>, library: Library, onChange: @escaping (Preferences) -> Set<HotKeyAction>,
          onRecordingChange: @escaping (Bool) -> Void) {
         self.preferences = preferences
+        self.library = library
         self.onChange = onChange
         self.onRecordingChange = onRecordingChange
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 360),
@@ -61,6 +75,27 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         scalePopUp.target = self
         scalePopUp.action = #selector(scaleChanged)
         rows.append(("Export", scalePopUp))
+
+        afterCapturePopUp.addItems(withTitles: ["Open the editor", "Show a thumbnail"])
+        afterCapturePopUp.target = self
+        afterCapturePopUp.action = #selector(afterCaptureChanged)
+        rows.append(("After a capture", afterCapturePopUp))
+
+        keepLibraryCheckbox.target = self
+        keepLibraryCheckbox.action = #selector(keepLibraryChanged)
+        let keepNote = NSTextField(labelWithString: "Keeps what is under blurs and erases too")
+        keepNote.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        keepNote.textColor = .secondaryLabelColor
+        let clear = NSButton(title: "Clear Library...", target: self, action: #selector(clearLibrary))
+        clear.bezelStyle = .rounded
+        libraryProblemLabel.textColor = .systemRed
+        libraryProblemLabel.preferredMaxLayoutWidth = 260
+        let libraryStack = NSStackView(views: [keepLibraryCheckbox, keepNote, NSStackView(views: [librarySizeLabel, clear]),
+                                               libraryProblemLabel])
+        libraryStack.orientation = .vertical
+        libraryStack.alignment = .leading
+        libraryStack.spacing = 6
+        rows.append(("Library", libraryStack))
 
         delayStepper.minValue = Double(Preferences.delayRange.lowerBound)
         delayStepper.maxValue = 10
@@ -103,6 +138,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             stack.addArrangedSubview(row)
         }
         window?.contentView = stack
+        // As tall as the rows need. The fitting width leaves out the stack's right inset,
+        // so the width keeps a floor that leaves the longest checkbox its margin.
+        window?.setContentSize(NSSize(width: max(stack.fittingSize.width, 460), height: stack.fittingSize.height))
     }
 
     private func loadValues(taken: Set<HotKeyAction>) {
@@ -118,7 +156,46 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         loginCheckbox.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menuBarIconCheckbox.state = preferences.showMenuBarIcon ? .on : .off
         dockIconCheckbox.state = preferences.showDockIconWhileCapturing ? .on : .off
+        afterCapturePopUp.selectItem(at: preferences.afterCapture == .editor ? 0 : 1)
+        keepLibraryCheckbox.state = preferences.keepLibrary ? .on : .off
+        refreshLibrary()
         refreshScreenAccess()
+    }
+
+    private func refreshLibrary() {
+        let bytes = ByteCountFormatter()
+        bytes.countStyle = .file
+        // Numbers only, or an empty library reads "Zero KB".
+        bytes.allowsNonnumericFormatting = false
+        librarySizeLabel.stringValue = "Uses " + bytes.string(fromByteCount: library.size())
+        let problem = library.problem()
+        libraryProblemLabel.stringValue = problem.map { "Captures are not being kept: \($0)" } ?? ""
+        libraryProblemLabel.isHidden = problem == nil
+    }
+
+    @objc private func afterCaptureChanged() {
+        preferences.afterCapture = afterCapturePopUp.indexOfSelectedItem == 0 ? .editor : .thumbnail
+        persist()
+    }
+
+    @objc private func keepLibraryChanged() {
+        preferences.keepLibrary = keepLibraryCheckbox.state == .on
+        persist()
+    }
+
+    /// Asks first, since nothing cleared comes back. Captures open in an editor stay.
+    @objc private func clearLibrary() {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "Clear the library?"
+        alert.informativeText = "Every kept capture is deleted, except any open in an editor. This can not be undone."
+        alert.addButton(withTitle: "Clear Library").hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.library.clear()
+            self?.refreshLibrary()
+        }
     }
 
     /// Refuses a combination another Tinysnap action already uses.
@@ -206,6 +283,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func show() {
+        refreshLibrary()
         refreshScreenAccess()
         window?.center()
         showWindow(nil)

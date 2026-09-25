@@ -83,10 +83,11 @@ public struct EditorSession {
     }
 
     /// What is under `point`, for the hover border that shows what is applied where,
-    /// with any tool. Nothing while the crop tool is out, which only moves the crop.
-    public func hovered(at point: CGPoint) -> Annotation.ID? {
+    /// with any tool: the annotation itself, or its border, which a filled box does not
+    /// cover. Nothing while the crop tool is out, which only moves the crop.
+    public func hovered(at point: CGPoint, reach: CGFloat = 0) -> Annotation.ID? {
         guard phase == .idle, tool != .crop else { return nil }
-        return display.topmost(at: point)
+        return display.topmost(at: point) ?? display.borderHit(at: point, reach: reach)
     }
 
     /// Changes part of the style: the selection's, or the next annotation's when nothing
@@ -190,6 +191,14 @@ public struct EditorSession {
             return
         }
 
+        // A click on an annotation, or on its hover border, picks it up with any tool,
+        // Command or not. The empty middle of an outline, or of a spotlight, still draws.
+        if let id = display.pickUp(at: point, reach: reach) {
+            selection = id
+            phase = .moving(id, last: point)
+            return
+        }
+
         startDrawing(at: point)
     }
 
@@ -219,7 +228,8 @@ public struct EditorSession {
         case let .resizing(original, handle):
             display.replace(original.resized(dragging: handle, to: point, constrained: constrained))
         case let .cropping(original, handle, last):
-            let bounds = display.capture.bounds
+            // The whole canvas, grown part included, can be cropped.
+            let bounds = display.extent
             if modifiers.contains(.space) {
                 // Moved as a whole, and stopped at the capture's edge rather than shrunk.
                 let move = display.outputRect.allowedMove(by: delta(last), within: bounds)
