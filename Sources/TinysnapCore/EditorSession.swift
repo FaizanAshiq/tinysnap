@@ -116,6 +116,19 @@ public struct EditorSession {
         if typingID == nil { history.commit(display, mergeKey: merging ? "style \(id)" : nil) }
     }
 
+    // MARK: Measure
+
+    /// The Measure tool's live reading, kept: one measurement a line, in one undo step,
+    /// and none of them selected, so the next click measures again.
+    public mutating func keep(_ lines: [MeasureLine]) {
+        guard !lines.isEmpty else { return }
+        for line in lines {
+            display.annotations.append(Annotation(kind: .measure(from: line.from, to: line.to), style: style(for: .measure)))
+        }
+        history.commit(display)
+        selection = nil
+    }
+
     // MARK: Backdrop
 
     /// Sets or clears the backdrop as one undoable step. `merging` is for the colour
@@ -123,6 +136,15 @@ public struct EditorSession {
     public mutating func setBackdrop(_ backdrop: Backdrop?, merging: Bool = false) {
         display.backdrop = backdrop
         history.commit(display, mergeKey: merging ? "backdrop" : nil)
+    }
+
+    // MARK: Size
+
+    /// Sets the export size as one undoable step, held to the limits. Nil follows the
+    /// Export setting again.
+    public mutating func setResize(_ resize: CGFloat?) {
+        display.resize = resize.map(display.clampedResize)
+        history.commit(display)
     }
 
     // MARK: Magnifier
@@ -298,6 +320,11 @@ public struct EditorSession {
         case .step: kind = .step(center: point)
         case .magnifier: kind = .magnifier(center: point, radius: Tool.magnifierRadiusPoints * scale, zoom: 2)
         case .text: kind = .text(origin: point, string: "")
+        case .measure:
+            // Nothing to drag out. A click that picks nothing up lets go of the selection,
+            // and the canvas keeps its live reading.
+            selection = nil
+            return
         case .select, .image, .crop: return
         }
 
@@ -316,6 +343,7 @@ public struct EditorSession {
         case .arrow: return .arrow(from: anchor, to: end)
         case .line: return .line(from: anchor, to: end)
         case .highlighter: return .highlighter(from: anchor, to: end)
+        case .measure: return .measure(from: anchor, to: end)
         case .rectangle: return .rectangle(box)
         case .oval: return .oval(box)
         case .spotlight: return .spotlight(box)

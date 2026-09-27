@@ -18,6 +18,16 @@ final class CenteringClipView: NSClipView {
     }
 }
 
+/// An upright rule between toolbar groups, fainter than the buttons either side.
+final class ToolbarDivider: NSView {
+    override var intrinsicContentSize: NSSize { NSSize(width: 13, height: 18) }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.separatorColor.setFill()
+        NSRect(x: (bounds.width - 1) / 2, y: (bounds.height - 18) / 2, width: 1, height: 18).fill()
+    }
+}
+
 /// One window per capture: the canvas, one toolbar row in the title bar, and the
 /// copy, save and drag out actions.
 @MainActor
@@ -27,12 +37,29 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private let preferences: () -> Preferences
     private let onStylesChange: ([Tool: Style], String) -> Void
     private let onClose: (EditorWindowController) -> Void
-    private let onPin: (CGImage, CGFloat, LibraryEntry?) -> Void
+    /// The image, its pixels per point, its entry, and whether it keeps its size.
+    private let onPin: (CGImage, CGFloat, LibraryEntry?, Bool) -> Void
     /// A backdrop setting was picked, so it can be remembered for the next capture.
     private let onBackdropChange: (Backdrop) -> Void
-    /// Set while the style panel shows the backdrop, with the tool and selection it was
-    /// opened over: picking another tool, or selecting something, puts the panel back.
-    private var backdropPanel: (tool: Tool, selection: Annotation.ID?)?
+    /// The Measure tool's lines, edge contrast or guide changed, so they can be remembered.
+    private let onMeasureChange: (MeasureSettings) -> Void
+    /// The Measure guide while it is open.
+    private var measureGuide: NSPopover?
+    /// The tool the toolbar last showed, so the guide opens as the Measure tool is picked.
+    private var lastTool: Tool?
+    /// The canvas's size when it last settled, so a change can be told from a redraw.
+    private var settledCanvasSize = NSSize.zero
+    /// Set once the window is resized by hand; from then on the editor leaves its size alone.
+    private var sizedByHand = false
+    /// The style panel's two other uses, each opened from its toolbar button.
+    private enum Panel {
+        case backdrop, size
+    }
+
+    /// Set while the style panel shows the backdrop or the export size, with the tool and
+    /// selection it was opened over: picking another tool, or selecting something, puts
+    /// the panel back.
+    private var panel: (kind: Panel, tool: Tool, selection: Annotation.ID?)?
     private weak var backdropItem: NSToolbarItem?
     /// The library entry this editor keeps up to date. Nil for a file opened from disk,
     /// a damaged entry opened flat, or any capture while the library is off.
@@ -58,6 +85,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private static let pinItem = NSToolbarItem.Identifier("pin")
     private static let textItem = NSToolbarItem.Identifier("text")
     private static let backdropItemIdentifier = NSToolbarItem.Identifier("backdrop")
+    private static let sizeItem = NSToolbarItem.Identifier("size")
+    private static let libraryItem = NSToolbarItem.Identifier("library")
     /// One toolbar item per tool, not one group of them: the toolbar draws hover and
     /// selection per item, so a group lit up as one block under the pointer.
     nonisolated private static func toolItem(_ tool: Tool) -> NSToolbarItem.Identifier {
@@ -69,12 +98,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     init(document: Document, entry: LibraryEntry?, library: LibraryStore, screen: NSScreen?, title: String,
          preferences: @escaping () -> Preferences, onStylesChange: @escaping ([Tool: Style], String) -> Void,
-         onPin: @escaping (CGImage, CGFloat, LibraryEntry?) -> Void, onBackdropChange: @escaping (Backdrop) -> Void,
-         onClose: @escaping (EditorWindowController) -> Void) {
+         onPin: @escaping (CGImage, CGFloat, LibraryEntry?, Bool) -> Void, onBackdropChange: @escaping (Backdrop) -> Void,
+         onMeasureChange: @escaping (MeasureSettings) -> Void, onClose: @escaping (EditorWindowController) -> Void) {
         self.preferences = preferences
         self.onStylesChange = onStylesChange
         self.onPin = onPin
         self.onBackdropChange = onBackdropChange
+        self.onMeasureChange = onMeasureChange
         self.onClose = onClose
         self.entry = entry
         self.library = library
@@ -90,7 +120,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         window.title = title
         window.titleVisibility = .hidden
         window.toolbarStyle = .unifiedCompact
-        window.minSize = NSSize(width: 1100, height: 280)
+        // Wide enough for every toolbar button: narrower, and the last ones go into an
+        // overflow menu, the library button first.
+        window.minSize = NSSize(width: 1140, height: 280)
         // Every capture its own window. With tabbing left to macOS, a second capture
         // could land as a tab inside the first.
         window.tabbingMode = .disallowed
@@ -100,7 +132,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
         buildCanvas()
         buildToolbar()
-        place(on: screen ?? NSScreen.main, capture: document.capture)
+        place(on: screen ?? NSScreen.main)
+        settledCanvasSize = canvas.frame.size
         refreshToolbar()
     }
 
@@ -142,10 +175,33 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         styleBar.readWallpaper = { [weak self] in WallpaperReader.softened(for: self?.window?.screen) }
 
         canvas.onChange = { [weak self] in
+            self?.followCanvasSize()
             self?.refreshToolbar()
             self?.documentChanged()
         }
         canvas.onStylesCommitted = { [weak self] in self?.rememberStyles() }
+        canvas.measure = preferences().measure
+        canvas.onMeasureChange = { [weak self] settings in self?.measureChanged(settings) }
+        styleBar.onMeasure = { [weak self] settings in
+            self?.canvas.measure = settings
+            self?.measureChanged(settings)
+        }
+        styleBar.onMeasureHelp = { [weak self] in self?.showMeasureGuide() }
+        styleBar.onDelete = { [weak self] in
+            guard let self else { return }
+            self.canvas.session.deleteSelection()
+            self.window?.makeFirstResponder(self.canvas)
+        }
+        styleBar.onSize = { [weak self] request in
+            guard let self else { return }
+            let document = self.canvas.session.display
+            switch request {
+            case let .fraction(fraction): self.canvas.session.setResize(fraction)
+            case let .width(pixels): self.canvas.session.setResize(document.resize(forWidth: pixels))
+            case let .height(pixels): self.canvas.session.setResize(document.resize(forHeight: pixels))
+            }
+            self.window?.makeFirstResponder(self.canvas)
+        }
         canvas.onPointerColor = { [weak self] hex in self?.showPointerColor(hex) }
         canvas.onCopyColor = { [weak self] in self?.copyPointerColor() }
         canvas.onClose = { [weak self] in self?.window?.performClose(nil) }
@@ -157,18 +213,50 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         }
     }
 
+    /// Room round the canvas when it opens and on Zoom to Fit, so it never meets the
+    /// window's edges.
+    private static let fitMargin: CGFloat = 24
+
     /// At 100% when it fits, shrunk to fit the display it was captured on when it does not.
-    private func place(on screen: NSScreen?, capture: Capture) {
+    /// Sized from the canvas, so a capture reopened with a backdrop fits with it. Opening
+    /// centres the window on the display; a refit keeps it centred where it was, on screen.
+    private func place(on screen: NSScreen?, around centre: NSPoint? = nil) {
         guard let window, let visible = screen?.visibleFrame else { return }
         let toolbarHeight: CGFloat = 40
-        let available = NSSize(width: visible.width * 0.9, height: visible.height * 0.9 - toolbarHeight)
-        let size = capture.pointSize
+        let margins = Self.fitMargin * 2
+        let available = NSSize(width: visible.width * 0.9 - margins, height: visible.height * 0.9 - toolbarHeight - margins)
+        let size = canvas.frame.size
         let fit = min(1, available.width / size.width, available.height / size.height)
-        let content = NSSize(width: max(size.width * fit, window.minSize.width), height: max(size.height * fit, window.minSize.height - toolbarHeight))
+        let content = NSSize(width: max(size.width * fit + margins, window.minSize.width),
+                             height: max(size.height * fit + margins, window.minSize.height - toolbarHeight))
         window.setContentSize(content)
-        window.setFrameOrigin(NSPoint(x: visible.midX - window.frame.width / 2, y: visible.midY - window.frame.height / 2))
+        let middle = centre ?? NSPoint(x: visible.midX, y: visible.midY)
+        let frame = window.frame
+        window.setFrameOrigin(NSPoint(x: min(max(middle.x - frame.width / 2, visible.minX), visible.maxX - frame.width),
+                                      y: min(max(middle.y - frame.height / 2, visible.minY), visible.maxY - frame.height)))
         scrollView.magnification = fit
         magnificationChanged()
+    }
+
+    /// A canvas that was wholly in view stays so when it changes size, once no drag or
+    /// typing is under way: the window is fitted to it as on opening, or, once sized by
+    /// hand, keeps its size while the zoom drops as far as it must. A canvas zoomed past
+    /// the window is left as it is.
+    private func followCanvasSize() {
+        let size = canvas.frame.size
+        guard canvas.session.phase == .idle, size != settledCanvasSize, let window else { return }
+        let old = settledCanvasSize
+        settledCanvasSize = size
+        let view = scrollView.contentSize
+        let magnification = scrollView.magnification
+        guard old.width * magnification <= view.width + 0.5, old.height * magnification <= view.height + 0.5 else { return }
+        guard sizedByHand else {
+            place(on: window.screen, around: NSPoint(x: window.frame.midX, y: window.frame.midY))
+            return
+        }
+        let margins = Self.fitMargin * 2
+        let fit = min((view.width - margins) / size.width, (view.height - margins) / size.height)
+        if fit < magnification { zoom(to: fit) }
     }
 
     override func showWindow(_ sender: Any?) {
@@ -186,11 +274,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         window?.toolbar = toolbar
     }
 
+    /// The output buttons, then each group of tools, a divider before every group after
+    /// the first.
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        let tools = Tool.toolbarGroups.map { $0.map(Self.toolItem) }.joined(separator: [.space])
-        return [Self.copyItem, Self.saveItem, Self.dragItem, Self.textItem, Self.pinItem, Self.backdropItemIdentifier, .space] + tools
-            + [.flexibleSpace, Self.colorItem]
+        let groups = [[Self.copyItem, Self.saveItem, Self.dragItem, Self.textItem, Self.pinItem, Self.backdropItemIdentifier, Self.sizeItem]]
+            + Tool.toolbarGroups.map { $0.map(Self.toolItem) }
+        let divided = groups.enumerated().flatMap { index, group in index == 0 ? group : [Self.divider(index)] + group }
+        return divided + [.flexibleSpace, Self.colorItem, Self.libraryItem]
     }
+
+    /// One identifier each, so no two items in the toolbar share one.
+    private static func divider(_ index: Int) -> NSToolbarItem.Identifier { NSToolbarItem.Identifier("divider \(index)") }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         toolbarDefaultItemIdentifiers(toolbar)
@@ -203,6 +297,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier,
                  willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        if identifier.rawValue.hasPrefix("divider ") {
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            item.view = ToolbarDivider()
+            return item
+        }
         if let tool = Tool.allCases.first(where: { Self.toolItem($0) == identifier }) {
             let item = NSToolbarItem(itemIdentifier: identifier)
             item.image = tool.symbol
@@ -234,8 +333,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             let item = button(identifier, symbol: "rectangle.dashed", tooltip: "Backdrop", action: #selector(showBackdropPanel(_:)))
             backdropItem = item
             return item
+        case Self.sizeItem:
+            return button(identifier, symbol: "square.resize", tooltip: "Export size", action: #selector(showSizePanel(_:)))
         case Self.pinItem:
             return button(identifier, symbol: "pin", tooltip: "Pin on top of every app and close (⌘P)", action: #selector(pinImage(_:)))
+        case Self.libraryItem:
+            // Sent up the responder chain to the app, which owns the library window, the
+            // same way the Window menu and the Dock menu reach it.
+            let item = button(identifier, symbol: "photo.stack", tooltip: "Library, every capture from the last 30 days",
+                              action: #selector(AppDelegate.openLibrary(_:)))
+            item.target = nil
+            return item
         case Self.colorItem:
             colorWell.wantsLayer = true
             colorWell.layer?.cornerRadius = 6
@@ -304,20 +412,60 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         // Filled while a backdrop is on, dashed while there is none.
         backdropItem?.image = NSImage(systemSymbolName: session.display.backdrop == nil ? "rectangle.dashed" : "rectangle.inset.filled",
                                       accessibilityDescription: "Backdrop")
-        if let panel = backdropPanel, panel.tool != session.tool || panel.selection != session.selection { backdropPanel = nil }
-        if backdropPanel != nil {
+        if let panel, panel.tool != session.tool || panel.selection != session.selection { self.panel = nil }
+        if let panel {
             styleBar.isHidden = false
-            styleBar.showBackdrop(session.display.backdrop, remembered: preferences().backdrop)
+            switch panel.kind {
+            case .backdrop:
+                styleBar.showBackdrop(session.display.backdrop, remembered: preferences().backdrop)
+            case .size:
+                let fraction = Exporter.outputScale(of: session.display, setting: preferences().exportScale)
+                styleBar.showSize(fraction: fraction, pixels: session.display.exportPixelSize(at: fraction))
+            }
             placeStyleBar()
             return
         }
         let target = styleTarget
         // Shown only for a tool with something to set.
-        styleBar.isHidden = !StyleBar.shows(target.tool) || session.phase != .idle && session.typingID == nil
+        // A shape picked up shows the panel even when it has no style to set, for its trash.
+        let deletable = session.selection != nil && session.typingID == nil
+        styleBar.isHidden = !(StyleBar.shows(target.tool) || deletable) || session.phase != .idle && session.typingID == nil
         if !styleBar.isHidden {
-            styleBar.show(tool: target.tool, style: target.style)
+            styleBar.show(tool: target.tool, style: target.style, measure: canvas.measure, selected: deletable)
             placeStyleBar()
         }
+        // The first time the Measure tool is picked, its guide opens from its button.
+        if session.tool == .measure, lastTool != .measure, !canvas.measure.guideSeen {
+            DispatchQueue.main.async { [weak self] in self?.showMeasureGuide() }
+        }
+        lastTool = session.tool
+    }
+
+    private func measureChanged(_ settings: MeasureSettings) {
+        refreshToolbar()
+        onMeasureChange(settings)
+    }
+
+    /// From the Measure button, where the eye already is.
+    private func showMeasureGuide() {
+        guard measureGuide == nil,
+              let item = window?.toolbar?.items.first(where: { $0.itemIdentifier == Self.toolItem(.measure) }) else { return }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentViewController = MeasureGuideController { [weak popover] in popover?.close() }
+        NotificationCenter.default.addObserver(forName: NSPopover.didCloseNotification, object: popover, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.measureGuideClosed() }
+        }
+        measureGuide = popover
+        popover.show(relativeTo: item)
+    }
+
+    /// Closed any way at all, it is not shown on its own again; the ? still opens it.
+    private func measureGuideClosed() {
+        measureGuide = nil
+        guard !canvas.measure.guideSeen else { return }
+        canvas.measure.guideSeen = true
+        onMeasureChange(canvas.measure)
     }
 
     /// 12 points in from the canvas's top right corner.
@@ -331,7 +479,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         // The crop tool hides the backdrop, so a backdrop turned on from it would seem to
         // do nothing.
         if canvas.session.tool == .crop { canvas.choose(.select) }
-        backdropPanel = (canvas.session.tool, canvas.session.selection)
+        panel = (.backdrop, canvas.session.tool, canvas.session.selection)
+        refreshToolbar()
+    }
+
+    /// The panel shows the export size until another tool is picked or something selected.
+    @objc func showSizePanel(_ sender: Any?) {
+        panel = (.size, canvas.session.tool, canvas.session.selection)
         refreshToolbar()
     }
 
@@ -430,9 +584,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     @objc func zoomToActualSize(_ sender: Any?) { zoom(to: 1) }
 
     @objc func zoomToFit(_ sender: Any?) {
+        let margins = Self.fitMargin * 2
         let visible = scrollView.contentSize
         let size = canvas.bounds.size
-        zoom(to: min(visible.width / size.width, visible.height / size.height))
+        zoom(to: min((visible.width - margins) / size.width, (visible.height - margins) / size.height))
     }
 
     // MARK: Output
@@ -456,25 +611,27 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         window?.close()
     }
 
-    /// Pins the result at full resolution and closes, as Copy does: the pin is where the
-    /// capture lives now, and the library still has it editable.
+    /// Pins the result and closes, as Copy does: at full resolution, or at the size the
+    /// capture was given. The pin is where the capture lives now, and the library still
+    /// has it editable.
     @objc func pinImage(_ sender: Any?) {
         canvas.finishTyping()
-        guard let exported = Exporter.export(canvas.session.display, scale: .native) else {
+        let document = canvas.session.display
+        guard let exported = Exporter.export(document, scale: .native) else {
             showError("Tinysnap could not make an image from this capture.")
             return
         }
-        onPin(exported.image, canvas.session.display.scale, entry)
+        onPin(exported.image, exported.dpi / 72, entry, document.resize != nil)
         canvas.session.markSaved()
         isClosingForGood = true
         window?.close()
     }
 
     /// Reads what an export would hold, so text under a blur, pixelate or erase is never
-    /// read back out.
+    /// read back out, at full resolution whatever size the capture exports at.
     @objc func copyText(_ sender: Any?) {
         canvas.finishTyping()
-        guard let exported = Exporter.export(canvas.session.display, scale: .native) else {
+        guard let exported = Exporter.exportForReading(canvas.session.display) else {
             NSSound.beep()
             return
         }
@@ -617,6 +774,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             sender.close()
         }
         return false
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        sizedByHand = true
     }
 
     func windowWillClose(_ notification: Notification) {

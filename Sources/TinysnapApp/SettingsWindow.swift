@@ -12,6 +12,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         /// Why captures are not being kept, when the last one could not be.
         let problem: () -> String?
         let clear: () -> Void
+        let open: () -> Void
     }
 
     private var preferences: Preferences
@@ -68,10 +69,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let chooseFolder = NSButton(title: "Choose", target: self, action: #selector(chooseFolder))
         chooseFolder.bezelStyle = .rounded
         folderLabel.lineBreakMode = .byTruncatingMiddle
-        folderLabel.widthAnchor.constraint(equalToConstant: 180).isActive = true
-        rows.append(("Save folder", NSStackView(views: [folderLabel, chooseFolder])))
+        // The path takes whatever the button leaves, so Choose ends on the right edge.
+        folderLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        folderLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let folderRow = NSStackView(views: [folderLabel, chooseFolder])
+        folderRow.distribution = .fill
+        rows.append(("Save folder", folderRow))
 
         scalePopUp.addItems(withTitles: ["Full resolution", "1x, one pixel per point"])
+        scalePopUp.toolTip = "The size every capture starts at. The Size button in the editor changes one capture"
         scalePopUp.target = self
         scalePopUp.action = #selector(scaleChanged)
         rows.append(("Export", scalePopUp))
@@ -88,9 +94,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         keepNote.textColor = .secondaryLabelColor
         let clear = NSButton(title: "Clear Library...", target: self, action: #selector(clearLibrary))
         clear.bezelStyle = .rounded
+        let open = NSButton(title: "Open Library", target: self, action: #selector(openLibrary))
+        open.bezelStyle = .rounded
         libraryProblemLabel.textColor = .systemRed
         libraryProblemLabel.preferredMaxLayoutWidth = 260
-        let libraryStack = NSStackView(views: [keepLibraryCheckbox, keepNote, NSStackView(views: [librarySizeLabel, clear]),
+        let libraryStack = NSStackView(views: [keepLibraryCheckbox, keepNote, librarySizeLabel, NSStackView(views: [open, clear]),
                                                libraryProblemLabel])
         libraryStack.orientation = .vertical
         libraryStack.alignment = .leading
@@ -122,6 +130,16 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         screenAccessButton.action = #selector(requestScreenAccess)
         rows.append(("Screen Recording", screenAccessButton))
 
+        // Every field, pop-up and the folder row runs the full control column, so they all
+        // end on the window's right margin instead of wherever their text happens to stop.
+        // The column is the window's 460 points less 20 each side, the 130 point labels
+        // and the 12 between.
+        let controlWidth: CGFloat = 278
+        let fullWidth: [NSView] = Array(recorders.values) + [scalePopUp, afterCapturePopUp, chooseFolder.superview].compactMap { $0 }
+        for view in fullWidth {
+            view.widthAnchor.constraint(equalToConstant: controlWidth).isActive = true
+        }
+
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -129,7 +147,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
         for (label, control) in rows {
             let row = NSStackView()
-            row.spacing = 10
+            row.spacing = 12
+            // On the first line of text, so a label beside several lines sits with the first.
+            row.alignment = .firstBaseline
             let text = NSTextField(labelWithString: label)
             text.alignment = .right
             text.widthAnchor.constraint(equalToConstant: 130).isActive = true
@@ -181,6 +201,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     @objc private func keepLibraryChanged() {
         preferences.keepLibrary = keepLibraryCheckbox.state == .on
         persist()
+    }
+
+    @objc private func openLibrary() {
+        library.open()
     }
 
     /// Asks first, since nothing cleared comes back. Captures open in an editor stay.
@@ -272,6 +296,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             preferences.toolStyles = onDisk.toolStyles
             preferences.colorHex = onDisk.colorHex
             preferences.backdrop = onDisk.backdrop
+            preferences.measure = onDisk.measure
         }
         try? preferences.save(to: Preferences.defaultFileURL)
         loadValues(taken: onChange(preferences))

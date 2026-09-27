@@ -15,14 +15,18 @@ final class PinWindowController: NSWindowController, NSWindowDelegate {
     let entry: LibraryEntry?
     let image: CGImage
     let scale: CGFloat
+    /// Drawn at a size the capture was given, which copy and save keep rather than
+    /// taking the Export setting's.
+    private let keepsSize: Bool
     private let preferences: () -> Preferences
     private let onOpen: (PinWindowController) -> Void
     private let onClose: (PinWindowController) -> Void
 
-    init(image: CGImage, scale: CGFloat, entry: LibraryEntry?, preferences: @escaping () -> Preferences,
+    init(image: CGImage, scale: CGFloat, entry: LibraryEntry?, keepsSize: Bool, preferences: @escaping () -> Preferences,
          onOpen: @escaping (PinWindowController) -> Void, onClose: @escaping (PinWindowController) -> Void) {
         self.image = image
         self.scale = scale
+        self.keepsSize = keepsSize
         self.entry = entry
         self.preferences = preferences
         self.onOpen = onOpen
@@ -78,13 +82,15 @@ final class PinWindowController: NSWindowController, NSWindowDelegate {
         window?.hasShadow = alpha == 1
     }
 
+    private var exportScale: ExportScale { keepsSize ? .native : preferences().exportScale }
+
     @objc func copyImage(_ sender: Any?) {
-        guard let (exported, png) = Output.exported(image, scale: scale, as: preferences().exportScale) else { return }
+        guard let (exported, png) = Output.exported(image, scale: scale, as: exportScale) else { return }
         Output.copy(exported, png: png)
     }
 
     @objc func saveImage(_ sender: Any?) {
-        guard let (_, png) = Output.exported(image, scale: scale, as: preferences().exportScale) else { return }
+        guard let (_, png) = Output.exported(image, scale: scale, as: exportScale) else { return }
         do {
             try Output.save(png, in: preferences().saveFolderURL)
         } catch {

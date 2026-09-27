@@ -103,6 +103,43 @@ struct ExportTests {
         #expect(buffer.pixel(x: 0, y: exported.image.height - 1).a == 255)
     }
 
+    @Test func anExportIsDrawnAtTheCapturesOwnSize() throws {
+        var document = Document(capture: Fixture.capture(width: 800, height: 600, scale: 2), resize: 2)
+        // A size of its own wins over the setting.
+        let doubled = try #require(Exporter.export(document, scale: .oneX))
+        #expect(doubled.image.width == 1600 && doubled.image.height == 1200)
+        document.resize = 0.5
+        #expect(try #require(Exporter.export(document, scale: .native)).image.width == 400)
+    }
+
+    @Test func theWholeFrameIsDrawnAtTheSize() throws {
+        var document = Document(capture: Fixture.capture(width: 800, height: 600, scale: 2), backdrop: .defaults)
+        document.crop = CGRect(x: 100, y: 100, width: 200, height: 100)
+        let full = try #require(Exporter.export(document, scale: .native)).image
+        document.resize = 0.5
+        let half = try #require(Exporter.export(document, scale: .native)).image
+        #expect(abs(half.width - full.width / 2) <= 1 && abs(half.height - full.height / 2) <= 1)
+    }
+
+    @Test func aRetinaCaptureKeepsItsSizeInPointsDownToHalf() throws {
+        var document = Document(capture: Fixture.capture(width: 1200, height: 800, scale: 2))
+        for (resize, dpi) in [(2, 288), (1, 144), (0.75, 108), (0.5, 72), (0.25, 72)] as [(CGFloat, CGFloat)] {
+            document.resize = resize
+            #expect(try #require(Exporter.export(document, scale: .native)).dpi == dpi)
+        }
+        document.resize = 0.75
+        #expect(try #require(Exporter.export(document, scale: .native)).pointSize == CGSize(width: 600, height: 400))
+        // Below half it shows smaller: 300 pixels at 72 dpi.
+        document.resize = 0.25
+        #expect(try #require(Exporter.export(document, scale: .native)).pointSize == CGSize(width: 300, height: 200))
+    }
+
+    @Test func textIsReadAtFullSizeWhateverSizeTheCaptureExportsAt() throws {
+        let document = Document(capture: Fixture.capture(width: 800, height: 600, scale: 2), resize: 0.25)
+        let read = try #require(Exporter.exportForReading(document))
+        #expect(read.image.width == 800 && read.dpi == 144)
+    }
+
     @Test func namesFilesLikeMacOSAndCountsUpOnClashes() throws {
         let utc = try #require(TimeZone(identifier: "UTC"))
         var calendar = Calendar(identifier: .gregorian)

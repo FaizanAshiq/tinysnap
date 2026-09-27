@@ -35,6 +35,17 @@ struct LibraryStoreTests {
 
     private func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }
 
+    @Test func anEntryReopensWithItsSizeAndItsImageIsDrawnAtIt() throws {
+        let library = try store()
+        let entry = try library.add(Fixture.capture(width: 40, height: 30, scale: 2), captured: captured, timeZone: utc)
+        var document = try #require(library.open(entry)).document
+        document.resize = 0.5
+        try library.saveEdits(document, to: entry)
+        try library.saveImage(document, to: entry)
+        #expect(try #require(library.open(entry)).document.resize == 0.5)
+        #expect(try #require(LibraryStore.readImage(entry.imageURL)).image.width == 20)
+    }
+
     @Test func aCaptureIsKeptAsThreeFilesInAFolderNamedForItsTime() throws {
         let library = try store()
         let capture = Fixture.capture(width: 40, height: 30, scale: 2)

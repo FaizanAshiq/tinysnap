@@ -1,8 +1,10 @@
 import AppKit
+import TinysnapCore
 
-/// Never shown, since Tinysnap has no Dock icon, but its key equivalents are what make
-/// ⌘C, ⌘Z, ⌘S and the rest work in the editor and inside a text being typed. Every
-/// item targets the first responder, so a text field gets its own copy and paste.
+/// Shown while a capture window is open and Tinysnap is in front, and its key
+/// equivalents are what make ⌘C, ⌘Z, ⌘S and the rest work in the editor and inside a
+/// text being typed. Every item targets the first responder, so a text field gets its
+/// own copy and paste, and the captures and the library reach the app delegate.
 @MainActor
 enum MainMenu {
     /// Sets the main menu, and hands AppKit the Window menu, which then lists every open
@@ -25,6 +27,11 @@ enum MainMenu {
             item("Save As...", "saveImageAs:", "S"),
             item("Close", "performClose:", "w"),
         ]))
+        menu.addItem(submenu("Capture", HotKeyAction.allCases.filter { $0 != .library }.map { action in
+            let capture = item(action.title, "captureFromMenu:", "")
+            capture.representedObject = action.rawValue
+            return capture
+        }))
         menu.addItem(submenu("Edit", [
             item("Undo", "undo:", "z"),
             item("Redo", "redo:", "Z"),
@@ -49,6 +56,8 @@ enum MainMenu {
             item("Zoom", "performZoom:", ""),
             .separator(),
             item("Bring All to Front", "arrangeInFront:", ""),
+            .separator(),
+            item("Library", "openLibrary:", ""),
         ]))
         return menu
     }

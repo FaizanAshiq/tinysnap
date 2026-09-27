@@ -110,6 +110,20 @@ struct RendererTests {
         #expect(Fixture.isClose(Fixture.pixel(image, 36, 36), background, within: 1))
     }
 
+    @Test func eraseDoesNotSmearALetterThatTouchesItsEdge() {
+        let grey = CGColor(srgbRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        // A stroke crossing the box's left edge, as when the word beside the erased one
+        // is not quite clear of it. It used to streak across the box, row by row.
+        let capture = Fixture.capture(width: 100, height: 100, fill: grey) {
+            $0.setFillColor(Fixture.black)
+            $0.fill(CGRect(x: 30, y: 46, width: 7, height: 8))
+        }
+        let background = Fixture.pixel(capture.image, 5, 5)
+        let image = render(capture, [Fixture.annotation(.erase(CGRect(x: 35, y: 35, width: 30, height: 30)))])
+        #expect(Fixture.isClose(Fixture.pixel(image, 37, 50), background, within: 2))
+        #expect(Fixture.isClose(Fixture.pixel(image, 45, 50), background, within: 2))
+    }
+
     @Test func eraseAtTheEdgeBlendsTheSidesItHas() {
         let capture = Fixture.capture(width: 100, height: 100, fill: Fixture.green) {
             $0.setFillColor(Fixture.black)

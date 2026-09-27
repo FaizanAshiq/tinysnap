@@ -6,10 +6,13 @@ import TinysnapCore
 final class ChipButton: NSButton {
     var isChosen = false { didSet { needsDisplay = true } }
     private let glyph: (NSRect, NSColor) -> Void
+    private let width: CGFloat
 
-    init(label: String, glyph: @escaping (NSRect, NSColor) -> Void) {
+    /// 30 points wide for a glyph; a chip with a word on it passes more.
+    init(label: String, width: CGFloat = 30, glyph: @escaping (NSRect, NSColor) -> Void) {
         self.glyph = glyph
-        super.init(frame: NSRect(x: 0, y: 0, width: 30, height: 26))
+        self.width = width
+        super.init(frame: NSRect(x: 0, y: 0, width: width, height: 26))
         title = ""
         isBordered = false
         setButtonType(.momentaryChange)
@@ -21,7 +24,7 @@ final class ChipButton: NSButton {
         fatalError("ChipButton is created in code only")
     }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: 30, height: 26) }
+    override var intrinsicContentSize: NSSize { NSSize(width: width, height: 26) }
 
     override func accessibilityValue() -> Any? { isChosen ? "selected" : nil }
 
@@ -47,6 +50,17 @@ final class StyleBar: NSVisualEffectView {
     /// The backdrop as it now is, nil for none. `merging` is true for the colour panel's
     /// stream of changes.
     var onBackdrop: ((_ merging: Bool, _ backdrop: Backdrop?) -> Void)?
+    /// A Measure chip changed its lines or its edge contrast.
+    var onMeasure: ((MeasureSettings) -> Void)?
+    /// The ? in the Measure panel.
+    var onMeasureHelp: (() -> Void)?
+    /// The trash chip, shown while a shape is selected.
+    var onDelete: (() -> Void)?
+    /// A size chip, or a width or height typed into the Size panel and entered.
+    enum SizeRequest: Equatable {
+        case fraction(CGFloat), width(Int), height(Int)
+    }
+    var onSize: ((SizeRequest) -> Void)?
     /// Reads the desktop picture when the wallpaper fill is picked.
     var readWallpaper: (() -> Backdrop.Wallpaper?)?
 
@@ -54,16 +68,22 @@ final class StyleBar: NSVisualEffectView {
     private var style = Style(colorHex: Palette.red)
     private var tool = Tool.arrow
     private var palette: NSPopover?
+    private weak var colorChip: NSView?
 
-    /// The bar shows either the tool's style or the capture's backdrop.
+    /// The bar shows the tool's style, the capture's backdrop, or its export size.
     private enum Mode {
-        case tool, backdrop
+        case tool, backdrop, size
     }
 
     private var mode = Mode.tool
     private var backdrop: Backdrop?
+    private var measure = MeasureSettings.defaults
+    private var selected = false
     /// The settings a backdrop starts from when it is turned on.
     private var remembered = Backdrop.defaults
+    /// The export size in use, as a fraction of full resolution, and the pixels it makes.
+    private var sizeFraction: CGFloat = 1
+    private var sizePixels = CGSize.zero
 
     init() {
         super.init(frame: .zero)
@@ -94,11 +114,16 @@ final class StyleBar: NSVisualEffectView {
     /// Whether this tool has anything to set, and so whether the bar shows at all.
     static func shows(_ tool: Tool) -> Bool { tool.hasColor || tool.hasSize || tool.hasFill || tool.hasCorners || tool.hasOverlay }
 
-    func show(tool: Tool, style: Style) {
-        guard mode != .tool || tool != self.tool || style != self.style || row.arrangedSubviews.isEmpty else { return }
+    /// `selected` is a shape picked up rather than a tool about to draw, and adds the
+    /// trash chip.
+    func show(tool: Tool, style: Style, measure: MeasureSettings = .defaults, selected: Bool = false) {
+        guard mode != .tool || tool != self.tool || style != self.style || measure != self.measure
+                || selected != self.selected || row.arrangedSubviews.isEmpty else { return }
         mode = .tool
         self.tool = tool
         self.style = style
+        self.measure = measure
+        self.selected = selected
         rebuild()
     }
 
@@ -110,10 +135,18 @@ final class StyleBar: NSVisualEffectView {
         rebuild()
     }
 
+    func showSize(fraction: CGFloat, pixels: CGSize) {
+        guard mode != .size || fraction != sizeFraction || pixels != sizePixels || row.arrangedSubviews.isEmpty else { return }
+        mode = .size
+        sizeFraction = fraction
+        sizePixels = pixels
+        rebuild()
+    }
+
     private func rebuild() {
         row.arrangedSubviews.forEach { $0.removeFromSuperview() }
         guard mode == .tool else {
-            buildBackdrop()
+            if mode == .backdrop { buildBackdrop() } else { buildSize() }
             setFrameSize(fittingSize)
             return
         }
@@ -125,6 +158,12 @@ final class StyleBar: NSVisualEffectView {
             row.addArrangedSubview(group(opacityChips()))
             row.addArrangedSubview(group([differenceChip()]))
         }
+        if tool == .measure {
+            row.addArrangedSubview(group(measureLineChips()))
+            row.addArrangedSubview(contrastControl())
+            row.addArrangedSubview(group([measureHelpChip()]))
+        }
+        if selected { row.addArrangedSubview(group([deleteChip()])) }
         setFrameSize(fittingSize)
     }
 
@@ -134,20 +173,22 @@ final class StyleBar: NSVisualEffectView {
         return stack
     }
 
-    private func change(merging: Bool = false, _ change: (inout Style) -> Void) {
+    private func change(_ change: (inout Style) -> Void) {
         change(&style)
-        onChange?(merging, change)
+        onChange?(false, change)
         rebuild()
-        if !merging { onCommit?() }
+        onCommit?()
     }
 
     // MARK: Colour
 
+    private var colorHex: String { mode == .backdrop ? (backdrop ?? remembered).colorHex : style.colorHex }
+
     private func colorButton() -> NSView {
-        let hex = mode == .backdrop ? (backdrop ?? remembered).colorHex : style.colorHex
-        let button = ChipButton(label: "Colour \(hex)") { box, _ in
+        let button = ChipButton(label: "Colour \(colorHex)") { [weak self] box, _ in
+            guard let self else { return }
             let swatch = NSBezierPath(roundedRect: box.insetBy(dx: 3, dy: 2), xRadius: 6, yRadius: 6)
-            NSColor(cgColor: Palette.color(hex: hex))?.setFill()
+            NSColor(cgColor: Palette.color(hex: self.colorHex))?.setFill()
             swatch.fill()
             NSColor.separatorColor.setStroke()
             swatch.lineWidth = 1
@@ -155,19 +196,14 @@ final class StyleBar: NSVisualEffectView {
         }
         button.target = self
         button.action = #selector(showPalette(_:))
+        colorChip = button
         return button
     }
 
     @objc private func showPalette(_ sender: NSButton) {
         palette?.close()
-        let chosen = mode == .backdrop ? (backdrop ?? remembered).colorHex : style.colorHex
-        let controller = ColorPaletteController(chosen: chosen) { [weak self] hex, merging in
-            guard let self else { return }
-            if self.mode == .backdrop {
-                self.changeBackdrop(merging: merging) { $0.colorHex = hex }
-            } else {
-                self.change(merging: merging) { $0.colorHex = hex }
-            }
+        let controller = ColorPaletteController(chosen: colorHex) { [weak self] hex, merging in
+            self?.recolor(hex, merging: merging)
         }
         let popover = NSPopover()
         popover.contentViewController = controller
@@ -187,6 +223,26 @@ final class StyleBar: NSVisualEffectView {
         palette?.close()
     }
 
+    /// Only the colour button shows the colour, so a new one redraws it where it stands.
+    /// Rebuilding the bar replaced the button the palette hangs from, which closed the
+    /// palette and cut the colour panel off before a colour from it could land. A swatch
+    /// is a finished choice, so it closes the palette, which commits.
+    private func recolor(_ hex: String, merging: Bool) {
+        if mode == .backdrop {
+            var next = backdrop ?? remembered
+            next.colorHex = hex
+            backdrop = next
+            onBackdrop?(merging, next)
+        } else {
+            style.colorHex = hex
+            onChange?(merging) { $0.colorHex = hex }
+        }
+        colorChip?.toolTip = "Colour \(hex)"
+        colorChip?.setAccessibilityLabel("Colour \(hex)")
+        colorChip?.needsDisplay = true
+        if !merging { palette?.close() }
+    }
+
     // MARK: Size
 
     private func sizeChips() -> [NSView] {
@@ -203,7 +259,7 @@ final class StyleBar: NSVisualEffectView {
                     let size = text.size()
                     text.draw(at: NSPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2))
                 }
-            case .arrow, .line, .rectangle, .oval, .freehand, .highlighter:
+            case .arrow, .line, .rectangle, .oval, .freehand, .highlighter, .measure:
                 glyph = { box, color in
                     let line = NSBezierPath()
                     line.move(to: NSPoint(x: box.minX + 8, y: box.midY))
@@ -312,12 +368,12 @@ final class StyleBar: NSVisualEffectView {
     }
 
     /// Rebuilt before the editor hears of it, so the bar is placed at its new width.
-    private func changeBackdrop(merging: Bool = false, _ change: (inout Backdrop) -> Void) {
+    private func changeBackdrop(_ change: (inout Backdrop) -> Void) {
         var next = backdrop ?? remembered
         change(&next)
         backdrop = next
         rebuild()
-        onBackdrop?(merging, next)
+        onBackdrop?(false, next)
     }
 
     private static let fillLabels = ["No backdrop", "Gradient from the capture", "Solid colour", "Desktop wallpaper", "Clear, see-through"]
@@ -461,6 +517,208 @@ final class StyleBar: NSVisualEffectView {
         changeBackdrop { $0.shadow = shadows[sender.tag] }
     }
 
+    // MARK: Export size
+
+    private static let sizeChoices: [CGFloat] = [0.25, 0.5, 1, 2]
+
+    /// The chips, the one for the size in use lit whether it was picked or comes from
+    /// Settings, then the pixels that size makes, which can be typed over.
+    private func buildSize() {
+        let chips = Self.sizeChoices.enumerated().map { index, fraction in
+            let title = "\(Int(fraction * 100))%"
+            let chip = ChipButton(label: "Export at \(title)", width: 46) { box, color in
+                let text = NSAttributedString(string: title, attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: color,
+                ])
+                let size = text.size()
+                text.draw(at: NSPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2))
+            }
+            chip.isChosen = abs(sizeFraction - fraction) < 0.0005
+            chip.target = self
+            chip.action = #selector(pickExportSize(_:))
+            chip.tag = index
+            return chip
+        }
+        row.addArrangedSubview(group(chips))
+        let times = NSTextField(labelWithString: "×")
+        times.textColor = .secondaryLabelColor
+        let unit = NSTextField(labelWithString: "px")
+        unit.textColor = .secondaryLabelColor
+        let fields = NSStackView(views: [
+            pixelField(sizePixels.width, label: "Export width in pixels, Return to apply", action: #selector(enterWidth(_:))),
+            times,
+            pixelField(sizePixels.height, label: "Export height in pixels, Return to apply", action: #selector(enterHeight(_:))),
+            unit,
+        ])
+        fields.spacing = 4
+        row.addArrangedSubview(fields)
+    }
+
+    private func pixelField(_ value: CGFloat, label: String, action: Selector) -> NSTextField {
+        let field = NSTextField(string: String(Int(value)))
+        field.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        field.alignment = .right
+        field.bezelStyle = .roundedBezel
+        field.toolTip = label
+        field.setAccessibilityLabel(label)
+        field.target = self
+        field.action = action
+        field.widthAnchor.constraint(equalToConstant: 58).isActive = true
+        return field
+    }
+
+    @objc private func pickExportSize(_ sender: NSButton) {
+        guard Self.sizeChoices.indices.contains(sender.tag) else { return }
+        onSize?(.fraction(Self.sizeChoices[sender.tag]))
+    }
+
+    @objc private func enterWidth(_ sender: NSTextField) {
+        enter(sender, current: sizePixels.width) { .width($0) }
+    }
+
+    @objc private func enterHeight(_ sender: NSTextField) {
+        enter(sender, current: sizePixels.height) { .height($0) }
+    }
+
+    /// A whole number of pixels is sent on, and the fields then show what it gave, held
+    /// to the limits. Anything else puts the size in use back, selected to type over.
+    private func enter(_ field: NSTextField, current: CGFloat, _ request: (Int) -> SizeRequest) {
+        guard let pixels = Int(field.stringValue.trimmingCharacters(in: .whitespaces)), pixels > 0 else {
+            field.stringValue = String(Int(current))
+            field.selectText(nil)
+            return
+        }
+        onSize?(request(pixels))
+        rebuild()
+    }
+
+    // MARK: Delete
+
+    /// The Delete key's button, so a shape can go without the keyboard.
+    private func deleteChip() -> NSView {
+        let chip = ChipButton(label: "Delete, or the Delete key") { box, color in
+            let configuration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+                .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+            guard let trash = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)?
+                .withSymbolConfiguration(configuration) else { return }
+            let size = trash.size
+            trash.draw(in: NSRect(x: box.midX - size.width / 2, y: box.midY - size.height / 2, width: size.width, height: size.height))
+        }
+        chip.target = self
+        chip.action = #selector(deleteSelection)
+        return chip
+    }
+
+    @objc private func deleteSelection() {
+        onDelete?()
+    }
+
+    // MARK: Measure
+
+    /// Across and Down, the same as X and Y: a line with a tick across each end.
+    private func measureLineChips() -> [NSView] {
+        [(true, "Across, or X"), (false, "Down, or Y")].map { across, label in
+            let chip = ChipButton(label: label) { box, color in
+                let frame = box.insetBy(dx: 8, dy: 7)
+                let line = NSBezierPath()
+                if across {
+                    line.move(to: NSPoint(x: frame.minX, y: frame.midY))
+                    line.line(to: NSPoint(x: frame.maxX, y: frame.midY))
+                    for x in [frame.minX, frame.maxX] {
+                        line.move(to: NSPoint(x: x, y: frame.minY + 2))
+                        line.line(to: NSPoint(x: x, y: frame.maxY - 2))
+                    }
+                } else {
+                    line.move(to: NSPoint(x: frame.midX, y: frame.minY))
+                    line.line(to: NSPoint(x: frame.midX, y: frame.maxY))
+                    for y in [frame.minY, frame.maxY] {
+                        line.move(to: NSPoint(x: frame.midX - 5, y: y))
+                        line.line(to: NSPoint(x: frame.midX + 5, y: y))
+                    }
+                }
+                line.lineWidth = 1.6
+                color.setStroke()
+                line.stroke()
+            }
+            chip.isChosen = across ? measure.across : measure.down
+            chip.target = self
+            chip.action = across ? #selector(toggleAcross) : #selector(toggleDown)
+            return chip
+        }
+    }
+
+    @objc private func toggleAcross() {
+        changeMeasure { $0.across.toggle() }
+    }
+
+    @objc private func toggleDown() {
+        changeMeasure { $0.down.toggle() }
+    }
+
+    /// Minus, the value, plus: the same as the down and up arrows.
+    private func contrastControl() -> NSView {
+        func sign(_ plus: Bool, _ label: String) -> ChipButton {
+            let chip = ChipButton(label: label) { box, color in
+                let sign = NSBezierPath()
+                sign.move(to: NSPoint(x: box.midX - 5, y: box.midY))
+                sign.line(to: NSPoint(x: box.midX + 5, y: box.midY))
+                if plus {
+                    sign.move(to: NSPoint(x: box.midX, y: box.midY - 5))
+                    sign.line(to: NSPoint(x: box.midX, y: box.midY + 5))
+                }
+                sign.lineWidth = 1.6
+                color.setStroke()
+                sign.stroke()
+            }
+            chip.target = self
+            chip.action = plus ? #selector(raiseContrast) : #selector(lowerContrast)
+            return chip
+        }
+        let value = NSTextField(labelWithString: measure.contrastLabel)
+        value.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        value.textColor = .secondaryLabelColor
+        value.alignment = .center
+        value.widthAnchor.constraint(equalToConstant: 34).isActive = true
+        value.toolTip = "Edge contrast: how big a change in brightness counts as an edge"
+        value.setAccessibilityLabel("Edge contrast \(measure.contrastLabel)")
+        return group([sign(false, "Lower edge contrast, finds fainter edges, or the down arrow"), value,
+                      sign(true, "Higher edge contrast, finds fewer edges, or the up arrow")])
+    }
+
+    @objc private func lowerContrast() {
+        changeMeasure { $0.stepContrast(up: false, coarse: false) }
+    }
+
+    @objc private func raiseContrast() {
+        changeMeasure { $0.stepContrast(up: true, coarse: false) }
+    }
+
+    private func measureHelpChip() -> NSView {
+        let chip = ChipButton(label: "Show the Measure guide") { box, color in
+            let circle = NSBezierPath(ovalIn: box.insetBy(dx: 7, dy: 5))
+            circle.lineWidth = 1.4
+            color.setStroke()
+            circle.stroke()
+            let mark = NSAttributedString(string: "?", attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .bold),
+                                                                    .foregroundColor: color])
+            let size = mark.size()
+            mark.draw(at: NSPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2))
+        }
+        chip.target = self
+        chip.action = #selector(showMeasureHelp)
+        return chip
+    }
+
+    @objc private func showMeasureHelp() {
+        onMeasureHelp?()
+    }
+
+    private func changeMeasure(_ change: (inout MeasureSettings) -> Void) {
+        change(&measure)
+        rebuild()
+        onMeasure?(measure)
+    }
+
     // MARK: Overlay
 
     private static let opacities: [CGFloat] = [0.25, 0.5, 0.75, 1]
@@ -539,6 +797,8 @@ final class ColorPaletteController: NSViewController {
         column.spacing = 10
         column.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
         view = column
+        // Told, or the popover picks a size of its own and squeezes the insets away.
+        preferredContentSize = column.fittingSize
     }
 
     private func swatch(_ hex: String) -> ChipButton {
@@ -572,10 +832,13 @@ final class ColorPaletteController: NSViewController {
 
     @objc private func showColorPanel() {
         let panel = NSColorPanel.shared
+        // The colour first, while the panel points nowhere: setting it in code sends the
+        // action as if it had been picked.
+        panel.setTarget(nil)
+        panel.color = NSColor(cgColor: Palette.color(hex: chosen)) ?? .systemRed
         Self.colorPanelOwner = self
         panel.setTarget(self)
         panel.setAction(#selector(colorPanelChanged(_:)))
-        panel.color = NSColor(cgColor: Palette.color(hex: chosen)) ?? .systemRed
         panel.orderFront(nil)
     }
 

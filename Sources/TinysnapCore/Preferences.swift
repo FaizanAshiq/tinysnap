@@ -184,6 +184,8 @@ public struct Preferences: Equatable, Sendable, Codable {
     public var backdrop: Backdrop {
         didSet { if backdrop.wallpaper != nil { backdrop.wallpaper = nil } }
     }
+    /// The Measure tool as it was left: its lines, its edge contrast, its guide seen.
+    public var measure: MeasureSettings
 
     public static let defaults = Preferences(
         hotkeys: .defaults,
@@ -196,14 +198,15 @@ public struct Preferences: Equatable, Sendable, Codable {
         toolStyles: [:],
         afterCapture: .editor,
         keepLibrary: true,
-        backdrop: .defaults
+        backdrop: .defaults,
+        measure: .defaults
     )
 
     public static let delayRange = 1...60
 
     public init(hotkeys: HotKeys, saveFolder: String, exportScale: ExportScale, delaySeconds: Int,
                 showMenuBarIcon: Bool, showDockIconWhileCapturing: Bool, colorHex: String, toolStyles: [String: Style],
-                afterCapture: AfterCapture, keepLibrary: Bool, backdrop: Backdrop) {
+                afterCapture: AfterCapture, keepLibrary: Bool, backdrop: Backdrop, measure: MeasureSettings = .defaults) {
         self.hotkeys = hotkeys
         self.saveFolder = saveFolder
         self.exportScale = exportScale
@@ -217,6 +220,7 @@ public struct Preferences: Equatable, Sendable, Codable {
         self.backdrop = backdrop
         // An observer does not run in init.
         self.backdrop.wallpaper = nil
+        self.measure = measure
     }
 
     /// Every key is optional and a bad value falls back on its own, so a file written
@@ -238,6 +242,7 @@ public struct Preferences: Equatable, Sendable, Codable {
         afterCapture = (try? container.decodeIfPresent(AfterCapture.self, forKey: .afterCapture)) ?? fallback.afterCapture
         keepLibrary = (try? container.decodeIfPresent(Bool.self, forKey: .keepLibrary)) ?? fallback.keepLibrary
         backdrop = (try? container.decodeIfPresent(Backdrop.self, forKey: .backdrop)) ?? fallback.backdrop
+        measure = (try? container.decodeIfPresent(MeasureSettings.self, forKey: .measure)) ?? fallback.measure
     }
 
     public var saveFolderURL: URL {

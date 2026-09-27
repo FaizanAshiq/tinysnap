@@ -12,6 +12,16 @@ struct DocumentArchiveTests {
         return backdrop
     }
 
+    @Test func aMeasurementComesBack() throws {
+        let measure = Fixture.annotation(.measure(from: CGPoint(x: 288, y: 200), to: CGPoint(x: 320, y: 200)))
+        let document = Document(capture: Fixture.capture(width: 400, height: 300, scale: 2), annotations: [measure])
+        let (json, images) = try DocumentArchive.encode(document, captured: captured)
+        #expect(images.isEmpty)
+        #expect(String(decoding: json, as: UTF8.self).contains(#""kind" : "measure""#))
+        let edits = try DocumentArchive.decode(json) { _ in nil }
+        #expect(edits.annotations == [measure])
+    }
+
     @Test func aBackdropAndItsWallpaperComeBack() throws {
         let backdrop = wallpaperBackdrop()
         let document = Document(capture: Fixture.capture(width: 40, height: 30), backdrop: backdrop)
@@ -31,6 +41,26 @@ struct DocumentArchiveTests {
         #expect(edits.backdrop?.fill == .gradient)
         #expect(edits.backdrop?.wallpaper == nil)
         #expect(edits.backdrop?.padding == .large)
+    }
+
+    @Test func aSizeComesBackAndAFileWithoutOneFollowsTheSetting() throws {
+        let document = Document(capture: Fixture.capture(width: 40, height: 30, scale: 2), resize: 0.5)
+        let (json, _) = try DocumentArchive.encode(document, captured: captured)
+        #expect(String(decoding: json, as: UTF8.self).contains(#""resize" : 0.5"#))
+        #expect(try DocumentArchive.decode(json) { _ in nil }.resize == 0.5)
+
+        let (plain, _) = try DocumentArchive.encode(Document(capture: Fixture.capture(width: 40, height: 30)), captured: captured)
+        #expect(!String(decoding: plain, as: UTF8.self).contains("resize"))
+        #expect(try DocumentArchive.decode(plain) { _ in nil }.resize == nil)
+    }
+
+    @Test func anUnreadableSizeIsLeftOffAndTheRestIntact() throws {
+        for bad in [#""big""#, "9", "0", "-1"] {
+            let json = #"{"version": 1, "captured": "2026-09-25T07:42:10Z", "scale": 2, "annotations": [], "resize": \#(bad)}"#
+            let edits = try DocumentArchive.decode(Data(json.utf8)) { _ in nil }
+            #expect(edits.resize == nil)
+            #expect(edits.scale == 2)
+        }
     }
 
     @Test func anUnreadableBackdropLeavesItOffAndTheRestIntact() throws {

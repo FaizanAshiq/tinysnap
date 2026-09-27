@@ -74,7 +74,7 @@ public struct LibraryStore: Sendable {
         }
     }
 
-    /// Renders the document the way a native export does, crop applied.
+    /// Renders the document at its size, or at full resolution when it has none, crop applied.
     public func saveImage(_ document: Document, to entry: LibraryEntry) throws {
         guard let exported = Exporter.export(document, scale: .native),
               let png = Exporter.pngData(exported) else { throw CocoaError(.fileWriteUnknown) }
@@ -105,7 +105,7 @@ public struct LibraryStore: Sendable {
            let edits = try? DocumentArchive.decode(json, image: { Self.readImage(entry.folder.appendingPathComponent($0))?.image }) {
             let capture = Capture(image: original.image, scale: edits.scale)
             return OpenedEntry(document: Document(capture: capture, crop: edits.crop, annotations: edits.annotations,
-                                                  backdrop: edits.backdrop),
+                                                  backdrop: edits.backdrop, resize: edits.resize),
                                isEditable: true)
         }
         guard let flat = Self.readImage(entry.imageURL) ?? Self.readImage(entry.originalURL) else { return nil }

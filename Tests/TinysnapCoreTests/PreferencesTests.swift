@@ -151,6 +151,15 @@ struct PreferencesTests {
         #expect(bad.delaySeconds == 5)
     }
 
+    @Test func theMeasureToolComesBackAsItWasLeftAndFallsBackAlone() throws {
+        #expect(Preferences.defaults.measure == .defaults)
+        let left = try Preferences.load(from: temporaryFile(containing: #"{"measure": {"down": true, "edgeContrast": 0.02, "guideSeen": true}}"#))
+        #expect(left.measure == MeasureSettings(across: true, down: true, edgeContrast: 0.02, guideSeen: true))
+        let bad = try Preferences.load(from: temporaryFile(containing: #"{"measure": 5, "delaySeconds": 4}"#))
+        #expect(bad.measure == .defaults)
+        #expect(bad.delaySeconds == 4)
+    }
+
     @Test func theRememberedBackdropNeverHoldsOnToAWallpaper() {
         var backdrop = Backdrop.defaults
         backdrop.fill = .wallpaper

@@ -65,25 +65,32 @@ struct PixelBuffer {
         }
 
         let rowBytes = width * 4
+        // Each pixel just outside the box stands for its stretch of that edge: the median
+        // of those within 16 pixels of it along the edge. A letter crossing the edge is a
+        // short run of odd pixels and drops out, where on its own it streaked across the
+        // box row by row. A gradient along the edge survives, since the median of an even
+        // slope is its middle.
+        let leftEdge = hasLeft ? smoothedEdge(count: inner.height) { (inner.y + $0) * rowBytes + left * 4 } : []
+        let rightEdge = hasRight ? smoothedEdge(count: inner.height) { (inner.y + $0) * rowBytes + right * 4 } : []
+        let topEdge = hasTop ? smoothedEdge(count: inner.width) { top * rowBytes + (inner.x + $0) * 4 } : []
+        let bottomEdge = hasBottom ? smoothedEdge(count: inner.width) { bottom * rowBytes + (inner.x + $0) * 4 } : []
+
         bytes.withUnsafeMutableBufferPointer { pixels in
-            // The edges sit outside the box, so filling it never changes a pixel that is
-            // still to be read.
             for y in inner.y..<(inner.y + inner.height) {
                 for x in inner.x..<(inner.x + inner.width) {
                     var r = 0.0, g = 0.0, b = 0.0, a = 0.0, weights = 0.0
-                    func add(_ sx: Int, _ sy: Int, _ distance: Int) {
+                    func add(_ pixel: EdgePixel, _ distance: Int) {
                         let weight = 1 / Double(distance)
-                        let index = sy * rowBytes + sx * 4
-                        r += Double(pixels[index]) * weight
-                        g += Double(pixels[index + 1]) * weight
-                        b += Double(pixels[index + 2]) * weight
-                        a += Double(pixels[index + 3]) * weight
+                        r += Double(pixel.r) * weight
+                        g += Double(pixel.g) * weight
+                        b += Double(pixel.b) * weight
+                        a += Double(pixel.a) * weight
                         weights += weight
                     }
-                    if hasLeft { add(left, y, x - left) }
-                    if hasRight { add(right, y, right - x) }
-                    if hasTop { add(x, top, y - top) }
-                    if hasBottom { add(x, bottom, bottom - y) }
+                    if hasLeft { add(leftEdge[y - inner.y], x - left) }
+                    if hasRight { add(rightEdge[y - inner.y], right - x) }
+                    if hasTop { add(topEdge[x - inner.x], y - top) }
+                    if hasBottom { add(bottomEdge[x - inner.x], bottom - y) }
                     let index = y * rowBytes + x * 4
                     pixels[index] = UInt8((r / weights).rounded())
                     pixels[index + 1] = UInt8((g / weights).rounded())
@@ -91,6 +98,23 @@ struct PixelBuffer {
                     pixels[index + 3] = UInt8((a / weights).rounded())
                 }
             }
+        }
+    }
+
+    private typealias EdgePixel = (r: UInt8, g: UInt8, b: UInt8, a: UInt8)
+
+    /// The edge pixels at `index(0..<count)`, each the median, channel by channel, of
+    /// those within 16 of it along the edge.
+    private func smoothedEdge(count: Int, index: (Int) -> Int) -> [EdgePixel] {
+        let reach = 16
+        let channels = (0..<4).map { channel in (0..<count).map { bytes[index($0) + channel] } }
+        return (0..<count).map { i in
+            let window = max(0, i - reach)...min(count - 1, i + reach)
+            func median(_ channel: Int) -> UInt8 {
+                let sorted = channels[channel][window].sorted()
+                return sorted[sorted.count / 2]
+            }
+            return (median(0), median(1), median(2), median(3))
         }
     }
 

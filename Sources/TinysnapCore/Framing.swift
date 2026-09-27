@@ -8,8 +8,15 @@ extension Renderer {
     /// to read back than the canvas had, so the export came out different from the screen.
     public static func renderOutput(_ document: Document, outputScale: CGFloat = 1,
                                     hiding hidden: Set<Annotation.ID> = []) -> CGImage? {
+        guard let cut = outputCut(document, outputScale: outputScale),
+              let full = render(document, region: document.extent, outputScale: outputScale, hiding: hidden) else { return nil }
+        return full.cropping(to: cut)
+    }
+
+    /// Where the output is cut from a render of the whole extent, on whole output pixels
+    /// rounded inwards. `Document.exportPixelSize(at:)` sizes exports with it too.
+    static func outputCut(_ document: Document, outputScale: CGFloat) -> CGRect? {
         let region = document.extent
-        guard let full = render(document, region: region, outputScale: outputScale, hiding: hidden) else { return nil }
         // The render starts at the extent's corner, left of or above the capture once the
         // canvas has grown.
         let rect = document.outputRect.offsetBy(dx: -region.minX, dy: -region.minY)
@@ -18,9 +25,8 @@ extension Renderer {
         let cut = CGRect(x: left, y: top,
                          width: max(1, (rect.maxX * outputScale).rounded(.down) - left),
                          height: max(1, (rect.maxY * outputScale).rounded(.down) - top))
-            .intersection(CGRect(x: 0, y: 0, width: full.width, height: full.height))
-        guard !cut.isNull else { return nil }
-        return full.cropping(to: cut)
+            .intersection(CGRect(origin: .zero, size: pixelSize(of: region, outputScale: outputScale)))
+        return cut.isNull ? nil : cut
     }
 
     /// The output inside its backdrop, or the plain output when there is none.
@@ -54,10 +60,15 @@ extension Renderer {
     /// The frame's size, where the output sits in it, and how round its corners are.
     private static func placement(of content: CGImage, in backdrop: Backdrop,
                                   perPoint: CGFloat) -> (width: Int, height: Int, box: CGRect, corner: CGFloat) {
-        let padding = Int((backdrop.padding.points * perPoint).rounded())
+        let padding = framePadding(backdrop, perPoint: perPoint)
         let box = CGRect(x: padding, y: padding, width: content.width, height: content.height)
         let corner = min((backdrop.corners.points ?? .greatestFiniteMagnitude) * perPoint, min(box.width, box.height) / 2)
         return (content.width + padding * 2, content.height + padding * 2, box, corner)
+    }
+
+    /// The backdrop's padding on each side, in whole output pixels.
+    static func framePadding(_ backdrop: Backdrop, perPoint: CGFloat) -> Int {
+        Int((backdrop.padding.points * perPoint).rounded())
     }
 
     /// The fill over everything, then a shadow under the output's rounded shape, then

@@ -38,6 +38,13 @@ final class HotKeyRecorderView: NSView {
     override var acceptsFirstResponder: Bool { true }
     override var intrinsicContentSize: NSSize { NSSize(width: 180, height: 24) }
 
+    /// Where the centred text's baseline falls, so a form can line the field up with its
+    /// label rather than with its bottom edge.
+    override var firstBaselineOffsetFromTop: CGFloat {
+        let font = NSFont.systemFont(ofSize: 12)
+        return (intrinsicContentSize.height - (font.ascender - font.descender + font.leading)) / 2 + font.ascender
+    }
+
     override func mouseDown(with event: NSEvent) {
         startRecording()
     }

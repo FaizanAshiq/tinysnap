@@ -8,7 +8,7 @@ extension Tool {
         [.select, .crop],
         [.arrow, .line, .rectangle, .oval, .freehand, .highlighter],
         [.text, .step, .image],
-        [.spotlight, .magnifier],
+        [.spotlight, .magnifier, .measure],
         [.blur, .pixelate, .erase],
     ]
 
@@ -31,6 +31,7 @@ extension Tool {
         case .blur: "drop"
         case .pixelate: "square.grid.3x3"
         case .erase: "eraser"
+        case .measure: "ruler"
         }
     }
 

@@ -14,7 +14,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var hotKeys: HotKeyCenter?
     private var takenHotKeys: Set<HotKeyAction> = []
-    private var preferences: Preferences = .defaults
+    /// Read here rather than on finishing launching: opening a file launches Tinysnap and
+    /// delivers the file first, and an editor built before the read took the defaults,
+    /// then wrote them over the remembered styles when it closed.
+    private var preferences: Preferences = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? .defaults
     private var editors: [EditorWindowController] = []
     private let library = LibraryStore()
     /// Why the last capture could not be kept, shown in Settings until one can.
@@ -39,7 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         couldReadScreenAtLaunch = ScreenAccess.isGranted
-        preferences = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? .defaults
         MainMenu.install()
         installStatusItem()
         statusItem?.isVisible = preferences.showMenuBarIcon
@@ -372,6 +374,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return "Capture at \(DateFormatter.localizedString(from: date, dateStyle: day, timeStyle: .medium))"
     }
 
+    /// For the app menu, the Dock menu and Settings, so the library never depends on a
+    /// hotkey, which is unset until chosen, or on the menu bar icon, which can be hidden.
+    @objc func openLibrary(_ sender: Any?) {
+        showLibrary()
+    }
+
     func showLibrary() {
         if libraryWindow == nil {
             libraryWindow = LibraryWindowController(
@@ -388,9 +396,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: Pins
 
-    func pin(_ image: CGImage, scale: CGFloat, entry: LibraryEntry?) {
+    /// `keepsSize` is for an image drawn at a size the capture was given.
+    func pin(_ image: CGImage, scale: CGFloat, entry: LibraryEntry?, keepsSize: Bool = false) {
         let pin = PinWindowController(
-            image: image, scale: scale, entry: entry,
+            image: image, scale: scale, entry: entry, keepsSize: keepsSize,
             preferences: { [weak self] in self?.preferences ?? .defaults },
             onOpen: { [weak self] pin in self?.openPinned(pin) },
             onClose: { [weak self] pin in self?.pins.removeAll { $0 === pin } }
@@ -404,14 +413,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         editors.first { $0.entry == entry }?.keep(renderingImage: true)
     }
 
-    /// The entry's rendered image, brought up to date with any editor still open on it.
+    /// The entry drawn from its edits, brought up to date with any editor still open on
+    /// it, at its size when it has one.
     func pin(_ entry: LibraryEntry) {
         flush(entry)
-        guard let flat = LibraryStore.readImage(entry.imageURL) else {
+        guard let document = library.open(entry)?.document, let exported = Exporter.export(document, scale: .native) else {
             NSSound.beep()
             return
         }
-        pin(flat.image, scale: flat.scale, entry: entry)
+        pin(exported.image, scale: exported.dpi / 72, entry: entry, keepsSize: document.resize != nil)
     }
 
     /// Back into the editor: the library entry, editable, when there is one.
@@ -445,8 +455,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             title: title,
             preferences: { [weak self] in self?.preferences ?? .defaults },
             onStylesChange: { [weak self] styles, colorHex in self?.remember(styles, colorHex: colorHex) },
-            onPin: { [weak self] image, scale, entry in self?.pin(image, scale: scale, entry: entry) },
+            onPin: { [weak self] image, scale, entry, keepsSize in
+                self?.pin(image, scale: scale, entry: entry, keepsSize: keepsSize)
+            },
             onBackdropChange: { [weak self] backdrop in self?.remember(backdrop) },
+            onMeasureChange: { [weak self] measure in self?.remember(measure) },
             onClose: { [weak self] closed in
                 self?.editors.removeAll { $0 === closed }
                 self?.updateDockIcon()
@@ -513,6 +526,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         try? current.save(to: Preferences.defaultFileURL)
     }
 
+    /// Merged into what is on disk, as the styles are, so Settings is not written over.
+    private func remember(_ measure: MeasureSettings) {
+        var current = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? preferences
+        current.measure = measure
+        preferences = current
+        try? current.save(to: Preferences.defaultFileURL)
+    }
+
     // MARK: Settings and lifecycle
 
     @objc func showSettings(_ sender: Any?) {
@@ -524,7 +545,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     guard let self else { return }
                     self.library.clear(keeping: self.openEntryNames)
                     NotificationCenter.default.post(name: .libraryChanged, object: nil)
-                }
+                },
+                open: { [weak self] in self?.showLibrary() }
             ), onChange: { [weak self] updated in
                 guard let self else { return [] }
                 self.preferences = updated
@@ -616,5 +638,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Quitting still has to happen if the launch never reports back.
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { NSApp.reply(toApplicationShouldTerminate: true) }
         return .terminateLater
+    }
+}
+
+extension AppDelegate: NSMenuItemValidation {
+    /// While a capture window is open Tinysnap has a Dock icon, and with it a Dock menu:
+    /// the captures and the library, as on the menu bar icon.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let menu = NSMenu()
+        for action in HotKeyAction.allCases where action != .library {
+            let item = NSMenuItem(title: action.title, action: #selector(captureFromMenu(_:)), keyEquivalent: "")
+            item.representedObject = action.rawValue
+            item.target = self
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        let library = NSMenuItem(title: "Open Library", action: #selector(openLibrary(_:)), keyEquivalent: "")
+        library.target = self
+        menu.addItem(library)
+        return menu
+    }
+
+    /// The app menu and the Dock menu enable their own items, so a capture that can not
+    /// run now shows as unavailable there too, as it does on the menu bar icon.
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        guard item.action == #selector(captureFromMenu(_:)), let raw = item.representedObject as? String,
+              let action = HotKeyAction(rawValue: raw) else { return true }
+        return !(action == .repeatArea && lastArea == nil) && secondsLeft == nil
     }
 }

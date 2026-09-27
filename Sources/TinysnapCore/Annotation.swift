@@ -39,6 +39,8 @@ public struct Annotation: Equatable, Identifiable {
         case blur(CGRect)
         case pixelate(CGRect)
         case erase(CGRect)
+        /// Two ends in capture pixels. The label is the length, worked out when drawn.
+        case measure(from: CGPoint, to: CGPoint)
     }
 
     /// The tool that draws this kind, and so whose remembered style it shares.
@@ -58,6 +60,7 @@ public struct Annotation: Equatable, Identifiable {
         case .blur: .blur
         case .pixelate: .pixelate
         case .erase: .erase
+        case .measure: .measure
         }
     }
 
@@ -76,6 +79,8 @@ public struct Annotation: Equatable, Identifiable {
             return CGRect(corner: from, corner: to).insetBy(dx: -reach, dy: -reach)
         case let .line(from, to), let .highlighter(from, to):
             return CGRect(corner: from, corner: to).insetBy(dx: -size / 2, dy: -size / 2)
+        case let .measure(from, to):
+            return MeasureShape.extent(from: from, to: to, width: size / scale, scale: scale)
         case let .rectangle(rect), let .oval(rect), let .spotlight(rect),
              let .blur(rect), let .pixelate(rect), let .erase(rect), let .image(rect, _):
             return rect
@@ -103,6 +108,10 @@ public struct Annotation: Equatable, Identifiable {
             return point.distance(toSegmentFrom: from, to: to) <= max(reach, head)
         case let .line(from, to), let .highlighter(from, to):
             return point.distance(toSegmentFrom: from, to: to) <= reach
+        case let .measure(from, to):
+            // The line, or its label, which is the easiest part of it to aim at.
+            return point.distance(toSegmentFrom: from, to: to) <= reach
+                || MeasureShape.tag(from: from, to: to, width: size / scale, scale: scale).rect.contains(point)
         case let .rectangle(rect):
             if style.filled { return rect.insetBy(dx: -reach, dy: -reach).contains(point) }
             let inner = rect.insetBy(dx: reach, dy: reach)
@@ -139,6 +148,7 @@ public struct Annotation: Equatable, Identifiable {
         case let .arrow(from, to): copy.kind = .arrow(from: from.offset(by: vector), to: to.offset(by: vector))
         case let .line(from, to): copy.kind = .line(from: from.offset(by: vector), to: to.offset(by: vector))
         case let .highlighter(from, to): copy.kind = .highlighter(from: from.offset(by: vector), to: to.offset(by: vector))
+        case let .measure(from, to): copy.kind = .measure(from: from.offset(by: vector), to: to.offset(by: vector))
         case let .rectangle(rect): copy.kind = .rectangle(shift(rect))
         case let .oval(rect): copy.kind = .oval(shift(rect))
         case let .spotlight(rect): copy.kind = .spotlight(shift(rect))
@@ -157,7 +167,7 @@ public struct Annotation: Equatable, Identifiable {
     /// Where the resize handles sit. Text, steps and freehand strokes only move.
     public func handles(scale: CGFloat) -> [(Handle, CGPoint)] {
         switch kind {
-        case let .arrow(from, to), let .line(from, to), let .highlighter(from, to):
+        case let .arrow(from, to), let .line(from, to), let .highlighter(from, to), let .measure(from, to):
             return [(.start, from), (.end, to)]
         case let .rectangle(rect), let .oval(rect), let .spotlight(rect),
              let .blur(rect), let .pixelate(rect), let .erase(rect), let .image(rect, _):
@@ -186,6 +196,7 @@ public struct Annotation: Equatable, Identifiable {
         case let .arrow(from, to): let (a, b) = line(from, to); copy.kind = .arrow(from: a, to: b)
         case let .line(from, to): let (a, b) = line(from, to); copy.kind = .line(from: a, to: b)
         case let .highlighter(from, to): let (a, b) = line(from, to); copy.kind = .highlighter(from: a, to: b)
+        case let .measure(from, to): let (a, b) = line(from, to); copy.kind = .measure(from: a, to: b)
         case let .rectangle(rect): copy.kind = .rectangle(box(rect))
         case let .oval(rect): copy.kind = .oval(box(rect))
         case let .spotlight(rect): copy.kind = .spotlight(box(rect))
@@ -207,7 +218,7 @@ public struct Annotation: Equatable, Identifiable {
     public func isDegenerate(scale: CGFloat) -> Bool {
         let minimum = 2 * scale
         switch kind {
-        case let .arrow(from, to), let .line(from, to), let .highlighter(from, to):
+        case let .arrow(from, to), let .line(from, to), let .highlighter(from, to), let .measure(from, to):
             return from.distance(to: to) < minimum
         case let .rectangle(rect), let .oval(rect), let .spotlight(rect),
              let .blur(rect), let .pixelate(rect), let .erase(rect), let .image(rect, _):

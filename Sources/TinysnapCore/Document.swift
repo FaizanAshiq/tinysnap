@@ -49,12 +49,17 @@ public struct Document: Equatable {
     public var annotations: [Annotation]
     /// Nil while there is no backdrop.
     public var backdrop: Backdrop?
+    /// The export's size as output pixels per capture pixel, 0.01 to 4. Nil follows the
+    /// Export setting.
+    public var resize: CGFloat?
 
-    public init(capture: Capture, crop: CGRect? = nil, annotations: [Annotation] = [], backdrop: Backdrop? = nil) {
+    public init(capture: Capture, crop: CGRect? = nil, annotations: [Annotation] = [], backdrop: Backdrop? = nil,
+                resize: CGFloat? = nil) {
         self.capture = capture
         self.crop = crop
         self.annotations = annotations
         self.backdrop = backdrop
+        self.resize = resize
     }
 
     public var scale: CGFloat { capture.scale }

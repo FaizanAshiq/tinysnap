@@ -9,6 +9,7 @@ public struct ArchivedEdits {
     public var crop: CGRect?
     public var annotations: [Annotation]
     public var backdrop: Backdrop?
+    public var resize: CGFloat?
 }
 
 /// A document to and from `edits.json`, plus one PNG per pasted image. Coordinates stay
@@ -32,6 +33,7 @@ public enum DocumentArchive {
             switch annotation.kind {
             case let .arrow(from, to): item.kind = "arrow"; item.from = pair(from); item.to = pair(to)
             case let .line(from, to): item.kind = "line"; item.from = pair(from); item.to = pair(to)
+            case let .measure(from, to): item.kind = "measure"; item.from = pair(from); item.to = pair(to)
             case let .highlighter(from, to): item.kind = "highlighter"; item.from = pair(from); item.to = pair(to)
             case let .rectangle(rect): item.kind = "rectangle"; item.rect = Box(rect)
             case let .oval(rect): item.kind = "oval"; item.rect = Box(rect)
@@ -59,7 +61,7 @@ public enum DocumentArchive {
             backdrop?.file = name
         }
         let file = File(version: version, captured: captured, scale: document.scale,
-                        crop: document.crop.map(Box.init), annotations: items, backdrop: backdrop)
+                        crop: document.crop.map(Box.init), annotations: items, backdrop: backdrop, resize: document.resize)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -80,7 +82,7 @@ public enum DocumentArchive {
             Annotation(id: item.id, kind: try kind(of: item, image: image), style: item.style)
         }
         return ArchivedEdits(captured: file.captured, scale: file.scale, crop: file.crop?.rect, annotations: annotations,
-                             backdrop: file.backdrop.map { backdrop(from: $0, image: image) })
+                             backdrop: file.backdrop.map { backdrop(from: $0, image: image) }, resize: file.resize)
     }
 
     /// A wallpaper whose file is gone turns the fill into the gradient, rather than
@@ -112,6 +114,7 @@ public enum DocumentArchive {
         switch item.kind {
         case "arrow": return .arrow(from: try point(item.from, "from"), to: try point(item.to, "to"))
         case "line": return .line(from: try point(item.from, "from"), to: try point(item.to, "to"))
+        case "measure": return .measure(from: try point(item.from, "from"), to: try point(item.to, "to"))
         case "highlighter": return .highlighter(from: try point(item.from, "from"), to: try point(item.to, "to"))
         case "rectangle": return .rectangle(try rect())
         case "oval": return .oval(try rect())
@@ -145,18 +148,20 @@ public enum DocumentArchive {
         var crop: Box?
         var annotations: [Item]
         var backdrop: StoredBackdrop?
+        var resize: CGFloat?
 
-        init(version: Int, captured: Date, scale: CGFloat, crop: Box?, annotations: [Item], backdrop: StoredBackdrop?) {
-            (self.version, self.captured, self.scale, self.crop, self.annotations, self.backdrop) =
-                (version, captured, scale, crop, annotations, backdrop)
+        init(version: Int, captured: Date, scale: CGFloat, crop: Box?, annotations: [Item], backdrop: StoredBackdrop?,
+             resize: CGFloat?) {
+            (self.version, self.captured, self.scale, self.crop, self.annotations, self.backdrop, self.resize) =
+                (version, captured, scale, crop, annotations, backdrop, resize)
         }
 
         private enum CodingKeys: String, CodingKey {
-            case version, captured, scale, crop, annotations, backdrop
+            case version, captured, scale, crop, annotations, backdrop, resize
         }
 
-        /// Strict for everything the document needs, lenient for the backdrop: one that
-        /// can not be read is left off, and the rest of the entry opens as it was.
+        /// Strict for everything the document needs, lenient for the backdrop and the size:
+        /// one that can not be read is left off, and the rest of the entry opens as it was.
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             version = try container.decode(Int.self, forKey: .version)
@@ -165,6 +170,9 @@ public enum DocumentArchive {
             crop = try container.decodeIfPresent(Box.self, forKey: .crop)
             annotations = try container.decode([Item].self, forKey: .annotations)
             backdrop = (try? container.decodeIfPresent(StoredBackdrop.self, forKey: .backdrop)) ?? nil
+            // A size past the limits is as unreadable as a word.
+            let resize = (try? container.decodeIfPresent(CGFloat.self, forKey: .resize)) ?? nil
+            self.resize = resize.flatMap { Document.resizeLimits.contains($0) ? $0 : nil }
         }
     }
 

@@ -52,12 +52,11 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
     }
 
     private func build(in window: NSWindow) {
-        let layout = NSCollectionViewFlowLayout()
-        layout.itemSize = NSSize(width: 200, height: 164)
-        layout.minimumInteritemSpacing = 14
-        layout.minimumLineSpacing = 14
-        layout.sectionInset = NSEdgeInsets(top: 4, left: 16, bottom: 20, right: 16)
-        layout.headerReferenceSize = NSSize(width: 0, height: 36)
+        let layout = LibraryLayout()
+        layout.minimumInteritemSpacing = LibraryLayout.gap
+        layout.minimumLineSpacing = LibraryLayout.gap
+        layout.sectionInset = NSEdgeInsets(top: 0, left: LibraryLayout.edge, bottom: 16, right: LibraryLayout.edge)
+        layout.headerReferenceSize = NSSize(width: 0, height: 52)
 
         grid.collectionViewLayout = layout
         grid.dataSource = self
@@ -166,7 +165,7 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
         let pixels = CGSize(width: (properties?[kCGImagePropertyPixelWidth] as? Int) ?? 0,
                             height: (properties?[kCGImagePropertyPixelHeight] as? Int) ?? 0)
         let options = [kCGImageSourceCreateThumbnailFromImageAlways: true,
-                       kCGImageSourceThumbnailMaxPixelSize: 480] as CFDictionary
+                       kCGImageSourceThumbnailMaxPixelSize: 640] as CFDictionary
         guard let small = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else { return (nil, pixels) }
         let image = NSImage(cgImage: small, size: .zero)
         thumbnails[url] = (modified, image, pixels)
@@ -228,10 +227,13 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
         openSelected()
     }
 
+    /// Drawn from the entry's edits, so a capture with a size of its own copies at it and
+    /// one without takes the Export setting.
     @objc func copy(_ sender: Any?) {
         if let entry = selectedEntry { flush(entry) }
-        guard let entry = selectedEntry, let flat = LibraryStore.readImage(entry.imageURL),
-              let (exported, png) = Output.exported(flat.image, scale: flat.scale, as: preferences().exportScale) else {
+        guard let entry = selectedEntry, let document = library.open(entry)?.document,
+              let exported = Exporter.export(document, scale: preferences().exportScale),
+              let png = Exporter.pngData(exported) else {
             NSSound.beep()
             return
         }
@@ -356,6 +358,30 @@ final class LibraryGrid: NSCollectionView {
     }
 }
 
+/// Tiles share each row: as many as sit nearest 230 points wide, stretched to fill it, so
+/// the gaps and the edges stay the same at any window width. Leftover width went into
+/// the gaps before, which grew uneven as the window widened.
+final class LibraryLayout: NSCollectionViewFlowLayout {
+    static let gap: CGFloat = 16
+    static let edge: CGFloat = 24
+    private static let idealTileWidth: CGFloat = 230
+
+    override func prepare() {
+        if let width = collectionView?.bounds.width, width > 0 {
+            let usable = width - Self.edge * 2
+            let columns = max(1, ((usable + Self.gap) / (Self.idealTileWidth + Self.gap)).rounded())
+            let tile = ((usable - Self.gap * (columns - 1)) / columns).rounded(.down)
+            let size = NSSize(width: tile, height: LibraryItem.height(forWidth: tile))
+            if itemSize != size { itemSize = size }
+        }
+        super.prepare()
+    }
+
+    override func shouldInvalidateLayout(forBoundsChange newBounds: NSRect) -> Bool {
+        newBounds.width != collectionView?.bounds.width || super.shouldInvalidateLayout(forBoundsChange: newBounds)
+    }
+}
+
 /// One capture: its picture, the time it was taken and its size in pixels.
 final class LibraryItem: NSCollectionViewItem {
     static let identifier = NSUserInterfaceItemIdentifier("LibraryItem")
@@ -363,13 +389,22 @@ final class LibraryItem: NSCollectionViewItem {
     private let time = NSTextField(labelWithString: "")
     private let pixels = NSTextField(labelWithString: "")
 
+    private let tile = LibraryTile(frame: NSRect(x: 0, y: 0, width: 230, height: LibraryItem.height(forWidth: 230)))
+
+    /// An 8 point margin round a 16 by 10 picture, then the labels' row.
+    static func height(forWidth width: CGFloat) -> CGFloat {
+        (8 + (width - 16) * 10 / 16 + 32).rounded()
+    }
+
     override func loadView() {
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 164))
+        let root = tile
         picture.imageScaling = .scaleProportionallyUpOrDown
         picture.wantsLayer = true
-        picture.layer?.cornerRadius = 8
+        picture.layer?.cornerRadius = 6
         picture.layer?.masksToBounds = true
-        picture.layer?.borderColor = NSColor.controlAccentColor.cgColor
+        // A well a shade under the tile, the same box on every tile, so a wide capture's
+        // bands read as part of the frame rather than as uneven space.
+        picture.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.12).cgColor
         for label in [time, pixels] {
             label.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
             label.textColor = .secondaryLabelColor
@@ -380,20 +415,20 @@ final class LibraryItem: NSCollectionViewItem {
             root.addSubview(view)
         }
         NSLayoutConstraint.activate([
-            picture.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            picture.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            picture.topAnchor.constraint(equalTo: root.topAnchor),
-            picture.heightAnchor.constraint(equalToConstant: 136),
-            time.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 2),
-            time.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -4),
-            pixels.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -2),
-            pixels.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -4),
+            picture.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 8),
+            picture.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
+            picture.topAnchor.constraint(equalTo: root.topAnchor, constant: 8),
+            picture.heightAnchor.constraint(equalTo: picture.widthAnchor, multiplier: 10.0 / 16),
+            time.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 10),
+            time.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -9),
+            pixels.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
+            pixels.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -9),
         ])
         view = root
     }
 
     override var isSelected: Bool {
-        didSet { picture.layer?.borderWidth = isSelected ? 3 : 0 }
+        didSet { tile.isSelected = isSelected }
     }
 
     func show(image: NSImage?, time: String, width: Int, height: Int) {
@@ -401,6 +436,24 @@ final class LibraryItem: NSCollectionViewItem {
         self.time.stringValue = time
         pixels.stringValue = "\(width) × \(height)"
         picture.setAccessibilityLabel("Capture at \(time), \(width) by \(height) pixels")
+    }
+}
+
+/// The ground one capture sits on, so a portrait capture and its labels line up on the
+/// same tile instead of floating in an empty cell. Drawn in `updateLayer` so the fill
+/// follows light and dark.
+final class LibraryTile: NSView {
+    var isSelected = false {
+        didSet { needsDisplay = true }
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        layer?.cornerRadius = 10
+        layer?.backgroundColor = NSColor.quaternarySystemFill.cgColor
+        layer?.borderColor = NSColor.controlAccentColor.cgColor
+        layer?.borderWidth = isSelected ? 3 : 0
     }
 }
 
@@ -414,9 +467,10 @@ final class LibraryHeader: NSView, NSCollectionViewElement {
         label.font = .systemFont(ofSize: 15, weight: .semibold)
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
+        // In line with the tiles below it, and sitting on them rather than on the title bar.
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: LibraryLayout.edge),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
         ])
     }
 

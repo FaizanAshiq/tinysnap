@@ -2,7 +2,7 @@ import CoreGraphics
 
 public enum Tool: String, CaseIterable, Codable, Sendable {
     case select, arrow, line, rectangle, oval, text, highlighter, freehand
-    case step, spotlight, magnifier, image, crop, blur, pixelate, erase
+    case step, spotlight, magnifier, image, crop, blur, pixelate, erase, measure
 
     public var key: Character {
         switch self {
@@ -22,6 +22,7 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
         case .blur: "b"
         case .pixelate: "p"
         case .erase: "e"
+        case .measure: "d"
         }
     }
 
@@ -48,6 +49,7 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
         case .blur: "Blur, can be partly reversed"
         case .pixelate: "Pixelate, can be partly reversed"
         case .erase: "Erase, the only guaranteed redaction"
+        case .measure: "Measure"
         }
     }
 
@@ -60,6 +62,7 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
         case .step: [20, 26, 32, 40, 50]
         case .blur: [3, 5, 8, 12, 18]
         case .pixelate: [6, 8, 12, 16, 24]
+        case .measure: [1, 1.5, 2, 3, 4]
         case .select, .spotlight, .magnifier, .image, .crop, .erase: nil
         }
     }
@@ -73,7 +76,7 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
 
     public var hasColor: Bool {
         switch self {
-        case .arrow, .line, .rectangle, .oval, .text, .highlighter, .freehand, .step: true
+        case .arrow, .line, .rectangle, .oval, .text, .highlighter, .freehand, .step, .measure: true
         case .select, .spotlight, .magnifier, .image, .crop, .blur, .pixelate, .erase: false
         }
     }

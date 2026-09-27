@@ -21,6 +21,12 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     var onPointerColor: ((String?) -> Void)?
     /// Tab: copy the colour under the pointer.
     var onCopyColor: (() -> Void)?
+    /// The Measure tool's lines, edge contrast and guide, as the editor last set them.
+    var measure = MeasureSettings.defaults {
+        didSet { if measure != oldValue { needsDisplay = true } }
+    }
+    /// X, Y or an arrow changed the Measure tool's settings.
+    var onMeasureChange: ((MeasureSettings) -> Void)?
     private var tracking: NSTrackingArea?
 
     private var rendered: CGImage?
@@ -71,10 +77,71 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         let point = pixelPoint(event)
         reportColor(at: point)
         hover(at: point)
+        measurePointer = session.tool == .measure ? point : nil
     }
 
     override func mouseExited(with event: NSEvent) {
         hovered = nil
+        measurePointer = nil
+    }
+
+    // MARK: Measuring
+
+    /// Where the pointer rests, in capture pixels, while the Measure tool is out.
+    private var measurePointer: CGPoint? {
+        didSet { if measurePointer != oldValue { needsDisplay = true } }
+    }
+
+    /// Read once per capture: the walks need each pixel's brightness, not its colour.
+    private var luminance: (capture: ObjectIdentifier, buffer: LuminanceBuffer)?
+
+    /// What a click would keep. Nothing over an annotation, where a click picks it up.
+    private var liveReading: [MeasureLine] {
+        guard session.tool == .measure, session.phase == .idle, !overPickUp, let point = measurePointer else { return [] }
+        let capture = session.display.capture
+        if luminance?.capture != ObjectIdentifier(capture) {
+            luminance = LuminanceBuffer(image: capture.image).map { (ObjectIdentifier(capture), $0) }
+        }
+        guard let buffer = luminance?.buffer else { return [] }
+        return MeasureReading.lines(at: point, in: buffer, scale: scale, settings: measure)
+    }
+
+    /// Drawn by the same code as a kept measurement, so the reading is what a click keeps.
+    private func drawLiveReading(in context: CGContext) {
+        let lines = liveReading
+        guard !lines.isEmpty else { return }
+        let style = session.style(for: .measure)
+        context.saveGState()
+        // Capture pixels, y down, as the renderer draws.
+        context.scaleBy(x: 1 / scale, y: 1 / scale)
+        context.translateBy(x: -shown.minX, y: -shown.minY)
+        for line in lines {
+            MeasureShape.draw(from: line.from, to: line.to, width: Tool.measure.points(for: style.size) ?? 2,
+                              color: Palette.color(hex: style.colorHex), scale: scale, in: context)
+        }
+        context.restoreGState()
+    }
+
+    /// X and Y toggle the lines, and with nothing selected the up and down arrows change
+    /// what counts as an edge. With something selected the arrows nudge it, as always.
+    private func measureKey(_ event: NSEvent) -> Bool {
+        guard session.tool == .measure, session.phase == .idle else { return false }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .numericPad, .function])
+        var next = measure
+        let arrow = event.keyCode == 125 || event.keyCode == 126
+        if arrow, session.selection == nil, flags.subtracting(.shift).isEmpty {
+            next.stepContrast(up: event.keyCode == 126, coarse: flags.contains(.shift))
+        } else {
+            guard flags.isEmpty else { return false }
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "x": next.across.toggle()
+            case "y": next.down.toggle()
+            default: return false
+            }
+        }
+        measure = next
+        onMeasureChange?(next)
+        return true
     }
 
     // MARK: Showing what is applied
@@ -277,6 +344,7 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         drawCrop(in: context)
         drawBorders(in: context)
         drawSelection(in: context)
+        drawLiveReading(in: context)
     }
 
     private func drawCrop(in context: CGContext) {
@@ -347,7 +415,10 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         window?.makeFirstResponder(self)
         let point = pixelPoint(event)
         lastPoint = point
+        let reading = liveReading
         session.pointerDown(at: point, modifiers: modifiers(event.modifierFlags), clickCount: event.clickCount, reach: reach)
+        // A Measure click that picked nothing up keeps what was showing.
+        if session.tool == .measure, session.phase == .idle, session.selection == nil { session.keep(reading) }
         hover(at: point)
     }
 
@@ -408,6 +479,7 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     // MARK: Keys
 
     override func keyDown(with event: NSEvent) {
+        if measureKey(event) { return }
         let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
         switch event.keyCode {
         case 49 where isDrawing:

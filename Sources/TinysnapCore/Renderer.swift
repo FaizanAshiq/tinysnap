@@ -5,16 +5,21 @@ import Foundation
 /// The one renderer. The canvas draws what this returns and export writes it, so what
 /// you see is exactly what you copy.
 public enum Renderer {
+    /// A region's size in output pixels. Rounded down: rounding 400.5 up gave a last
+    /// column only half covered by the capture, which came out half transparent.
+    static func pixelSize(of region: CGRect, outputScale: CGFloat) -> CGSize {
+        CGSize(width: max(1, (region.width * outputScale).rounded(.down)),
+               height: max(1, (region.height * outputScale).rounded(.down)))
+    }
+
     /// Draws `region` of the document, in capture pixels, at `outputScale` output pixels
     /// per capture pixel, the whole extent unless told otherwise. `hidden` leaves out
     /// annotations, used for the text being typed.
     public static func render(_ document: Document, region: CGRect? = nil, outputScale: CGFloat = 1,
                               hiding hidden: Set<Annotation.ID> = []) -> CGImage? {
         let region = region ?? document.extent
-        // Rounded down: rounding 400.5 up gave a last column only half covered by the
-        // capture, which came out half transparent.
-        let width = max(1, Int((region.width * outputScale).rounded(.down)))
-        let height = max(1, Int((region.height * outputScale).rounded(.down)))
+        let size = pixelSize(of: region, outputScale: outputScale)
+        let width = Int(size.width), height = Int(size.height)
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
                                       bytesPerRow: 0, space: space,
@@ -92,6 +97,8 @@ struct Canvas {
             context.setStrokeColor(color)
             context.setLineWidth(size)
             context.strokeLineSegments(between: [from, to])
+        case let .measure(from, to):
+            MeasureShape.draw(from: from, to: to, width: size / scale, color: color, scale: scale, in: context)
         case let .rectangle(rect):
             // Half the stroke again, so the inside of an outline is as round as the outside.
             let radius = radius(annotation.style.corners, for: rect, extra: annotation.style.filled ? 0 : size / 2)
