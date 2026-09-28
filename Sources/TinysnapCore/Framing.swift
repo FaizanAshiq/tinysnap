@@ -32,34 +32,36 @@ extension Renderer {
     /// The output inside its backdrop, or the plain output when there is none.
     public static func renderFramed(_ document: Document, outputScale: CGFloat = 1,
                                     hiding hidden: Set<Annotation.ID> = []) -> CGImage? {
-        guard let content = renderOutput(document, outputScale: outputScale, hiding: hidden) else { return nil }
-        guard let backdrop = document.backdrop else { return content }
-        return frame(content, in: backdrop, capture: document.capture, perPoint: document.scale * outputScale)
+        var ground: FrameGround?
+        return renderFramed(document, outputScale: outputScale, hiding: hidden, ground: &ground)
     }
 
-    /// The document's output drawn over the last frame made for an output of its size:
-    /// while a shape is drawn or moved only the output changes, and working out the
-    /// shadow again was most of the time a frame took. Nil when the size has changed.
-    /// Under see-through window corners the last output shows until a fresh frame.
-    public static func reframe(_ document: Document, over last: CGImage, outputScale: CGFloat = 1,
-                               hiding hidden: Set<Annotation.ID> = []) -> CGImage? {
-        guard let backdrop = document.backdrop,
-              let content = renderOutput(document, outputScale: outputScale, hiding: hidden) else { return nil }
-        let place = placement(of: content, in: backdrop, perPoint: document.scale * outputScale)
-        guard last.width == place.width, last.height == place.height,
-              let space = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(data: nil, width: place.width, height: place.height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        context.draw(last, in: CGRect(x: 0, y: 0, width: place.width, height: place.height))
-        context.addPath(CGPath(roundedRect: place.box, cornerWidth: place.corner, cornerHeight: place.corner, transform: nil))
-        context.clip()
-        context.draw(content, in: place.box)
-        return context.makeImage()
+    /// The same, drawn over `ground` while it still fits, and over a new one kept there
+    /// when it does not. The shadow was most of what a frame cost, and a stroke, an undo
+    /// or a restyle never moves it, so the canvas keeps one ground and pays for the output.
+    public static func renderFramed(_ document: Document, outputScale: CGFloat = 1, hiding hidden: Set<Annotation.ID> = [],
+                                    ground: inout FrameGround?) -> CGImage? {
+        guard let content = renderOutput(document, outputScale: outputScale, hiding: hidden) else { return nil }
+        guard let backdrop = document.backdrop else { return content }
+        let perPoint = document.scale * outputScale
+        let place = placement(of: content, in: backdrop, perPoint: perPoint)
+        let key = FrameGround.Key(backdrop: backdrop, capture: ObjectIdentifier(document.capture),
+                                  output: document.outputPixelRect, extent: document.extent, outputScale: outputScale)
+        if ground?.key != key {
+            // The shadow follows the output with nothing drawn on it: a window's see-through
+            // corners shape it, the marks drawn on top do not.
+            let bare = renderOutput(document, outputScale: outputScale, hiding: Set(document.annotations.map(\.id))) ?? content
+            ground = makeGround(caster: bare, place: place, backdrop: backdrop, capture: document.capture, perPoint: perPoint)
+                .map { FrameGround(image: $0, key: key) }
+        }
+        guard let ground else { return nil }
+        return frame(content, over: ground.image, place: place)
     }
 
     /// The frame's size, where the output sits in it, and how round its corners are.
-    private static func placement(of content: CGImage, in backdrop: Backdrop,
-                                  perPoint: CGFloat) -> (width: Int, height: Int, box: CGRect, corner: CGFloat) {
+    private typealias Placement = (width: Int, height: Int, box: CGRect, corner: CGFloat)
+
+    private static func placement(of content: CGImage, in backdrop: Backdrop, perPoint: CGFloat) -> Placement {
         let padding = framePadding(backdrop, perPoint: perPoint)
         let box = CGRect(x: padding, y: padding, width: content.width, height: content.height)
         let corner = min((backdrop.corners.points ?? .greatestFiniteMagnitude) * perPoint, min(box.width, box.height) / 2)
@@ -71,10 +73,12 @@ extension Renderer {
         Int((backdrop.padding.points * perPoint).rounded())
     }
 
-    /// The fill over everything, then a shadow under the output's rounded shape, then
-    /// the output clipped to it. `perPoint` is output pixels per point.
-    static func frame(_ content: CGImage, in backdrop: Backdrop, capture: Capture, perPoint: CGFloat) -> CGImage? {
-        let (width, height, box, corner) = placement(of: content, in: backdrop, perPoint: perPoint)
+    /// The fill over everything, then the shadow `caster` throws under the output's
+    /// rounded shape, with the caster taken back out: its pixels are the output's to draw.
+    /// `perPoint` is output pixels per point.
+    private static func makeGround(caster: CGImage, place: Placement, backdrop: Backdrop, capture: Capture,
+                                   perPoint: CGFloat) -> CGImage? {
+        let (width, height, box, corner) = place
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
@@ -107,19 +111,41 @@ extension Renderer {
                                              width: size.width, height: size.height))
         }
 
-        context.saveGState()
-        if let (blur, drop, alpha) = shadow(backdrop.shadow) {
-            context.setShadow(offset: CGSize(width: 0, height: -drop * perPoint), blur: blur * perPoint,
-                              color: CGColor(gray: 0, alpha: alpha))
+        if let (blur, drop, alpha) = shadow(backdrop.shadow),
+           let layer = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                 space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
+            let shape = CGPath(roundedRect: box, cornerWidth: corner, cornerHeight: corner, transform: nil)
+            layer.saveGState()
+            layer.setShadow(offset: CGSize(width: 0, height: -drop * perPoint), blur: blur * perPoint,
+                            color: CGColor(gray: 0, alpha: alpha))
+            // One layer, so the shadow follows the clipped output's shape, see-through
+            // window corners and all.
+            layer.beginTransparencyLayer(auxiliaryInfo: nil)
+            layer.addPath(shape)
+            layer.clip()
+            layer.draw(caster, in: box)
+            layer.endTransparencyLayer()
+            layer.restoreGState()
+            // Then the caster out again, leaving its shadow where the output does not cover it.
+            layer.setBlendMode(.destinationOut)
+            layer.addPath(shape)
+            layer.clip()
+            layer.draw(caster, in: box)
+            if let shade = layer.makeImage() { context.draw(shade, in: whole) }
         }
-        // One layer, so the shadow follows the clipped output's shape, see-through window
-        // corners and all.
-        context.beginTransparencyLayer(auxiliaryInfo: nil)
+        return context.makeImage()
+    }
+
+    /// The output over its ground, clipped to its rounded shape.
+    private static func frame(_ content: CGImage, over ground: CGImage, place: Placement) -> CGImage? {
+        let (width, height, box, corner) = place
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.draw(ground, in: CGRect(x: 0, y: 0, width: width, height: height))
         context.addPath(CGPath(roundedRect: box, cornerWidth: corner, cornerHeight: corner, transform: nil))
         context.clip()
         context.draw(content, in: box)
-        context.endTransparencyLayer()
-        context.restoreGState()
         return context.makeImage()
     }
 
@@ -130,5 +156,20 @@ extension Renderer {
         case .soft: (24, 10, 0.3)
         case .strong: (40, 18, 0.45)
         }
+    }
+}
+
+/// A frame without its output: the backdrop's fill and the shadow the output throws on it.
+public struct FrameGround {
+    public let image: CGImage
+    fileprivate let key: Key
+
+    /// Everything the ground depends on. The annotations are not in it, which is the point.
+    fileprivate struct Key: Equatable {
+        let backdrop: Backdrop
+        let capture: ObjectIdentifier
+        let output: CGRect
+        let extent: CGRect
+        let outputScale: CGFloat
     }
 }

@@ -98,7 +98,8 @@ struct Canvas {
             context.setLineWidth(size)
             context.strokeLineSegments(between: [from, to])
         case let .measure(from, to):
-            MeasureShape.draw(from: from, to: to, width: size / scale, color: color, scale: scale, in: context)
+            MeasureShape.draw(from: from, to: to, width: size / scale, color: color, scale: scale,
+                              at: annotation.labelAt, in: context)
         case let .rectangle(rect):
             // Half the stroke again, so the inside of an outline is as round as the outside.
             let radius = radius(annotation.style.corners, for: rect, extra: annotation.style.filled ? 0 : size / 2)

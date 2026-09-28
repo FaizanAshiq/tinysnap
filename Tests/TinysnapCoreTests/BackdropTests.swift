@@ -52,14 +52,17 @@ struct BackdropTests {
         #expect(alpha(clear, 30, 30) == 255)
     }
 
-    @Test func aChangedOutputOverTheLastFrameMatchesAFreshFrameInAFractionOfTheTime() throws {
-        // The canvas frames on every change while a shape is drawn or moved, and working
-        // out the shadow each time made drawing on a full screen capture lag.
+    @Test func aFrameOverAKeptGroundMatchesAFreshFrameInAFractionOfTheTime() throws {
+        // The canvas frames on every change, and working out the shadow each time made
+        // drawing, undo and style changes lag on a full screen capture.
         var document = Document(capture: Fixture.capture(width: 3024, height: 1964, scale: 2), backdrop: .defaults)
-        let last = try #require(Renderer.renderFramed(document))
+        var ground: FrameGround?
+        _ = try #require(Renderer.renderFramed(document, ground: &ground))
+        let kept = try #require(ground)
         document.annotations.append(Fixture.annotation(.rectangle(CGRect(x: 100, y: 100, width: 400, height: 300))))
+        let overImage = try #require(Renderer.renderFramed(document, ground: &ground))
+        #expect(ground?.image === kept.image)
         let freshImage = try #require(Renderer.renderFramed(document))
-        let overImage = try #require(Renderer.reframe(document, over: last))
         let fresh = try #require(PixelBuffer(image: freshImage)), over = try #require(PixelBuffer(image: overImage))
         // Padding, the new box's stroke, the capture, and the shadow under it.
         for (x, y) in [(10, 10), (196, 300), (1700, 1100), (3100, 2100)] {
@@ -67,14 +70,41 @@ struct BackdropTests {
             #expect(Fixture.isClose((Int(a.r), Int(a.g), Int(a.b)), (Int(b.r), Int(b.g), Int(b.b)), within: 2))
         }
         func fastest(_ work: () -> Void) -> Duration { (0..<3).map { _ in ContinuousClock().measure(work) }.min()! }
-        #expect(fastest { _ = Renderer.reframe(document, over: last) } * 3 < fastest { _ = Renderer.renderFramed(document) })
+        var reused: FrameGround? = kept
+        #expect(fastest { _ = Renderer.renderFramed(document, ground: &reused) } * 3 < fastest { _ = Renderer.renderFramed(document) })
     }
 
-    @Test func anOutputThatChangedSizeIsNotDrawnOverTheLastFrame() throws {
+    @Test func aNewCropOrBackdropBuildsANewGround() throws {
         var document = Document(capture: Fixture.capture(width: 200, height: 100), backdrop: .defaults)
-        let last = try #require(Renderer.renderFramed(document))
+        var ground: FrameGround?
+        _ = Renderer.renderFramed(document, ground: &ground)
+        let first = try #require(ground).image
         document.crop = CGRect(x: 0, y: 0, width: 100, height: 50)
-        #expect(Renderer.reframe(document, over: last) == nil)
+        _ = Renderer.renderFramed(document, ground: &ground)
+        let second = try #require(ground).image
+        #expect(second !== first && second.width < first.width)
+        document.backdrop?.padding = .large
+        _ = Renderer.renderFramed(document, ground: &ground)
+        #expect(try #require(ground).image !== second)
+    }
+
+    @Test func aWindowsSeeThroughCornerShowsTheFillNotAHole() throws {
+        // A window capture's corners are transparent. The ground leaves the output out,
+        // so what shows there must still be the fill.
+        let capture = Fixture.capture(width: 100, height: 60) { context in
+            context.setFillColor(Fixture.blue)
+            context.fill(CGRect(x: 0, y: 0, width: 100, height: 60))
+            context.clear(CGRect(x: 0, y: 0, width: 10, height: 10))
+        }
+        var backdrop = Backdrop.defaults
+        backdrop.fill = .solid
+        backdrop.colorHex = "#34C759"
+        backdrop.shadow = .none
+        backdrop.corners = .square
+        let image = try #require(Renderer.renderFramed(Document(capture: capture, backdrop: backdrop)))
+        let padding = Renderer.framePadding(backdrop, perPoint: 1)
+        #expect(Fixture.isClose(Fixture.pixel(image, padding + 3, padding + 3), (52, 199, 89)))
+        #expect(Fixture.isClose(Fixture.pixel(image, padding + 50, padding + 30), (0, 0, 255)))
     }
 
     @Test func theShadowDarkensThePaddingJustBelowTheCapture() throws {
@@ -184,5 +214,31 @@ struct BackdropTests {
         }
         editor.undo()
         #expect(editor.display.backdrop == .defaults)
+    }
+
+    @Test func aCaptureSplitEvenlyBetweenTwoColoursAlwaysStartsFromTheSameOne() {
+        // Groups of equal size came out in dictionary order, which changes per launch,
+        // so a gradient could flip on reopening. Each pair is tried both ways round, and
+        // eight pairs leave a coin toss no room to pass them all by luck.
+        let pairs: [((Int, Int, Int), (Int, Int, Int))] = [
+            ((0, 0, 255), (255, 0, 0)), ((0, 255, 0), (255, 0, 0)), ((0, 0, 0), (255, 255, 255)),
+            ((0, 0, 128), (255, 255, 0)), ((0, 128, 128), (255, 128, 0)), ((128, 0, 128), (128, 255, 0)),
+            ((128, 128, 128), (255, 0, 128)), ((0, 96, 0), (255, 0, 255)),
+        ]
+        func color(_ c: (Int, Int, Int)) -> CGColor {
+            CGColor(srgbRed: CGFloat(c.0) / 255, green: CGFloat(c.1) / 255, blue: CGFloat(c.2) / 255, alpha: 1)
+        }
+        for (lower, higher) in pairs {
+            for (left, right) in [(lower, higher), (higher, lower)] {
+                // 64 pixels square, the size the sample is read at, so nothing blends.
+                let capture = Fixture.capture(width: 64, height: 64) { context in
+                    context.setFillColor(color(left))
+                    context.fill(CGRect(x: 0, y: 0, width: 32, height: 64))
+                    context.setFillColor(color(right))
+                    context.fill(CGRect(x: 32, y: 0, width: 32, height: 64))
+                }
+                #expect(Fixture.isClose(rgb(capture.gradientColors[0]), lower, within: 2))
+            }
+        }
     }
 }

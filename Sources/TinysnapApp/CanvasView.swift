@@ -33,8 +33,8 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     private var renderedDocument: Document?
     private var renderedHidden: Annotation.ID?
     private var renderedFramed = false
-    /// The last render was the output drawn over an earlier frame, so it wants a fresh one.
-    private var renderedOver = false
+    /// The backdrop's fill and shadow, kept while the frame's size and backdrop hold.
+    private var frameGround: FrameGround?
     private var textView: NSTextView?
     /// What the canvas shows, in capture pixels: the framed output with a backdrop on,
     /// otherwise the whole extent. Kept here because working it out measures text. The
@@ -115,9 +115,11 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         // Capture pixels, y down, as the renderer draws.
         context.scaleBy(x: 1 / scale, y: 1 / scale)
         context.translateBy(x: -shown.minX, y: -shown.minY)
-        for line in lines {
-            MeasureShape.draw(from: line.from, to: line.to, width: Tool.measure.points(for: style.size) ?? 2,
-                              color: Palette.color(hex: style.colorHex), scale: scale, in: context)
+        // Placed the way keeping them places them, so a click keeps what is on screen.
+        let width = Tool.measure.points(for: style.size) ?? 2
+        for line in MeasureShape.clearTags(lines, width: width, scale: scale) {
+            MeasureShape.draw(from: line.from, to: line.to, width: width, color: Palette.color(hex: style.colorHex),
+                              scale: scale, at: line.labelAt, in: context)
         }
         context.restoreGState()
     }
@@ -206,7 +208,11 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     private var reach: CGFloat { 6 / magnification * scale }
 
     private func pixelPoint(_ event: NSEvent) -> CGPoint {
-        let point = convert(event.locationInWindow, from: nil)
+        pixelPoint(inWindow: event.locationInWindow)
+    }
+
+    private func pixelPoint(inWindow location: NSPoint) -> CGPoint {
+        let point = convert(location, from: nil)
         return CGPoint(x: point.x * scale + shown.minX, y: point.y * scale + shown.minY)
     }
 
@@ -219,6 +225,12 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         fitExtent()
         needsDisplay = true
         syncTextView()
+        // Picking the Measure tool reads the space under the pointer at once, rather than
+        // once the pointer next moves.
+        if session.tool == .measure, old.tool != .measure, let window,
+           visibleRect.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil)) {
+            measurePointer = pixelPoint(inWindow: window.mouseLocationOutsideOfEventStream)
+        }
         onChange?()
     }
 
@@ -315,20 +327,15 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         // ponytail: renders the whole document on every change. Fine at Retina laptop
         // sizes; cache the annotations below the one being dragged if 5K captures lag.
         let framed = self.framed
-        let gesture = session.phase != .idle
-        if rendered == nil || renderedDocument != session.display || renderedHidden != hidden || renderedFramed != framed
-            || renderedOver && !gesture {
+        if rendered == nil || renderedDocument != session.display || renderedHidden != hidden || renderedFramed != framed {
             let hiding: Set<Annotation.ID> = hidden.map { [$0] } ?? []
-            // Mid gesture only the output changes, so it goes over the last frame, and the
-            // frame is drawn afresh once the gesture ends.
-            let over = framed && renderedFramed && gesture
-                ? rendered.flatMap { Renderer.reframe(session.display, over: $0, hiding: hiding) } : nil
-            // With a backdrop, the canvas shows exactly what an export gives.
-            rendered = over ?? (framed ? Renderer.renderFramed(session.display, hiding: hiding) : Renderer.render(session.display, hiding: hiding))
+            // With a backdrop, the canvas shows exactly what an export gives, drawn over the
+            // kept ground so only a new size or backdrop pays for the shadow.
+            rendered = framed ? Renderer.renderFramed(session.display, hiding: hiding, ground: &frameGround)
+                : Renderer.render(session.display, hiding: hiding)
             renderedDocument = session.display
             renderedHidden = hidden
             renderedFramed = framed
-            renderedOver = over != nil
         }
 
         if let rendered {

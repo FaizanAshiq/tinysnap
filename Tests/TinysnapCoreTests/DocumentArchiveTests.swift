@@ -22,6 +22,18 @@ struct DocumentArchiveTests {
         #expect(edits.annotations == [measure])
     }
 
+    @Test func aMeasurementsMovedTagComesBack() throws {
+        let moved = Annotation(kind: .measure(from: CGPoint(x: 150, y: 20), to: CGPoint(x: 150, y: 180)),
+                               style: Fixture.red, labelAt: 0.3)
+        let centred = Fixture.annotation(.measure(from: CGPoint(x: 50, y: 100), to: CGPoint(x: 250, y: 100)))
+        let document = Document(capture: Fixture.capture(width: 300, height: 200), annotations: [moved, centred])
+        let (json, _) = try DocumentArchive.encode(document, captured: captured)
+        // Only a tag off its middle is written, so older files and centred tags read the same.
+        #expect(String(decoding: json, as: UTF8.self).components(separatedBy: "labelAt").count == 2)
+        let edits = try DocumentArchive.decode(json) { _ in nil }
+        #expect(edits.annotations.map(\.labelAt) == [0.3, 0.5])
+    }
+
     @Test func aBackdropAndItsWallpaperComeBack() throws {
         let backdrop = wallpaperBackdrop()
         let document = Document(capture: Fixture.capture(width: 40, height: 30), backdrop: backdrop)

@@ -30,6 +30,8 @@ public enum DocumentArchive {
         var images: [String: CGImage] = [:]
         let items = document.annotations.map { annotation -> Item in
             var item = Item(id: annotation.id, kind: "", style: annotation.style)
+            // Only a tag slid off its middle is written, so everything else reads as before.
+            if annotation.labelAt != 0.5 { item.labelAt = annotation.labelAt }
             switch annotation.kind {
             case let .arrow(from, to): item.kind = "arrow"; item.from = pair(from); item.to = pair(to)
             case let .line(from, to): item.kind = "line"; item.from = pair(from); item.to = pair(to)
@@ -79,7 +81,8 @@ public enum DocumentArchive {
         // the capture no size or an absurd one, which the editor can not lay out.
         guard file.scale.isFinite, (1...8).contains(file.scale) else { throw Failure.badScale(file.scale) }
         let annotations = try file.annotations.map { item in
-            Annotation(id: item.id, kind: try kind(of: item, image: image), style: item.style)
+            Annotation(id: item.id, kind: try kind(of: item, image: image), style: item.style,
+                       labelAt: item.labelAt.flatMap { (0...1).contains($0) ? $0 : nil } ?? 0.5)
         }
         return ArchivedEdits(captured: file.captured, scale: file.scale, crop: file.crop?.rect, annotations: annotations,
                              backdrop: file.backdrop.map { backdrop(from: $0, image: image) }, resize: file.resize)
@@ -225,6 +228,7 @@ public enum DocumentArchive {
         var points: [[CGFloat]]?
         var radius, zoom: CGFloat?
         var file: String?
+        var labelAt: CGFloat?
 
         init(id: UUID, kind: String, style: Style) {
             self.id = id

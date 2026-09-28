@@ -85,7 +85,8 @@ struct ColorSample {
         return pixels
     }
 
-    /// Biggest first.
+    /// Biggest first, and equal sizes by colour: a dictionary's order changes every
+    /// launch, which could flip a capture's gradient on reopening.
     private static func groups(_ pixels: [Pixel]) -> [Group] {
         var groups: [Int: Group] = [:]
         for pixel in pixels {
@@ -97,6 +98,7 @@ struct ColorSample {
             group.blue += pixel.blue
             groups[key] = group
         }
-        return groups.values.sorted { $0.count > $1.count }
+        return groups.sorted { $0.value.count != $1.value.count ? $0.value.count > $1.value.count : $0.key < $1.key }
+            .map(\.value)
     }
 }

@@ -46,6 +46,34 @@ struct LibraryStoreTests {
         #expect(try #require(LibraryStore.readImage(entry.imageURL)).image.width == 20)
     }
 
+    @Test func aSavedSizePastTheLongestSideIsHeldToItOnOpening() throws {
+        // Only the Size panel held a size to 16,384 pixels, so an edits.json asking for 400%
+        // of a wide capture would have rendered something far past it.
+        let library = try store()
+        let entry = try library.add(Fixture.capture(width: 5000, height: 10), captured: captured, timeZone: utc)
+        var document = try #require(library.open(entry)).document
+        document.resize = 4
+        try library.saveEdits(document, to: entry)
+        let opened = try #require(library.open(entry)).document
+        #expect(opened.resize == opened.largestResize && opened.largestResize < 4)
+    }
+
+    @Test func anImageDrawnFromOlderEditsStillReadsAsStale() throws {
+        // A render off the main thread can land after newer edits were written. Stamped
+        // with the edits it was drawn from, it still reads as stale and is drawn again.
+        let library = try store()
+        let entry = try library.add(Fixture.capture(width: 40, height: 30, scale: 2), captured: captured, timeZone: utc)
+        var document = try #require(library.open(entry)).document
+        let older = try #require(library.editsDate(entry))
+        document.annotations = [Fixture.annotation(.rectangle(CGRect(x: 2, y: 2, width: 10, height: 10)))]
+        try library.saveEdits(document, to: entry)
+        try FileManager.default.setAttributes([.modificationDate: older.addingTimeInterval(5)], ofItemAtPath: entry.editsURL.path)
+        try library.saveImage(document, to: entry, editsAsOf: older)
+        #expect(library.imageIsStale(entry))
+        try library.saveImage(document, to: entry, editsAsOf: library.editsDate(entry))
+        #expect(!library.imageIsStale(entry))
+    }
+
     @Test func aCaptureIsKeptAsThreeFilesInAFolderNamedForItsTime() throws {
         let library = try store()
         let capture = Fixture.capture(width: 40, height: 30, scale: 2)

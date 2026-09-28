@@ -163,9 +163,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         window?.contentView = container
         scrollView.frame = container.bounds
         styleBar.onChange = { [weak self] merging, change in self?.canvas.session.restyle(merging: merging, change) }
+        // One write, for whichever the panel was showing: every tool restyle used to
+        // rewrite the remembered backdrop as well.
         styleBar.onCommit = { [weak self] in
-            self?.rememberStyles()
-            if let backdrop = self?.canvas.session.display.backdrop { self?.onBackdropChange(backdrop) }
+            guard let self else { return }
+            if self.panel?.kind == .backdrop, let backdrop = self.canvas.session.display.backdrop {
+                self.onBackdropChange(backdrop)
+            } else {
+                self.rememberStyles()
+            }
         }
         styleBar.onBackdrop = { [weak self] merging, backdrop in
             guard let self else { return }
@@ -441,6 +447,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         lastTool = session.tool
     }
 
+    /// Settings, or another editor, changed what this one shows: the Size panel's starting
+    /// size, and the Measure tool's lines, edge contrast and whether its guide was seen.
+    func preferencesChanged() {
+        canvas.measure = preferences().measure
+        refreshToolbar()
+    }
+
     private func measureChanged(_ settings: MeasureSettings) {
         refreshToolbar()
         onMeasureChange(settings)
@@ -509,14 +522,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         }
     }
 
-    /// Writes the edits now, and with `renderingImage` the image too, which Quick Look,
-    /// drag and pin show. The image is rendered on close, copy, save and pin, not on
-    /// every edit, because a Retina capture takes a moment to encode.
+    /// Writes the edits now, and with `renderingImage` the image too, which Quick Look
+    /// and a drag from the library show. The image is rendered on save, quit and when the
+    /// library asks, not on every edit, because a Retina capture takes a moment to encode;
+    /// on close the app renders it off the main thread instead (`pendingRender`).
     ///
     /// It never ends typing: the timer fires mid-word, and every caller that needs the
     /// text committed ends it first. False when the library could not be written, so
     /// closing and quitting ask instead of trusting a copy that is not there.
-    // ponytail: writes on the main thread; move to a background queue if 5K captures stutter on close.
     @discardableResult
     func keep(renderingImage: Bool) -> Bool {
         pendingKeep?.cancel()
@@ -749,7 +762,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         canvas.finishTyping()
         if isClosingForGood { return true }
-        if entry != nil, keep(renderingImage: true) { return true }
+        if entry != nil, keep(renderingImage: false) { return true }
         guard canvas.session.isUnsaved else { return true }
 
         let alert = NSAlert()
@@ -780,8 +793,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         sizedByHand = true
     }
 
+    /// The entry's edits and document when its image is behind them, for the app to
+    /// render once this editor has closed.
+    func pendingRender() -> (document: Document, entry: LibraryEntry)? {
+        let document = canvas.session.history.document
+        guard let entry, document != renderedDocument else { return nil }
+        return (document, entry)
+    }
+
     func windowWillClose(_ notification: Notification) {
-        keep(renderingImage: true)
+        keep(renderingImage: false)
         styleBar.closePalette()
         rememberStyles()
         if let magnifyObserver { NotificationCenter.default.removeObserver(magnifyObserver) }
