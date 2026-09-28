@@ -433,7 +433,8 @@ public struct EditorSession {
     // MARK: Images
 
     /// Adds a pasted or dropped image, centred at its own point size and scaled down to
-    /// fit the capture if it is larger. It is then selected with the select tool.
+    /// fit the capture if it is larger. It is then selected, and the tool in hand stays:
+    /// a selection moves under any tool.
     public mutating func insert(_ image: PastedImage, pointSize: CGSize) {
         guard pointSize.width > 0, pointSize.height > 0 else { return }
         finishTyping()
@@ -453,7 +454,6 @@ public struct EditorSession {
         display.annotations.append(annotation)
         history.commit(display)
         selection = annotation.id
-        tool = .select
     }
 
     public mutating func markSaved() {

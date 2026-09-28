@@ -29,8 +29,8 @@ why that matters. Tinysnap needs macOS 14 Sonoma or later.
 | --- | --- |
 | `Command+Shift+2` | Capture an area, or press `Space` first and click a window |
 | `Command+Shift+1` | Capture the whole screen under the pointer |
-| `Command+Shift+O` | Capture an area and copy the text in it, or what a QR code in it holds |
-| Unset | Repeat the last area, capture after a delay (3 seconds unless you change it), open the library |
+| `Command+Shift+O` | Capture an area and copy the text in it |
+| Unset | Scan a QR code in an area and copy what it holds, repeat the last area, capture after a delay (3 seconds unless you change it), open the library |
 
 Every hotkey can be changed or cleared in Settings, and every capture is also on the menu
 bar icon.
@@ -64,10 +64,11 @@ pixels and is the only redaction to trust with a password or a card number.
 
 | Input | Effect |
 | --- | --- |
-| `Command+C` | Copy the image and close the editor |
-| `Command+S` | Save to the save folder. `Command+Shift+S` asks where |
+| `Command+C` | Copy the image. A tick on the Copy button says it worked |
+| `Command+S` | Save to the save folder, with a tick on the Save button. `Command+Shift+S` asks where |
 | `Command+P` | Pin the image on top of every app and close the editor |
-| `Command+Shift+C` | Copy the text or QR code in the image |
+| `Command+Shift+C` | Copy Text: each drag copies the text under it and a click copies all of it. It stays on until `Esc`, another tool or a second press |
+| `Command+Shift+R` | Copy what a QR code in the image holds, one per line when there are several |
 | `Tab` | Copy the hex colour under the pointer |
 | `Shift` while drawing | Straighten a line to 45 degrees, or square a box |
 | `Option` while drawing | Draw out from the centre |
@@ -79,7 +80,8 @@ pixels and is the only redaction to trust with a password or a card number.
 | `Command+=`, `Command+-`, `Command+0`, `Command+1` | Zoom in, out, to fit, to actual size |
 | `Esc` | Deselect, then close |
 
-Click a shape's outline, or anywhere on a blur, an erase or a piece of text, to select it and drag it, whatever tool is out. Drawing past the edge of
+The tool you pick stays out until you pick another: pasting, Copy Text and the panels
+never switch it. Click a shape's outline, or anywhere on a blur, an erase or a piece of text, to select it and drag it, whatever tool is out. Drawing past the edge of
 the capture grows the canvas, filled with the capture's own edge colour. The drag handle
 in the toolbar drops the image straight into another app.
 
@@ -96,8 +98,8 @@ while you change the crop.
 The Size button sets how big this capture exports: 25%, 50%, 100% or 200% of full
 resolution, or an exact width or height in pixels with the shape kept. The capture keeps
 it, so reopening it from the library shows the size it has, and 100% is one click away.
-Copy, save, drag out, pins and the library all use it, while Copy Text still reads every
-pixel. A capture you have not sized starts at the Export setting.
+Copy, save, drag out, pins and the library all use it, while Copy Text and Scan QR Code
+still read every pixel. A capture you have not sized starts at the Export setting.
 
 ### Measuring
 
@@ -118,8 +120,9 @@ chip turns everything that matches the capture black, so only what changed shows
 
 Settings chooses whether a capture opens the editor or waits as a thumbnail in the corner
 of the screen. The thumbnail copies, saves or pins with one click, opens the editor when
-clicked, and drags straight into another app. Swipe it away or leave it and it lands on
-the clipboard.
+clicked, and drags straight into another app. Swipe it away or leave it and it slides
+off, kept in the library. With the library off it lands on the clipboard instead, so a
+capture is never lost.
 
 A pin floats above every app. Scroll over it to resize it, press
 `1` to `9` or `0` for its opacity, and `Command+C`, `Command+S` or `Esc` to copy, save or
@@ -131,8 +134,10 @@ Every capture is kept for 30 days in
 `~/Library/Application Support/Tinysnap/Library`, one folder each, annotations and all,
 so reopening one lets you keep editing where you left off. Open it from the button at the
 end of the capture window's toolbar, the Window menu, the menu bar icon, the Dock icon or
-Settings. In the library window `Space` previews with Quick Look, `Return` edits, and
-`Delete` moves a capture to the Trash.
+Settings. Its toolbar copies, saves, edits, pins or trashes the selected capture, and
+Copy, Save and Edit also sit on any tile under the pointer. `Command+C` copies,
+`Command+S` saves to the save folder, `Space` previews with Quick Look, `Return` edits,
+and `Delete` moves a capture to the Trash.
 
 The library keeps what is under blurs and erases too, since that is what makes them
 editable later. Turn it off in Settings, or clear it from there, if that matters to you.

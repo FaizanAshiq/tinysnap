@@ -95,9 +95,46 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     /// Read once per capture: the walks need each pixel's brightness, not its colour.
     private var luminance: (capture: ObjectIdentifier, buffer: LuminanceBuffer)?
 
+    /// What each of Copy Text's drags or clicks asks for, and its end.
+    enum TextPick {
+        case area(CGRect), whole, stopped
+    }
+
+    /// Set while Copy Text is on: the capture dims, a drag draws the box, and the box, in
+    /// capture pixels, is handed on. It stays on until Esc, another tool or Copy Text again.
+    private var textPick: ((TextPick) -> Void)?
+    private var textPickStart: CGPoint?
+    private var textPickBox: CGRect? {
+        didSet { needsDisplay = true }
+    }
+
+    var isPickingText: Bool { textPick != nil }
+
+    /// Copy Text: each drag over text reads that area and each click the whole capture.
+    /// The tool in hand stays in hand for when Copy Text ends.
+    func pickText(_ onPick: @escaping (TextPick) -> Void) {
+        finishTyping()
+        textPick = onPick
+        textPickStart = nil
+        textPickBox = nil
+        window?.makeFirstResponder(self)
+        updateCursor()
+        needsDisplay = true
+    }
+
+    func stopPickingText() {
+        guard let pick = textPick else { return }
+        textPick = nil
+        textPickStart = nil
+        textPickBox = nil
+        updateCursor()
+        needsDisplay = true
+        pick(.stopped)
+    }
+
     /// What a click would keep. Nothing over an annotation, where a click picks it up.
     private var liveReading: [MeasureLine] {
-        guard session.tool == .measure, session.phase == .idle, !overPickUp, let point = measurePointer else { return [] }
+        guard session.tool == .measure, session.phase == .idle, !overPickUp, textPick == nil, let point = measurePointer else { return [] }
         let capture = session.display.capture
         if luminance?.capture != ObjectIdentifier(capture) {
             luminance = LuminanceBuffer(image: capture.image).map { (ObjectIdentifier(capture), $0) }
@@ -176,6 +213,10 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
 
     /// An open hand over anything a click would pick up.
     private func updateCursor() {
+        guard textPick == nil else {
+            NSCursor.crosshair.set()
+            return
+        }
         let picksUp = commandHeld || overPickUp || session.tool == .select || session.tool == .image
         (picksUp && hovered != nil ? NSCursor.openHand : NSCursor.arrow).set()
     }
@@ -352,6 +393,26 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         drawBorders(in: context)
         drawSelection(in: context)
         drawLiveReading(in: context)
+        drawTextPick(in: context)
+    }
+
+    /// While Copy Text waits: everything dimmed but the box being dragged.
+    private func drawTextPick(in context: CGContext) {
+        guard textPick != nil else { return }
+        context.saveGState()
+        let shade = CGMutablePath()
+        shade.addRect(bounds)
+        let box = textPickBox.map(viewRect)
+        if let box { shade.addRect(box) }
+        context.addPath(shade)
+        context.setFillColor(NSColor.black.withAlphaComponent(0.35).cgColor)
+        context.fillPath(using: .evenOdd)
+        if let box {
+            context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+            context.setLineWidth(1.5 / magnification)
+            context.stroke(box)
+        }
+        context.restoreGState()
     }
 
     private func drawCrop(in context: CGContext) {
@@ -420,6 +481,10 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        if textPick != nil {
+            textPickStart = pixelPoint(event)
+            return
+        }
         let point = pixelPoint(event)
         lastPoint = point
         let reading = liveReading
@@ -430,6 +495,10 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if textPick != nil, let start = textPickStart {
+            textPickBox = CGRect(corner: start, corner: pixelPoint(event))
+            return
+        }
         autoscroll(with: event)
         let point = pixelPoint(event)
         lastPoint = point
@@ -438,6 +507,18 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if let pick = textPick {
+            let box = textPickBox
+            textPickStart = nil
+            textPickBox = nil
+            // A box too small to hold a word is a click, which reads the whole capture.
+            if let box, box.width >= 4 * scale, box.height >= 4 * scale {
+                pick(.area(box))
+            } else {
+                pick(.whole)
+            }
+            return
+        }
         lastPoint = nil
         session.pointerUp()
         hover(at: pixelPoint(event))
@@ -486,6 +567,11 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     // MARK: Keys
 
     override func keyDown(with event: NSEvent) {
+        // While Copy Text is on, Esc ends it. Tool keys pick their tool, which ends it too.
+        if textPick != nil, event.keyCode == 53 {
+            stopPickingText()
+            return
+        }
         if measureKey(event) { return }
         let step: CGFloat = event.modifierFlags.contains(.shift) ? 10 : 1
         switch event.keyCode {
@@ -536,7 +622,9 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         super.keyDown(with: event)
     }
 
+    /// Picking a tool while Copy Text is on means drawing, so Copy Text ends.
     func choose(_ tool: Tool) {
+        stopPickingText()
         session.choose(tool)
         if tool == .image { onPickImage?() }
     }

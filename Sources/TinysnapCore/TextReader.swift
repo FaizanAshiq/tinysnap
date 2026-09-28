@@ -14,8 +14,7 @@ public struct TextReading: Equatable, Sendable {
 
     public var isEmpty: Bool { codes.isEmpty && lines.isEmpty }
 
-    /// What is copied. A QR code wins over the text around it: pointing at a code means
-    /// wanting what it holds, not the caption beside it.
+    /// What is copied: a reading for text holds only lines, and a scan only codes.
     public var text: String { (codes.isEmpty ? lines : codes).joined(separator: "\n") }
 
     /// A web address to offer Open Link for, only when that is all the result is.
@@ -30,21 +29,33 @@ public struct TextReading: Equatable, Sendable {
 /// Text recognition and QR codes, on device. Vision picks the language itself and
 /// corrects words with its language model, so there is no language setting.
 public enum TextReader {
-    public static func read(_ image: CGImage) throws -> TextReading {
-        let text = VNRecognizeTextRequest()
-        text.recognitionLevel = .accurate
-        text.usesLanguageCorrection = true
-        text.automaticallyDetectsLanguage = true
-        let codes = VNDetectBarcodesRequest()
-        codes.symbologies = [.qr]
-        try VNImageRequestHandler(cgImage: image, options: [:]).perform([text, codes])
+    /// Copy Text reads the words and Scan QR Code reads what codes hold. Asked for apart,
+    /// the caption beside a code is never taken for it, and each pays only for its own pass.
+    public enum Target: Sendable {
+        case text, codes
+    }
 
-        let observations = text.results ?? []
-        let lines = readingOrder(observations.map(\.boundingBox)).compactMap { observations[$0].topCandidates(1).first?.string }
-        var seen = Set<String>()
-        // One code can be reported more than once, so each payload is kept once, in order.
-        let payloads = (codes.results ?? []).compactMap(\.payloadStringValue).filter { seen.insert($0).inserted }
-        return TextReading(codes: payloads, lines: lines)
+    public static func read(_ image: CGImage, for target: Target) throws -> TextReading {
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        switch target {
+        case .text:
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = true
+            request.automaticallyDetectsLanguage = true
+            try handler.perform([request])
+            let observations = request.results ?? []
+            let lines = readingOrder(observations.map(\.boundingBox)).compactMap { observations[$0].topCandidates(1).first?.string }
+            return TextReading(codes: [], lines: lines)
+        case .codes:
+            let request = VNDetectBarcodesRequest()
+            request.symbologies = [.qr]
+            try handler.perform([request])
+            var seen = Set<String>()
+            // One code can be reported more than once, so each payload is kept once, in order.
+            let payloads = (request.results ?? []).compactMap(\.payloadStringValue).filter { seen.insert($0).inserted }
+            return TextReading(codes: payloads, lines: [])
+        }
     }
 
     /// Vision reports text in blocks, which reads a dashboard column by column. Lines are

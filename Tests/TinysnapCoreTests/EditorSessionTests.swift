@@ -435,8 +435,21 @@ struct EditorSessionTests {
         let pasted = PastedImage(Fixture.capture(width: 8, height: 2).image)
         editor.insert(pasted, pointSize: CGSize(width: 400, height: 100))
         #expect(editor.display.annotations[0].kind == .image(CGRect(x: 0, y: 100, width: 400, height: 100), pasted))
-        #expect(editor.tool == .select)
         #expect(editor.selection == editor.display.annotations[0].id)
+    }
+
+    @Test func pastingKeepsTheToolInHandAndTheImageStillMoves() {
+        // The tool changes only when the person picks one. The pasted image is selected,
+        // so it moves under whatever tool is out.
+        var editor = session(.arrow)
+        editor.insert(PastedImage(Fixture.capture(width: 40, height: 20).image), pointSize: CGSize(width: 40, height: 20))
+        #expect(editor.tool == .arrow)
+        let pasted = editor.display.annotations[0]
+        #expect(editor.selection == pasted.id)
+        let before = pasted.bounds(scale: editor.scale)
+        drag(&editor, from: CGPoint(x: before.midX, y: before.midY), to: CGPoint(x: before.midX + 30, y: before.midY))
+        #expect(editor.display.annotations.count == 1)
+        #expect(editor.display.annotations[0].bounds(scale: editor.scale).minX == before.minX + 30)
     }
 
     @Test func cropStaysInsideTheCaptureOnWholePixels() {

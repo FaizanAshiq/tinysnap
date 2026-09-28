@@ -147,6 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .repeatArea: repeatLastArea()
         case .delayed: startDelayedCapture()
         case .text: captureArea(for: .text)
+        case .qr: captureArea(for: .codes)
         case .library: showLibrary()
         }
     }
@@ -205,10 +206,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if alert.runModal() == .alertFirstButtonReturn { ScreenAccess.openSettings() }
     }
 
-    /// An area or window picked on the frozen screen becomes an image to edit, or text
-    /// on the clipboard.
+    /// An area or window picked on the frozen screen becomes an image to edit, its text
+    /// on the clipboard, or what a QR code in it holds.
     private enum Purpose {
-        case image, text
+        case image, text, codes
     }
 
     /// Freezes the screen, then puts the area overlay on the frozen image.
@@ -259,7 +260,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func take(_ capture: Capture, on displayID: CGDirectDisplayID?, for purpose: Purpose) {
         switch purpose {
         case .image: deliver(capture, on: displayID)
-        case .text: TextCopy.read(capture.image, on: NSScreen.screens.first { $0.displayID == displayID })
+        case .text: TextCopy.read(capture.image, for: .text, on: NSScreen.screens.first { $0.displayID == displayID })
+        case .codes: TextCopy.read(capture.image, for: .codes, on: NSScreen.screens.first { $0.displayID == displayID })
         }
     }
 

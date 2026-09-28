@@ -134,10 +134,20 @@ struct ExportTests {
         #expect(try #require(Exporter.export(document, scale: .native)).pointSize == CGSize(width: 300, height: 200))
     }
 
-    @Test func textIsReadAtFullSizeWhateverSizeTheCaptureExportsAt() throws {
-        let document = Document(capture: Fixture.capture(width: 800, height: 600, scale: 2), resize: 0.25)
-        let read = try #require(Exporter.exportForReading(document))
-        #expect(read.image.width == 800 && read.dpi == 144)
+    @Test func textIsReadFromEveryPixelWhateverSizeOrBackdropTheCaptureHas() throws {
+        let document = Document(capture: Fixture.capture(width: 800, height: 600, scale: 2), backdrop: .defaults, resize: 0.25)
+        let image = try #require(Exporter.readingImage(document))
+        // Full size, and no padding: a backdrop has nothing to read.
+        #expect(image.width == 800 && image.height == 600)
+    }
+
+    @Test func anAreaNarrowsWhatIsReadToThePartOfTheOutputUnderIt() throws {
+        var document = Document(capture: Fixture.capture(width: 400, height: 300, fill: Fixture.blue))
+        document.crop = CGRect(x: 100, y: 50, width: 200, height: 200)
+        // Half inside the crop: only the half inside is read.
+        let image = try #require(Exporter.readingImage(document, in: CGRect(x: 50, y: 100, width: 100, height: 40)))
+        #expect(image.width == 50 && image.height == 40)
+        #expect(Exporter.readingImage(document, in: CGRect(x: 0, y: 0, width: 40, height: 40)) == nil)
     }
 
     @Test func namesFilesLikeMacOSAndCountsUpOnClashes() throws {
