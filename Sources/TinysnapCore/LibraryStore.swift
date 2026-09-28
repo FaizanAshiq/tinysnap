@@ -75,10 +75,19 @@ public struct LibraryStore: Sendable {
     }
 
     /// Renders the document at its size, or at full resolution when it has none, crop applied.
-    public func saveImage(_ document: Document, to entry: LibraryEntry) throws {
+    /// `editsAsOf` dates the image by the edits it was drawn from rather than by when it
+    /// was written: a render off the main thread can land after newer edits, and dated
+    /// this way it still reads as stale and is drawn again.
+    public func saveImage(_ document: Document, to entry: LibraryEntry, editsAsOf date: Date? = nil) throws {
         guard let exported = Exporter.export(document, scale: .native),
               let png = Exporter.pngData(exported) else { throw CocoaError(.fileWriteUnknown) }
         try png.write(to: entry.imageURL, options: .atomic)
+        if let date { try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: entry.imageURL.path) }
+    }
+
+    /// When the entry's edits were last written.
+    public func editsDate(_ entry: LibraryEntry) -> Date? {
+        try? entry.editsURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
     }
 
     // MARK: Reading
@@ -104,9 +113,10 @@ public struct LibraryStore: Sendable {
            let json = try? Data(contentsOf: entry.editsURL),
            let edits = try? DocumentArchive.decode(json, image: { Self.readImage(entry.folder.appendingPathComponent($0))?.image }) {
             let capture = Capture(image: original.image, scale: edits.scale)
-            return OpenedEntry(document: Document(capture: capture, crop: edits.crop, annotations: edits.annotations,
-                                                  backdrop: edits.backdrop, resize: edits.resize),
-                               isEditable: true)
+            var document = Document(capture: capture, crop: edits.crop, annotations: edits.annotations, backdrop: edits.backdrop)
+            // Held to the limits the Size panel holds it to, whatever the file asks for.
+            document.resize = edits.resize.map(document.clampedResize)
+            return OpenedEntry(document: document, isEditable: true)
         }
         guard let flat = Self.readImage(entry.imageURL) ?? Self.readImage(entry.originalURL) else { return nil }
         return OpenedEntry(document: Document(capture: Capture(image: flat.image, scale: flat.scale)), isEditable: false)

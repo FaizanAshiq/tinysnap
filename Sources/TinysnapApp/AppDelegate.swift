@@ -388,7 +388,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 keeping: { [weak self] in self?.openEntryNames ?? [] },
                 onOpen: { [weak self] entry in self?.open(entry) },
                 onPin: { [weak self] entry in self?.pin(entry) },
-                flush: { [weak self] entry in self?.flush(entry) }
+                flush: { [weak self] entry in self?.flush(entry) },
+                renderStale: { [weak self] entry in
+                    self?.renderInBackground(entry) { library in
+                        let asOf = library.editsDate(entry)
+                        if let opened = library.open(entry), opened.isEditable {
+                            try? library.saveImage(opened.document, to: entry, editsAsOf: asOf)
+                        }
+                    }
+                }
             )
         }
         libraryWindow?.show()
@@ -434,7 +442,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Entries open in an editor are never swept or cleared out from under it.
-    var openEntryNames: Set<String> { Set(editors.compactMap { $0.entry?.name }) }
+    var openEntryNames: Set<String> { Set(editors.compactMap { $0.entry?.name }).union(rendering) }
+
+    /// Entries whose image is being rendered after their editor closed.
+    private var rendering: Set<String> = []
+
+    /// An entry's image, rendered off the main thread: at 400% of a 5K capture it is
+    /// 16,384 pixels across, and closing the editor stalled on it. Until it lands the entry
+    /// counts as open, so the library neither renders it a second time nor sweeps it.
+    /// Quitting first loses nothing: the edits are written, and a stale image is rendered
+    /// again the next time the library looks.
+    private func renderInBackground(_ entry: LibraryEntry, _ render: @escaping @Sendable (LibraryStore) -> Void) {
+        guard !rendering.contains(entry.name) else { return }
+        rendering.insert(entry.name)
+        let library = self.library
+        Task.detached(priority: .utility) {
+            render(library)
+            await MainActor.run { [weak self] in
+                self?.rendering.remove(entry.name)
+                NotificationCenter.default.post(name: .libraryChanged, object: nil)
+            }
+        }
+    }
 
     private func sweepLibrary() {
         guard !library.sweep(keeping: openEntryNames).isEmpty else { return }
@@ -463,6 +492,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             onClose: { [weak self] closed in
                 self?.editors.removeAll { $0 === closed }
                 self?.updateDockIcon()
+                if let (document, entry) = closed.pendingRender(), let self {
+                    let asOf = self.library.editsDate(entry)
+                    self.renderInBackground(entry) { try? $0.saveImage(document, to: entry, editsAsOf: asOf) }
+                }
             }
         )
         if let previous, let window = editor.window { cascade(window, after: previous) }
@@ -527,11 +560,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Merged into what is on disk, as the styles are, so Settings is not written over.
+    /// Every open editor follows, so X, Y or a guide closed in one holds in all of them.
     private func remember(_ measure: MeasureSettings) {
         var current = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? preferences
         current.measure = measure
         preferences = current
         try? current.save(to: Preferences.defaultFileURL)
+        editors.forEach { $0.preferencesChanged() }
     }
 
     // MARK: Settings and lifecycle
@@ -550,6 +585,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ), onChange: { [weak self] updated in
                 guard let self else { return [] }
                 self.preferences = updated
+                self.editors.forEach { $0.preferencesChanged() }
                 self.statusItem?.isVisible = updated.showMenuBarIcon
                 self.updateDockIcon()
                 self.takenHotKeys = self.hotKeys?.register(updated.hotkeys) ?? []

@@ -122,8 +122,9 @@ public struct EditorSession {
     /// and none of them selected, so the next click measures again.
     public mutating func keep(_ lines: [MeasureLine]) {
         guard !lines.isEmpty else { return }
-        for line in lines {
-            display.annotations.append(Annotation(kind: .measure(from: line.from, to: line.to), style: style(for: .measure)))
+        let style = style(for: .measure)
+        for line in MeasureShape.clearTags(lines, width: Tool.measure.points(for: style.size) ?? 2, scale: display.scale) {
+            display.annotations.append(Annotation(kind: .measure(from: line.from, to: line.to), style: style, labelAt: line.labelAt))
         }
         history.commit(display)
         selection = nil

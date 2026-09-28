@@ -54,10 +54,13 @@ extension MeasureSettings: Codable {
 public struct MeasureLine: Equatable, Sendable {
     public let from: CGPoint
     public let to: CGPoint
+    /// Where the tag sits along the line, 0 at `from` and 1 at `to`.
+    public var labelAt: CGFloat
 
-    public init(from: CGPoint, to: CGPoint) {
+    public init(from: CGPoint, to: CGPoint, labelAt: CGFloat = 0.5) {
         self.from = from
         self.to = to
+        self.labelAt = labelAt
     }
 }
 

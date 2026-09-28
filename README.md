@@ -4,7 +4,7 @@ A menu bar screenshot app for macOS. Press Command+Shift+2, drag, and the captur
 in an editor where you can annotate it, redact it, frame it and copy it, all without an
 account, a server or a subscription.
 
-<!-- Image goes here once there is one -->
+![The Tinysnap editor on a dashboard: a box round one card, an arrow to it, and the note Best week so far](.github/editor.webp)
 
 ## Install
 

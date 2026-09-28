@@ -13,18 +13,22 @@ public final class PastedImage: Equatable, Sendable {
     public static func == (lhs: PastedImage, rhs: PastedImage) -> Bool { lhs === rhs }
 }
 
-public struct Annotation: Equatable, Identifiable {
+public struct Annotation: Equatable, Identifiable, Sendable {
     public let id: UUID
     public var kind: Kind
     public var style: Style
+    /// Where a measurement's tag sits along its line, 0 at its start and 1 at its end.
+    /// Off the middle only when it slid clear of another tag.
+    public var labelAt: CGFloat
 
-    public init(id: UUID = UUID(), kind: Kind, style: Style) {
+    public init(id: UUID = UUID(), kind: Kind, style: Style, labelAt: CGFloat = 0.5) {
         self.id = id
         self.kind = kind
         self.style = style
+        self.labelAt = labelAt
     }
 
-    public enum Kind: Equatable {
+    public enum Kind: Equatable, Sendable {
         case arrow(from: CGPoint, to: CGPoint)
         case line(from: CGPoint, to: CGPoint)
         case rectangle(CGRect)
@@ -80,7 +84,7 @@ public struct Annotation: Equatable, Identifiable {
         case let .line(from, to), let .highlighter(from, to):
             return CGRect(corner: from, corner: to).insetBy(dx: -size / 2, dy: -size / 2)
         case let .measure(from, to):
-            return MeasureShape.extent(from: from, to: to, width: size / scale, scale: scale)
+            return MeasureShape.extent(from: from, to: to, width: size / scale, scale: scale, at: labelAt)
         case let .rectangle(rect), let .oval(rect), let .spotlight(rect),
              let .blur(rect), let .pixelate(rect), let .erase(rect), let .image(rect, _):
             return rect
@@ -111,7 +115,7 @@ public struct Annotation: Equatable, Identifiable {
         case let .measure(from, to):
             // The line, or its label, which is the easiest part of it to aim at.
             return point.distance(toSegmentFrom: from, to: to) <= reach
-                || MeasureShape.tag(from: from, to: to, width: size / scale, scale: scale).rect.contains(point)
+                || MeasureShape.tag(from: from, to: to, width: size / scale, scale: scale, at: labelAt).rect.contains(point)
         case let .rectangle(rect):
             if style.filled { return rect.insetBy(dx: -reach, dy: -reach).contains(point) }
             let inner = rect.insetBy(dx: reach, dy: reach)

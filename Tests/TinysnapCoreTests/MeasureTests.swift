@@ -75,6 +75,54 @@ struct MeasureTests {
         #expect(editor.selection == nil)
     }
 
+    /// Across and down through the middle of a card: both tags start on the same spot.
+    private let across = MeasureLine(from: CGPoint(x: 50, y: 100), to: CGPoint(x: 250, y: 100))
+    private let down = MeasureLine(from: CGPoint(x: 150, y: 20), to: CGPoint(x: 150, y: 180))
+
+    private func tagRect(_ line: MeasureLine) -> CGRect {
+        MeasureShape.tag(from: line.from, to: line.to, width: 2, scale: 1, at: line.labelAt).rect
+    }
+
+    /// Where a line is stroked, which no tag may sit on.
+    private func stroke(_ line: MeasureLine) -> CGRect {
+        CGRect(x: min(line.from.x, line.to.x) - 1, y: min(line.from.y, line.to.y) - 1,
+               width: abs(line.to.x - line.from.x) + 2, height: abs(line.to.y - line.from.y) + 2)
+    }
+
+    @Test func acrossAndDownThroughTheMiddleOfACardKeepTheirTagsApart() {
+        #expect(tagRect(across).intersects(tagRect(down)))
+        let placed = MeasureShape.clearTags([across, down], width: 2, scale: 1)
+        #expect(!tagRect(placed[0]).intersects(tagRect(placed[1])))
+        // Neither line strikes through the other's tag, as the Down line ran through the
+        // Across tag once the tags were only kept apart from each other.
+        #expect(!tagRect(placed[0]).intersects(stroke(placed[1])))
+        #expect(!tagRect(placed[1]).intersects(stroke(placed[0])))
+        // Each tag slid along its own line and stayed clear of its ticks.
+        #expect(tagRect(placed[0]).midY == 100 && tagRect(placed[1]).midX == 150)
+        #expect(tagRect(placed[0]).minX > 50 + 4 && tagRect(placed[0]).maxX < 250 - 4)
+        #expect(tagRect(placed[1]).minY > 20 + 4 && tagRect(placed[1]).maxY < 180 - 4)
+    }
+
+    @Test func tagsThatDoNotMeetStayOnTheirMiddles() {
+        // Down beside the Across line's end, below it, so nothing crosses.
+        let aside = MeasureLine(from: CGPoint(x: 240, y: 120), to: CGPoint(x: 240, y: 180))
+        #expect(MeasureShape.clearTags([across, aside], width: 2, scale: 1) == [across, aside])
+    }
+
+    @Test func keepingBothLinesKeepsTheirTagsApart() {
+        var editor = EditorSession(document: Document(capture: Fixture.capture(width: 300, height: 200)))
+        editor.choose(.measure)
+        editor.keep([across, down])
+        let kept = editor.display.annotations
+        func rect(_ annotation: Annotation) -> CGRect {
+            guard case let .measure(from, to) = annotation.kind else { return .null }
+            return MeasureShape.tag(from: from, to: to, width: 2, scale: 1, at: annotation.labelAt).rect
+        }
+        #expect(kept.count == 2 && !rect(kept[0]).intersects(rect(kept[1])))
+        // Picked up by its tag where the tag now is.
+        #expect(kept[1].contains(CGPoint(x: rect(kept[1]).midX, y: rect(kept[1]).midY), scale: 1))
+    }
+
     @Test func aKeptMeasurementStretchesAndItsLabelFollows() {
         let measure = Fixture.annotation(.measure(from: from, to: to))
         let stretched = measure.resized(dragging: .end, to: CGPoint(x: 290, y: 70), constrained: false)

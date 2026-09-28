@@ -16,6 +16,8 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
     /// Has an entry's open editor write its image now, so nothing handed out from here
     /// lags behind edits still on screen, a redaction least of all.
     private let flush: (LibraryEntry) -> Void
+    /// Renders an entry's image again, off the main thread.
+    private let renderStale: (LibraryEntry) -> Void
 
     private let grid = LibraryGrid()
     private let emptyNote = NSTextField(wrappingLabelWithString: "")
@@ -25,13 +27,14 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
 
     init(library: LibraryStore, preferences: @escaping () -> Preferences, keeping: @escaping () -> Set<String>,
          onOpen: @escaping (LibraryEntry) -> Void, onPin: @escaping (LibraryEntry) -> Void,
-         flush: @escaping (LibraryEntry) -> Void) {
+         flush: @escaping (LibraryEntry) -> Void, renderStale: @escaping (LibraryEntry) -> Void) {
         self.library = library
         self.preferences = preferences
         self.keeping = keeping
         self.onOpen = onOpen
         self.onPin = onPin
         self.flush = flush
+        self.renderStale = renderStale
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 600),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Library"
@@ -107,13 +110,14 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
 
     // MARK: Contents
 
-    /// Also renders again any image left older than its edits by a crash, so what the
-    /// grid and Quick Look show matches what reopening gives.
+    /// Also has any image left older than its edits, by a crash or a quit mid render,
+    /// rendered again, so what the grid and Quick Look show matches what reopening gives.
+    /// The old image shows until the new one lands and the grid reloads.
     func reload() {
         let open = keeping()
         let entries = library.entries()
         for entry in entries where !open.contains(entry.name) && library.imageIsStale(entry) {
-            if let opened = library.open(entry), opened.isEditable { try? library.saveImage(opened.document, to: entry) }
+            renderStale(entry)
         }
         let calendar = Calendar.current
         var grouped: [(day: Date, entries: [LibraryEntry])] = []

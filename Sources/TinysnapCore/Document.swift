@@ -41,7 +41,7 @@ public final class Capture: Equatable, Sendable {
 }
 
 /// One capture plus everything drawn on it. Plain values, so undo is a stack of these.
-public struct Document: Equatable {
+public struct Document: Equatable, Sendable {
     public let capture: Capture
     /// Applied only on export. Nil means the whole capture.
     public var crop: CGRect?
