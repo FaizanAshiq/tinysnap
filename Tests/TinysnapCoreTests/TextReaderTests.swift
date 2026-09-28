@@ -25,7 +25,7 @@ struct TextReaderTests {
 
     @Test func readsLinesTopToBottom() throws {
         let capture = page([("Order shipped today", CGPoint(x: 40, y: 60)), ("Tracking arrives soon", CGPoint(x: 40, y: 200))])
-        let reading = try TextReader.read(capture.image)
+        let reading = try TextReader.read(capture.image, for: .text)
         #expect(reading.lines == ["Order shipped today", "Tracking arrives soon"])
         #expect(reading.codes.isEmpty)
         #expect(reading.text == "Order shipped today\nTracking arrives soon")
@@ -34,10 +34,10 @@ struct TextReaderTests {
     @Test func sideBySideTextReadsAcrossEachRowBeforeGoingDown() throws {
         let capture = page([("Left top", CGPoint(x: 40, y: 60)), ("Right top", CGPoint(x: 560, y: 64)),
                             ("Left low", CGPoint(x: 40, y: 260)), ("Right low", CGPoint(x: 560, y: 256))])
-        #expect(try TextReader.read(capture.image).lines == ["Left top", "Right top", "Left low", "Right low"])
+        #expect(try TextReader.read(capture.image, for: .text).lines == ["Left top", "Right top", "Left low", "Right low"])
     }
 
-    @Test func aQRCodeWinsOverTextBesideIt() throws {
+    @Test func copyingTextReadsOnlyTheTextAndScanningReadsOnlyTheCode() throws {
         let link = "https://tinysnap.example/qr"
         let code = qrCode(link)
         let capture = page([("Scan to open", CGPoint(x: 420, y: 150))], width: 900, height: 420) { context in
@@ -48,14 +48,17 @@ struct TextReaderTests {
             context.draw(code, in: CGRect(x: 0, y: 0, width: code.width, height: code.height))
             context.restoreGState()
         }
-        let reading = try TextReader.read(capture.image)
-        #expect(reading.codes == [link])
-        #expect(reading.text == link)
-        #expect(reading.link == URL(string: link))
+        let text = try TextReader.read(capture.image, for: .text)
+        #expect(text.lines == ["Scan to open"] && text.codes.isEmpty && text.text == "Scan to open")
+        let scanned = try TextReader.read(capture.image, for: .codes)
+        #expect(scanned.codes == [link] && scanned.lines.isEmpty)
+        #expect(scanned.text == link)
+        #expect(scanned.link == URL(string: link))
     }
 
     @Test func aBlankImageReadsAsNothing() throws {
-        #expect(try TextReader.read(Fixture.capture(width: 200, height: 100).image).isEmpty)
+        let blank = Fixture.capture(width: 200, height: 100).image
+        #expect(try TextReader.read(blank, for: .text).isEmpty && TextReader.read(blank, for: .codes).isEmpty)
     }
 
     @Test func joiningLinesLeavesSingleSpaces() {
@@ -72,8 +75,14 @@ struct TextReaderTests {
     @Test func textUnderAnEraseIsNeverRead() throws {
         let capture = page([("Public note", CGPoint(x: 40, y: 60)), ("Secret code", CGPoint(x: 40, y: 200))])
         let erase = Fixture.annotation(.erase(CGRect(x: 20, y: 180, width: 600, height: 110)))
-        let exported = try #require(Exporter.export(Document(capture: capture, annotations: [erase]), scale: .native))
-        let reading = try TextReader.read(exported.image)
-        #expect(reading.lines == ["Public note"])
+        let image = try #require(Exporter.readingImage(Document(capture: capture, annotations: [erase])))
+        #expect(try TextReader.read(image, for: .text).lines == ["Public note"])
+    }
+
+    @Test func onlyTheTextInADraggedAreaIsRead() throws {
+        let capture = page([("Public note", CGPoint(x: 40, y: 60)), ("Other line", CGPoint(x: 40, y: 200))])
+        let area = CGRect(x: 20, y: 160, width: 600, height: 120)
+        let image = try #require(Exporter.readingImage(Document(capture: capture), in: area))
+        #expect(try TextReader.read(image, for: .text).lines == ["Other line"])
     }
 }

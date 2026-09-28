@@ -84,6 +84,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private static let dragItem = NSToolbarItem.Identifier("drag")
     private static let pinItem = NSToolbarItem.Identifier("pin")
     private static let textItem = NSToolbarItem.Identifier("text")
+    private static let qrItem = NSToolbarItem.Identifier("qr")
     private static let backdropItemIdentifier = NSToolbarItem.Identifier("backdrop")
     private static let sizeItem = NSToolbarItem.Identifier("size")
     private static let libraryItem = NSToolbarItem.Identifier("library")
@@ -122,7 +123,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         window.toolbarStyle = .unifiedCompact
         // Wide enough for every toolbar button: narrower, and the last ones go into an
         // overflow menu, the library button first.
-        window.minSize = NSSize(width: 1140, height: 280)
+        window.minSize = NSSize(width: 1180, height: 280)
         // Every capture its own window. With tabbing left to macOS, a second capture
         // could land as a tab inside the first.
         window.tabbingMode = .disallowed
@@ -160,6 +161,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         styleBar.autoresizingMask = [.minXMargin, .minYMargin]
         styleBar.isHidden = true
         container.addSubview(styleBar)
+        textHint.isHidden = true
+        container.addSubview(textHint)
         window?.contentView = container
         scrollView.frame = container.bounds
         styleBar.onChange = { [weak self] merging, change in self?.canvas.session.restyle(merging: merging, change) }
@@ -283,7 +286,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     /// The output buttons, then each group of tools, a divider before every group after
     /// the first.
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        let groups = [[Self.copyItem, Self.saveItem, Self.dragItem, Self.textItem, Self.pinItem, Self.backdropItemIdentifier, Self.sizeItem]]
+        let groups = [[Self.copyItem, Self.saveItem, Self.dragItem, Self.textItem, Self.qrItem, Self.pinItem, Self.backdropItemIdentifier,
+                       Self.sizeItem]]
             + Tool.toolbarGroups.map { $0.map(Self.toolItem) }
         let divided = groups.enumerated().flatMap { index, group in index == 0 ? group : [Self.divider(index)] + group }
         return divided + [.flexibleSpace, Self.colorItem, Self.libraryItem]
@@ -297,8 +301,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     /// The toolbar itself marks the current tool, the way it marks a settings tab.
+    /// Copy Text shows as selected while it waits, as a tool does.
     func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        Self.toolItems
+        Self.toolItems + [Self.textItem]
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier,
@@ -320,7 +325,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         }
         switch identifier {
         case Self.copyItem:
-            return button(identifier, symbol: "doc.on.doc", tooltip: "Copy and close (⌘C)", action: #selector(copy(_:)))
+            return button(identifier, symbol: "doc.on.doc", tooltip: "Copy (⌘C)", action: #selector(copy(_:)))
         case Self.saveItem:
             return button(identifier, symbol: "square.and.arrow.down", tooltip: "Save to the save folder (⌘S)", action: #selector(saveImage(_:)))
         case Self.dragItem:
@@ -334,7 +339,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             item.label = "Drag out the capture"
             return item
         case Self.textItem:
-            return button(identifier, symbol: "text.viewfinder", tooltip: "Copy the text or QR code (⌘⇧C)", action: #selector(copyText(_:)))
+            return button(identifier, symbol: "text.viewfinder", tooltip: "Copy the text in an area (⌘⇧C)", action: #selector(copyText(_:)))
+        case Self.qrItem:
+            return button(identifier, symbol: "qrcode.viewfinder", tooltip: "Scan a QR code (⌘⇧R)", action: #selector(scanQRCode(_:)))
         case Self.backdropItemIdentifier:
             let item = button(identifier, symbol: "rectangle.dashed", tooltip: "Backdrop", action: #selector(showBackdropPanel(_:)))
             backdropItem = item
@@ -414,7 +421,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     private func refreshToolbar() {
         let session = canvas.session
-        window?.toolbar?.selectedItemIdentifier = Self.toolItem(session.tool)
+        window?.toolbar?.selectedItemIdentifier = canvas.isPickingText ? Self.textItem : Self.toolItem(session.tool)
         // Filled while a backdrop is on, dashed while there is none.
         backdropItem?.image = NSImage(systemSymbolName: session.display.backdrop == nil ? "rectangle.dashed" : "rectangle.inset.filled",
                                       accessibilityDescription: "Backdrop")
@@ -488,10 +495,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     /// The panel shows the backdrop until another tool is picked or something selected.
+    /// The tool stays as it is, the crop tool too, where the backdrop shows once another
+    /// tool is picked.
     @objc func showBackdropPanel(_ sender: Any?) {
-        // The crop tool hides the backdrop, so a backdrop turned on from it would seem to
-        // do nothing.
-        if canvas.session.tool == .crop { canvas.choose(.select) }
         panel = (.backdrop, canvas.session.tool, canvas.session.selection)
         refreshToolbar()
     }
@@ -612,7 +618,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         return (exported, png)
     }
 
-    /// Copy is the one-keystroke way out: the image goes on the clipboard and the window closes.
+    /// The image goes on the clipboard and the editor stays open, with a tick on the Copy
+    /// button to say it worked.
     @objc func copy(_ sender: Any?) {
         guard let (exported, png) = exportedPNG() else {
             showError("Tinysnap could not make an image from this capture.")
@@ -620,8 +627,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         }
         Output.copy(exported, png: png)
         canvas.session.markSaved()
-        isClosingForGood = true
-        window?.close()
+        Output.showDone(on: toolbarItem(Self.copyItem))
+    }
+
+    private func toolbarItem(_ identifier: NSToolbarItem.Identifier) -> NSToolbarItem? {
+        window?.toolbar?.items.first { $0.itemIdentifier == identifier }
     }
 
     /// Pins the result and closes, as Copy does: at full resolution, or at the size the
@@ -640,15 +650,73 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         window?.close()
     }
 
-    /// Reads what an export would hold, so text under a blur, pixelate or erase is never
-    /// read back out, at full resolution whatever size the capture exports at.
+    /// Copy Text stays on, as a tool does: each drag over text copies that text and each
+    /// click all of it, until Esc, another tool or Copy Text again. What is read is what
+    /// an export holds, so text under a blur or an erase never is.
     @objc func copyText(_ sender: Any?) {
+        guard !canvas.isPickingText else {
+            canvas.stopPickingText()
+            return
+        }
+        showTextHint(true)
+        canvas.pickText { [weak self] pick in
+            guard let self else { return }
+            let area: CGRect?
+            switch pick {
+            case .stopped:
+                self.showTextHint(false)
+                self.refreshToolbar()
+                return
+            case .whole: area = nil
+            case let .area(box): area = box
+            }
+            guard let image = Exporter.readingImage(self.canvas.session.display, in: area) else {
+                NSSound.beep()
+                return
+            }
+            TextCopy.read(image, for: .text, on: self.window?.screen)
+        }
+        refreshToolbar()
+    }
+
+    /// Reads every QR code in the capture and copies what they hold.
+    @objc func scanQRCode(_ sender: Any?) {
         canvas.finishTyping()
-        guard let exported = Exporter.exportForReading(canvas.session.display) else {
+        guard let image = Exporter.readingImage(canvas.session.display) else {
             NSSound.beep()
             return
         }
-        TextCopy.read(exported.image, on: window?.screen)
+        TextCopy.read(image, for: .codes, on: window?.screen)
+    }
+
+    /// Says what Copy Text is waiting for, along the bottom of the canvas where the style
+    /// panel never is.
+    private let textHint: NSView = {
+        let label = NSTextField(labelWithString: "Drag over text to copy it, or click to copy all of it. Esc to stop.")
+        label.font = .systemFont(ofSize: 13, weight: .medium)
+        let back = NSVisualEffectView()
+        back.material = .popover
+        back.blendingMode = .withinWindow
+        back.state = .active
+        back.wantsLayer = true
+        back.layer?.cornerRadius = 10
+        label.translatesAutoresizingMaskIntoConstraints = false
+        back.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: back.leadingAnchor, constant: 14),
+            label.trailingAnchor.constraint(equalTo: back.trailingAnchor, constant: -14),
+            label.topAnchor.constraint(equalTo: back.topAnchor, constant: 8),
+            label.bottomAnchor.constraint(equalTo: back.bottomAnchor, constant: -8),
+        ])
+        back.setFrameSize(back.fittingSize)
+        back.autoresizingMask = [.minXMargin, .maxXMargin, .maxYMargin]
+        return back
+    }()
+
+    private func showTextHint(_ shown: Bool) {
+        textHint.isHidden = !shown
+        guard shown, let bounds = window?.contentView?.bounds else { return }
+        textHint.setFrameOrigin(NSPoint(x: (bounds.width - textHint.frame.width) / 2, y: 16))
     }
 
     @objc func paste(_ sender: Any?) {
@@ -660,7 +728,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     @objc func saveImage(_ sender: Any?) {
-        _ = saveToFolder()
+        if saveToFolder() { Output.showDone(on: toolbarItem(Self.saveItem)) }
     }
 
     /// For quitting: ends any typing, then says whether there are edits to lose. An
@@ -739,10 +807,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         panel.allowsMultipleSelection = false
         panel.beginSheetModal(for: window) { [weak self] response in
             guard let self else { return }
+            // Cancelled, the image tool stays out: the tool changes only when picked.
             if response == .OK, let url = panel.url, let image = NSImage(contentsOf: url) {
                 self.canvas.insert(image)
-            } else {
-                self.canvas.choose(.select)
             }
         }
     }

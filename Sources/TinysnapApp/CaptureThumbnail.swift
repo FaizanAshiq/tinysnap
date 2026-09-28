@@ -3,7 +3,8 @@ import TinysnapCore
 
 /// A capture floating in the bottom right corner of its screen instead of opening the
 /// editor. Click edits it, dragging drops it into another app, the buttons copy, save
-/// or pin it. Left alone, or swiped right, it slides away and lands on the clipboard.
+/// or pin it. Left alone, or swiped right, it slides away, kept in the library; with the
+/// library off it lands on the clipboard instead, so it is never lost.
 @MainActor
 final class CaptureThumbnail: NSObject {
     let document: Document
@@ -57,13 +58,14 @@ final class CaptureThumbnail: NSObject {
     // MARK: Leaving
 
     /// Every way out comes through here. `copying` is the time out, the swipe and a new
-    /// capture, which copy only onto an unchanged clipboard; the close button, a click
-    /// to edit and a drag out leave the clipboard alone.
+    /// capture, which copy only when the library did not keep the capture, and only onto
+    /// an unchanged clipboard; the close button, a click to edit and a drag out leave the
+    /// clipboard alone.
     func dismiss(copying: Bool) {
         guard !isGone else { return }
         isGone = true
         timer?.invalidate()
-        if copying, NSPasteboard.general.changeCount == pasteboardCount { copyNow() }
+        if copying, entry == nil, NSPasteboard.general.changeCount == pasteboardCount { copyNow() }
         let frame = panel.frame
         slide(from: frame.origin, to: NSPoint(x: frame.minX + frame.width + 40, y: frame.minY)) { [weak self] in
             guard let self else { return }
@@ -82,7 +84,9 @@ final class CaptureThumbnail: NSObject {
         }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.25
-            panel.animator().setFrameOrigin(end)
+            // A window animates its frame, not its origin: through the animator, the
+            // origin never moved, and the thumbnail stayed off the edge of the screen.
+            panel.animator().setFrame(NSRect(origin: end, size: panel.frame.size), display: true)
         }, completionHandler: {
             MainActor.assumeIsolated { done() }
         })

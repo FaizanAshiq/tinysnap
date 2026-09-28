@@ -123,11 +123,13 @@ public struct LibraryStore: Sendable {
     }
 
     /// True after a crash between an edit and the next render: the edits are newer than
-    /// the image, so the image is rendered again before it is shown.
+    /// the image, so the image is rendered again before it is shown. An image stamped
+    /// with its edits' date comes back up to a microsecond early, so anything closer than
+    /// 10 microseconds is the same moment; no edit lands that soon after a render.
     public func imageIsStale(_ entry: LibraryEntry) -> Bool {
         func modified(_ url: URL) -> Date? { try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }
         guard let edits = modified(entry.editsURL), let image = modified(entry.imageURL) else { return false }
-        return edits > image
+        return edits.timeIntervalSince(image) > 0.000_01
     }
 
     /// The bytes every entry takes, for Settings.

@@ -1,34 +1,36 @@
 import AppKit
 import TinysnapCore
 
-/// Reads the text or QR code in an image off the main thread, copies it, and shows what
-/// it copied in a toast at the top of `screen`.
+/// Reads the text, or what QR codes hold, in an image off the main thread, copies it,
+/// and shows what it copied in a toast at the top of `screen`.
 @MainActor
 enum TextCopy {
     private static var toast: TextToast?
 
-    static func read(_ image: CGImage, on screen: NSScreen?) {
+    static func read(_ image: CGImage, for target: TextReader.Target, on screen: NSScreen?) {
         Task {
-            let reading = await Task.detached(priority: .userInitiated) { try? TextReader.read(image) }.value
-            show(reading, on: screen)
+            let reading = await Task.detached(priority: .userInitiated) { try? TextReader.read(image, for: target) }.value
+            show(reading, for: target, on: screen)
         }
     }
 
-    private static func show(_ reading: TextReading?, on screen: NSScreen?) {
+    private static func show(_ reading: TextReading?, for target: TextReader.Target, on screen: NSScreen?) {
         toast?.dismiss()
+        let scanning = target == .codes
         guard let reading else {
-            toast = TextToast(title: "Could not read text", preview: "", reading: nil, on: screen)
+            toast = TextToast(title: scanning ? "Could not scan for a QR code" : "Could not read text", preview: "",
+                              reading: nil, on: screen)
             return
         }
         guard !reading.isEmpty else {
-            toast = TextToast(title: "No text found", preview: "", reading: nil, on: screen)
+            toast = TextToast(title: scanning ? "No QR code found" : "No text found", preview: "", reading: nil, on: screen)
             return
         }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(reading.text, forType: .string)
         let preview = reading.text.components(separatedBy: "\n").prefix(4).joined(separator: "\n")
-        toast = TextToast(title: reading.codes.isEmpty ? "Text copied" : "QR code copied", preview: preview,
-                          reading: reading, on: screen)
+        let title = !scanning ? "Text copied" : reading.codes.count == 1 ? "QR code copied" : "\(reading.codes.count) QR codes copied"
+        toast = TextToast(title: title, preview: preview, reading: reading, on: screen)
     }
 }
 

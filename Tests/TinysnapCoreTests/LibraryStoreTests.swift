@@ -74,6 +74,21 @@ struct LibraryStoreTests {
         #expect(!library.imageIsStale(entry))
     }
 
+    @Test func anImageStampedWithItsEditsIsNotStaleWhateverTheirNanoseconds() throws {
+        // A file date goes through a Date and back when an image is stamped, and comes back
+        // a few hundred nanoseconds early. Read as stale, it was drawn again for as long
+        // as the library stayed open.
+        let library = try store()
+        let entry = try library.add(Fixture.capture(width: 40, height: 30, scale: 2), captured: captured, timeZone: utc)
+        let document = try #require(library.open(entry)).document
+        for nanoseconds in [1, 123_456_789, 502_000_158, 999_999_999] {
+            var times = [timespec(tv_sec: 1_790_304_130, tv_nsec: nanoseconds), timespec(tv_sec: 1_790_304_130, tv_nsec: nanoseconds)]
+            #expect(utimensat(AT_FDCWD, entry.editsURL.path, &times, 0) == 0)
+            try library.saveImage(document, to: entry, editsAsOf: library.editsDate(entry))
+            #expect(!library.imageIsStale(entry), "edits at \(nanoseconds) ns")
+        }
+    }
+
     @Test func aCaptureIsKeptAsThreeFilesInAFolderNamedForItsTime() throws {
         let library = try store()
         let capture = Fixture.capture(width: 40, height: 30, scale: 2)

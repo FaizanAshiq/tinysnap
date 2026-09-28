@@ -26,6 +26,18 @@ struct PreferencesTests {
         #expect(preferences.hotkeys.fullscreen == HotKeys.defaults.fullscreen)
     }
 
+    @Test func scanQRCodeHasNoHotkeyUntilOneIsSet() throws {
+        #expect(HotKeys.defaults.qr == nil)
+        #expect(HotKeyAction.allCases.firstIndex(of: .qr) == HotKeyAction.allCases.firstIndex(of: .text)! + 1)
+        // A file from before Scan QR Code existed leaves it unset.
+        #expect(try Preferences.load(from: temporaryFile(containing: #"{"hotkeys": {"area": null}}"#)).hotkeys.qr == nil)
+        var preferences = Preferences.defaults
+        preferences.hotkeys.qr = HotKeyBinding(keyCode: 15, modifiers: [.command, .shift])
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("prefs-\(UUID().uuidString).json")
+        try preferences.save(to: url)
+        #expect(try Preferences.load(from: url).hotkeys.qr == preferences.hotkeys.qr)
+    }
+
     @Test func aClearedHotkeyStaysClearedAfterSaving() throws {
         var preferences = Preferences.defaults
         preferences.hotkeys.area = nil
@@ -96,9 +108,10 @@ struct PreferencesTests {
         #expect(HotKeys.defaults.library == nil)
     }
 
-    @Test func theMenuListsCaptureTextThirdAndOpenLibraryLast() {
+    @Test func theMenuListsCaptureTextThenScanQRCodeAndOpenLibraryLast() {
         #expect(HotKeyAction.allCases.map(\.title) == [
-            "Capture Area", "Capture Fullscreen", "Capture Text", "Repeat Last Area", "Delayed Capture", "Open Library",
+            "Capture Area", "Capture Fullscreen", "Capture Text", "Scan QR Code", "Repeat Last Area", "Delayed Capture",
+            "Open Library",
         ])
     }
 

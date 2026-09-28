@@ -40,6 +40,21 @@ enum Output {
         return url
     }
 
+    /// A tick in place of the button's symbol for a moment: copying and saving change
+    /// nothing on screen, so without it a click looks as if it did nothing. A second
+    /// press while the tick shows leaves it be, so the tick never becomes the symbol.
+    static func showDone(on sender: Any?) {
+        if let button = sender as? NSButton, let image = button.image, image !== tick {
+            button.image = tick
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { button.image = image }
+        } else if let item = sender as? NSToolbarItem, let image = item.image, image !== tick {
+            item.image = tick
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { item.image = image }
+        }
+    }
+
+    private static let tick = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Done")
+
     /// An alert for a failed output, over `window` when there is one.
     static func show(_ error: Error, over window: NSWindow?) {
         let alert = NSAlert()

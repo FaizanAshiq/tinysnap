@@ -3,10 +3,11 @@ import Quartz
 import TinysnapCore
 
 /// Every kept capture, newest first, grouped by day. Return or double-click edits,
-/// Space previews, Command C copies, dragging drops the image anywhere, Delete trashes.
+/// Space previews, Command C copies, Command S saves, dragging drops the image anywhere,
+/// Delete trashes; the toolbar and each tile's hover buttons do the same without a key.
 @MainActor
 final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCollectionViewDataSource,
-    NSCollectionViewDelegate, QLPreviewPanelDataSource {
+    NSCollectionViewDelegate, QLPreviewPanelDataSource, NSToolbarDelegate, NSToolbarItemValidation, NSMenuItemValidation {
     private let library: LibraryStore
     private let preferences: () -> Preferences
     /// Entries open in an editor, which are not trashed or rendered over.
@@ -44,6 +45,11 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
         super.init(window: window)
         window.delegate = self
         window.setFrameAutosaveName("TinysnapLibrary")
+        let toolbar = NSToolbar(identifier: "TinysnapLibrary")
+        toolbar.delegate = self
+        toolbar.displayMode = .iconOnly
+        toolbar.allowsUserCustomization = false
+        window.toolbar = toolbar
         build(in: window)
         observer = NotificationCenter.default.addObserver(forName: .libraryChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.reload() }
@@ -129,8 +135,14 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
                 grouped.append((day, [entry]))
             }
         }
+        let selected = selectedEntry
         days = grouped.map { (Self.title(for: $0.day), $0.entries) }
         grid.reloadData()
+        // A reload, after an edit or a new capture, keeps the capture that was selected.
+        if let selected, let section = days.firstIndex(where: { $0.entries.contains(selected) }),
+           let item = days[section].entries.firstIndex(of: selected) {
+            grid.selectionIndexPaths = [IndexPath(item: item, section: section)]
+        }
 
         emptyNote.isHidden = !entries.isEmpty
         emptyNote.stringValue = preferences().keepLibrary
@@ -193,6 +205,9 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
         let (image, pixels) = thumbnail(for: entry)
         item.show(image: image, time: DateFormatter.localizedString(from: entry.captured, dateStyle: .none, timeStyle: .short),
                   width: Int(pixels.width), height: Int(pixels.height))
+        item.onCopy = { [weak self] button in if self?.copy(entry: entry) == true { Output.showDone(on: button) } }
+        item.onSave = { [weak self] button in if self?.save(entry: entry) == true { Output.showDone(on: button) } }
+        item.onEdit = { [weak self] in self?.onOpen(entry) }
         return item
     }
 
@@ -231,24 +246,54 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
         openSelected()
     }
 
-    /// Drawn from the entry's edits, so a capture with a size of its own copies at it and
-    /// one without takes the Export setting.
     @objc func copy(_ sender: Any?) {
-        if let entry = selectedEntry { flush(entry) }
-        guard let entry = selectedEntry, let document = library.open(entry)?.document,
-              let exported = Exporter.export(document, scale: preferences().exportScale),
-              let png = Exporter.pngData(exported) else {
-            NSSound.beep()
-            return
-        }
-        Output.copy(exported, png: png)
+        guard let entry = selectedEntry, copy(entry: entry) else { return }
+        Output.showDone(on: sender)
     }
 
-    @objc func pinItem(_ sender: Any?) {
+    @objc func saveImage(_ sender: Any?) {
+        guard let entry = selectedEntry, save(entry: entry) else { return }
+        Output.showDone(on: sender)
+    }
+
+    @objc func pinImage(_ sender: Any?) {
         guard let entry = selectedEntry else { return }
         onPin(entry)
     }
 
+    /// The entry drawn from its edits, so a capture with a size of its own comes out at
+    /// it and one without takes the Export setting. Nil, with a beep, when it cannot be.
+    private func exported(_ entry: LibraryEntry) -> (ExportedImage, Data)? {
+        flush(entry)
+        guard let document = library.open(entry)?.document,
+              let exported = Exporter.export(document, scale: preferences().exportScale),
+              let png = Exporter.pngData(exported) else {
+            NSSound.beep()
+            return nil
+        }
+        return (exported, png)
+    }
+
+    private func copy(entry: LibraryEntry) -> Bool {
+        guard let (exported, png) = exported(entry) else { return false }
+        Output.copy(exported, png: png)
+        return true
+    }
+
+    /// Into the save folder, as the editor's Save does.
+    private func save(entry: LibraryEntry) -> Bool {
+        guard let (_, png) = exported(entry) else { return false }
+        do {
+            try Output.save(png, in: preferences().saveFolderURL)
+            return true
+        } catch {
+            Output.show(error, over: window)
+            return false
+        }
+    }
+
+    /// A tick on the button that asked, for a moment: copying and saving change nothing
+    /// on screen, so without it a click looks as if it did nothing.
     @objc func showInFinder(_ sender: Any?) {
         guard let entry = selectedEntry else { return }
         flush(entry)
@@ -275,14 +320,62 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
 
     func contextMenu() -> NSMenu {
         let menu = NSMenu()
-        for (title, action) in [("Open", #selector(openItem(_:))), ("Copy", #selector(copy(_:))),
-                                ("Pin", #selector(pinItem(_:))), ("Show in Finder", #selector(showInFinder(_:))),
-                                ("Move to Trash", #selector(moveToTrash(_:)))] {
+        for (title, action) in [("Edit", #selector(openItem(_:))), ("Copy", #selector(copy(_:))),
+                                ("Save", #selector(saveImage(_:))), ("Pin", #selector(pinImage(_:))),
+                                ("Show in Finder", #selector(showInFinder(_:))), ("Move to Trash", #selector(moveToTrash(_:)))] {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = self
             menu.addItem(item)
         }
         return menu
+    }
+
+    // MARK: Toolbar
+
+    /// Everything the right click menu offers for the selected capture, without a click
+    /// on the capture first.
+    private var toolbarActions: [(id: NSToolbarItem.Identifier, symbol: String, label: String, tooltip: String, action: Selector)] {
+        [
+            (NSToolbarItem.Identifier("copy"), "doc.on.doc", "Copy", "Copy (⌘C)", #selector(copy(_:))),
+            (NSToolbarItem.Identifier("save"), "square.and.arrow.down", "Save", "Save to the save folder (⌘S)", #selector(saveImage(_:))),
+            (NSToolbarItem.Identifier("edit"), "pencil", "Edit", "Edit (Return)", #selector(openItem(_:))),
+            (NSToolbarItem.Identifier("pin"), "pin", "Pin", "Pin on top of every app (⌘P)", #selector(pinImage(_:))),
+            (NSToolbarItem.Identifier("trash"), "trash", "Move to Trash", "Move to Trash (Delete)", #selector(moveToTrash(_:))),
+        ]
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.flexibleSpace] + toolbarActions.map(\.id)
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        toolbarDefaultItemIdentifiers(toolbar)
+    }
+
+    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier,
+                 willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        guard let action = toolbarActions.first(where: { $0.id == identifier }) else { return nil }
+        let item = NSToolbarItem(itemIdentifier: identifier)
+        item.image = NSImage(systemSymbolName: action.symbol, accessibilityDescription: action.label)
+        item.label = action.label
+        item.toolTip = action.tooltip
+        item.target = self
+        item.action = action.action
+        item.isBordered = true
+        return item
+    }
+
+    /// Only with a capture selected, which is what every one of them acts on.
+    func validateToolbarItem(_ item: NSToolbarItem) -> Bool {
+        selectedEntry != nil
+    }
+
+    /// The same for the menus, so Save or Copy with nothing selected is dimmed rather
+    /// than a key that does nothing.
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        guard let action = item.action, toolbarActions.contains(where: { $0.action == action })
+                || action == #selector(showInFinder(_:)) else { return true }
+        return selectedEntry != nil
     }
 
     // MARK: Quick Look
@@ -389,6 +482,17 @@ final class LibraryLayout: NSCollectionViewFlowLayout {
 /// One capture: its picture, the time it was taken and its size in pixels.
 final class LibraryItem: NSCollectionViewItem {
     static let identifier = NSUserInterfaceItemIdentifier("LibraryItem")
+    /// Copy, Save and Edit for this capture, from the buttons over its picture while the
+    /// pointer is on the tile. Copy and Save hand over their button for a tick.
+    var onCopy: ((NSButton) -> Void)?
+    var onSave: ((NSButton) -> Void)?
+    var onEdit: (() -> Void)?
+    private lazy var hoverActions = TileHoverView(buttons: [
+        TileActionButton(symbol: "doc.on.doc", label: "Copy", tooltip: "Copy", primary: true, target: self, action: #selector(copyTapped(_:))),
+        TileActionButton(symbol: "square.and.arrow.down", label: "Save", tooltip: "Save to the save folder", primary: false, target: self,
+                         action: #selector(saveTapped(_:))),
+        TileActionButton(symbol: "pencil", label: "Edit", tooltip: "Edit", primary: false, target: self, action: #selector(editTapped(_:))),
+    ])
     private let picture = NSImageView()
     private let time = NSTextField(labelWithString: "")
     private let pixels = NSTextField(labelWithString: "")
@@ -428,7 +532,32 @@ final class LibraryItem: NSCollectionViewItem {
             pixels.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
             pixels.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -9),
         ])
+        buildHoverActions(in: root)
         view = root
+    }
+
+    /// The fade and the buttons cover the picture exactly, clipped to its corners, so the
+    /// row slides up from under the picture's own edge.
+    private func buildHoverActions(in root: NSView) {
+        hoverActions.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(hoverActions)
+        NSLayoutConstraint.activate([
+            hoverActions.leadingAnchor.constraint(equalTo: picture.leadingAnchor),
+            hoverActions.trailingAnchor.constraint(equalTo: picture.trailingAnchor),
+            hoverActions.topAnchor.constraint(equalTo: picture.topAnchor),
+            hoverActions.bottomAnchor.constraint(equalTo: picture.bottomAnchor),
+        ])
+        tile.onHover = { [weak self] inside in self?.hoverActions.show(inside, animated: true) }
+    }
+
+    @objc private func copyTapped(_ sender: NSButton) { onCopy?(sender) }
+    @objc private func saveTapped(_ sender: NSButton) { onSave?(sender) }
+    @objc private func editTapped(_ sender: NSButton) { onEdit?() }
+
+    /// A reused tile starts without its hover buttons, whatever the last one it showed.
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        hoverActions.show(false, animated: false)
     }
 
     override var isSelected: Bool {
@@ -450,6 +579,21 @@ final class LibraryTile: NSView {
     var isSelected = false {
         didSet { needsDisplay = true }
     }
+    /// The pointer came onto the tile, or left it.
+    var onHover: ((Bool) -> Void)?
+    private var area: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let area { removeTrackingArea(area) }
+        let tracking = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                      owner: self, userInfo: nil)
+        addTrackingArea(tracking)
+        area = tracking
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func mouseExited(with event: NSEvent) { onHover?(false) }
 
     override var wantsUpdateLayer: Bool { true }
 
@@ -458,6 +602,159 @@ final class LibraryTile: NSView {
         layer?.backgroundColor = NSColor.quaternarySystemFill.cgColor
         layer?.borderColor = NSColor.controlAccentColor.cgColor
         layer?.borderWidth = isSelected ? 3 : 0
+    }
+}
+
+/// Copy, Save and Edit over a tile's picture: a dark fade rises from the foot and a row
+/// of labelled buttons slides up on it while the pointer is on the tile. The fade keeps
+/// white labels readable over a white capture as well as a dark one.
+final class TileHoverView: NSView {
+    private let scrim = TileScrim()
+    private let row: NSStackView
+    private var rowBottom: NSLayoutConstraint!
+    /// Where the row sits when shown, and far enough under the picture to be out of sight.
+    private static let shown: CGFloat = -8
+    private static let away: CGFloat = 40
+
+    init(buttons: [TileActionButton]) {
+        row = NSStackView(views: buttons)
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        layer?.masksToBounds = true
+        row.distribution = .fillEqually
+        row.spacing = 5
+        for view in [scrim, row] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
+        }
+        rowBottom = row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: Self.away)
+        NSLayoutConstraint.activate([
+            scrim.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrim.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrim.topAnchor.constraint(equalTo: topAnchor),
+            scrim.bottomAnchor.constraint(equalTo: bottomAnchor),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            rowBottom,
+        ])
+        scrim.alphaValue = 0
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("TileHoverView is created in code only")
+    }
+
+    /// Only the buttons take clicks. Everywhere else a click, a double-click or a drag
+    /// reaches the grid under it, as on the picture itself.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit is NSButton ? hit : nil
+    }
+
+    func show(_ shown: Bool, animated: Bool) {
+        let bottom = shown ? Self.shown : Self.away
+        guard animated else {
+            rowBottom.constant = bottom
+            scrim.alphaValue = shown ? 1 : 0
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = shown ? 0.24 : 0.16
+            context.timingFunction = shown ? CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1) : CAMediaTimingFunction(name: .easeIn)
+            context.allowsImplicitAnimation = true
+            rowBottom.constant = bottom
+            scrim.animator().alphaValue = shown ? 1 : 0
+            layoutSubtreeIfNeeded()
+        }
+    }
+}
+
+/// Black rising from the foot of the picture: strongest under the buttons, gone by two
+/// thirds of the way up.
+final class TileScrim: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("TileScrim is created in code only")
+    }
+
+    override func makeBackingLayer() -> CALayer {
+        let gradient = CAGradientLayer()
+        gradient.colors = [NSColor.black.withAlphaComponent(0.78).cgColor, NSColor.black.withAlphaComponent(0.45).cgColor,
+                           NSColor.black.withAlphaComponent(0).cgColor]
+        gradient.locations = [0, 0.38, 0.7]
+        gradient.startPoint = CGPoint(x: 0.5, y: 0)
+        gradient.endPoint = CGPoint(x: 0.5, y: 1)
+        return gradient
+    }
+}
+
+/// One hover button: a white label on a translucent ground, or on the accent for Copy,
+/// and dark on white under the pointer.
+final class TileActionButton: NSButton {
+    private let isPrimary: Bool
+    private let label: String
+    private var area: NSTrackingArea?
+    private var hovering = false {
+        didSet { restyle() }
+    }
+
+    init(symbol: String, label: String, tooltip: String, primary: Bool, target: AnyObject, action: Selector) {
+        isPrimary = primary
+        self.label = label
+        super.init(frame: .zero)
+        self.target = target
+        self.action = action
+        isBordered = false
+        wantsLayer = true
+        layer?.cornerRadius = 7
+        image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold))
+        imagePosition = .imageLeading
+        imageHugsTitle = true
+        toolTip = tooltip
+        setAccessibilityLabel(tooltip)
+        translatesAutoresizingMaskIntoConstraints = false
+        heightAnchor.constraint(equalToConstant: 28).isActive = true
+        restyle()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("TileActionButton is created in code only")
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let area { removeTrackingArea(area) }
+        let tracking = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                      owner: self, userInfo: nil)
+        addTrackingArea(tracking)
+        area = tracking
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        restyle()
+    }
+
+    private func restyle() {
+        let accent = NSColor.controlAccentColor
+        let ground: NSColor = isPrimary
+            ? (hovering ? accent.blended(withFraction: 0.18, of: .white) ?? accent : accent)
+            : (hovering ? .white : NSColor.white.withAlphaComponent(0.2))
+        let ink: NSColor = hovering && !isPrimary ? NSColor(white: 0.07, alpha: 1) : .white
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = ground.cgColor
+        }
+        contentTintColor = ink
+        attributedTitle = NSAttributedString(string: label, attributes: [.foregroundColor: ink, .font: NSFont.systemFont(ofSize: 12, weight: .semibold)])
     }
 }
 
@@ -482,3 +779,5 @@ final class LibraryHeader: NSView, NSCollectionViewElement {
         fatalError("LibraryHeader is created in code only")
     }
 }
+
+

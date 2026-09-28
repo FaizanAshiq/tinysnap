@@ -43,6 +43,7 @@ enum MainMenu {
             item("Select All", "selectAll:", "a"),
             .separator(),
             item("Copy Text", "copyText:", "C"),
+            item("Scan QR Code", "scanQRCode:", "R"),
             item("Pin", "pinImage:", "p"),
         ]))
         menu.addItem(submenu("View", [

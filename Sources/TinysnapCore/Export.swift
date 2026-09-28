@@ -35,12 +35,18 @@ public enum Exporter {
                              pointSize: CGSize(width: CGFloat(image.width) * 72 / dpi, height: CGFloat(image.height) * 72 / dpi))
     }
 
-    /// Every capture pixel, whatever size the capture exports at: what text is read
-    /// from, so a smaller export never costs accuracy.
-    public static func exportForReading(_ document: Document) -> ExportedImage? {
-        var full = document
-        full.resize = nil
-        return export(full, scale: .native)
+    /// What text and codes are read from: every capture pixel, whatever size the capture
+    /// exports at, with the annotations drawn, so nothing under a blur or an erase is read
+    /// back out, and the crop applied, but no backdrop, which holds nothing to read. `area`,
+    /// in capture pixels, narrows it to what was dragged over; nil when that misses the output.
+    public static func readingImage(_ document: Document, in area: CGRect? = nil) -> CGImage? {
+        guard let output = Renderer.renderOutput(document) else { return nil }
+        guard let area else { return output }
+        let origin = document.outputPixelRect.origin
+        let cut = area.offsetBy(dx: -origin.x, dy: -origin.y).integral
+            .intersection(CGRect(x: 0, y: 0, width: output.width, height: output.height))
+        guard !cut.isNull, cut.width >= 1, cut.height >= 1 else { return nil }
+        return output.cropping(to: cut)
     }
 
     public static func pngData(_ exported: ExportedImage) -> Data? {
