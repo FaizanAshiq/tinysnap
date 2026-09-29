@@ -177,6 +177,44 @@ internal static class Native
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool UnregisterHotKey(nint window, int id);
 
+    internal const uint CF_UNICODETEXT = 13;
+    internal const uint CF_DIBV5 = 17;
+    internal const uint GMEM_MOVEABLE = 0x0002;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    internal static extern uint RegisterClipboardFormatW(string name);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool OpenClipboard(nint owner);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool CloseClipboard();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool EmptyClipboard();
+
+    [DllImport("user32.dll")]
+    internal static extern nint SetClipboardData(uint format, nint memory);
+
+    [DllImport("user32.dll")]
+    internal static extern uint GetClipboardSequenceNumber();
+
+    [DllImport("kernel32.dll")]
+    internal static extern nint GlobalAlloc(uint flags, nuint bytes);
+
+    [DllImport("kernel32.dll")]
+    internal static extern nint GlobalLock(nint memory);
+
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GlobalUnlock(nint memory);
+
+    [DllImport("kernel32.dll")]
+    internal static extern nint GlobalFree(nint memory);
+
     /// <summary>Physical pixels for the calls in the block, whatever the process declared, so the
     /// monitors, the pointer and the windows all come back in one coordinate space.</summary>
     internal readonly struct PerMonitorPixels : IDisposable

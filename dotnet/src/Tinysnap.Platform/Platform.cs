@@ -37,8 +37,21 @@ public interface IHotkeys : IDisposable
     void UnregisterAll();
 }
 
+public interface IClipboard
+{
+    /// <summary>The image as a PNG, which keeps its DPI, and as a bitmap for apps that read only
+    /// that, see-through pixels kept in both. False when the clipboard could not be taken.</summary>
+    bool SetImage(SKImage image, byte[] png, double dpi);
+
+    bool SetText(string text);
+
+    /// <summary>Changes whenever anything, in any app, puts something on the clipboard.</summary>
+    uint ChangeCount { get; }
+}
+
 public interface IPlatform
 {
     IScreenCapture Screen { get; }
     IHotkeys Hotkeys { get; }
+    IClipboard Clipboard { get; }
 }
