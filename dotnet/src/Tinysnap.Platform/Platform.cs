@@ -40,7 +40,8 @@ public interface IHotkeys : IDisposable
 public interface IClipboard
 {
     /// <summary>The image as a PNG, which keeps its DPI, and as a bitmap for apps that read only
-    /// that, see-through pixels kept in both. False when the clipboard could not be taken.</summary>
+    /// that, see-through pixels kept in both. The image is read only during the call and stays the
+    /// caller's to dispose. False when the clipboard could not be taken.</summary>
     bool SetImage(SKImage image, byte[] png, double dpi);
 
     bool SetText(string text);

@@ -366,6 +366,7 @@ internal sealed class EditorWindow : Window
     private void CopyImage()
     {
         if (Finished(services.Preferences().ExportScale) is not var (exported, png)) return;
+        using var image = exported.Image;
         if (!Output.Copy(services.Clipboard, exported, png))
         {
             _ = services.Dialogs.Tell(this, "Tinysnap could not copy to the clipboard. Another app may be holding it; try again.");
@@ -375,13 +376,21 @@ internal sealed class EditorWindow : Window
         Tick(copyButton, ToolIcons.Copy);
     }
 
+    /// <summary>The PNG of the capture at its own size, the image drawn for it let go at once.</summary>
+    private byte[]? FinishedPng()
+    {
+        if (Finished(ExportScale.Native) is not var (exported, png)) return null;
+        exported.Image.Dispose();
+        return png;
+    }
+
     private void SaveImage() => SaveToFolder();
 
     /// <summary>Saves into the save folder under a name for now. False, after telling the person,
     /// when that failed.</summary>
     private bool SaveToFolder()
     {
-        if (Finished(ExportScale.Native) is not var (_, png)) return false;
+        if (FinishedPng() is not { } png) return false;
         try
         {
             Output.Save(png, services.Preferences().SaveFolderPath, DateTimeOffset.Now);
@@ -399,7 +408,7 @@ internal sealed class EditorWindow : Window
     /// <summary>Asks where, starting in the save folder.</summary>
     private async Task SaveImageAs()
     {
-        if (Finished(ExportScale.Native) is not var (_, png)) return;
+        if (FinishedPng() is not { } png) return;
         var now = DateTimeOffset.Now;
         var folder = services.Preferences().SaveFolderPath;
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
@@ -472,7 +481,7 @@ internal sealed class EditorWindow : Window
     /// be written.</summary>
     internal string? DragFile()
     {
-        if (Finished(ExportScale.Native) is not var (_, png)) return null;
+        if (FinishedPng() is not { } png) return null;
         return Output.TemporaryFile(png, DateTimeOffset.Now);
     }
 

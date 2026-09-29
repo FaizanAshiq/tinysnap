@@ -26,7 +26,8 @@ public sealed class FakeClipboard : IClipboard
 
     public bool SetImage(SkiaSharp.SKImage image, byte[] png, double dpi)
     {
-        (Image, Png, Dpi, Text) = (image, png, dpi, null);
+        // A copy, as a real clipboard keeps: the caller disposes its image once this returns.
+        (Image, Png, Dpi, Text) = (SkiaSharp.SKImage.FromEncodedData(png), png, dpi, null);
         ChangeCount++;
         return true;
     }
