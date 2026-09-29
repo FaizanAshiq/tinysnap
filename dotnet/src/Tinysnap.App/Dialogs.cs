@@ -14,8 +14,9 @@ internal interface IDialogs
     /// <summary>A notice with OK, over <paramref name="owner"/> when there is one.</summary>
     Task Tell(Window? owner, string message);
 
-    /// <summary>Save, Discard or Cancel, for closing a capture whose edits would be lost.</summary>
-    Task<CloseChoice> AskToSave(Window owner);
+    /// <summary>Save, Discard or Cancel, for closing a capture whose edits would be lost.
+    /// <paramref name="libraryFailed"/> says why for a capture the library could not keep.</summary>
+    Task<CloseChoice> AskToSave(Window owner, bool libraryFailed = false);
 }
 
 internal sealed class AvaloniaDialogs : IDialogs
@@ -27,9 +28,11 @@ internal sealed class AvaloniaDialogs : IDialogs
         else await dialog.ShowDialog<int?>(owner);
     }
 
-    public async Task<CloseChoice> AskToSave(Window owner)
+    public async Task<CloseChoice> AskToSave(Window owner, bool libraryFailed = false)
     {
-        var dialog = Dialog("Save this capture before closing?", "Its annotations and crop are lost if you do not.",
+        var dialog = Dialog("Save this capture before closing?", libraryFailed
+            ? "Tinysnap could not keep it in the library, so its annotations and crop are lost if you do not."
+            : "Its annotations and crop are lost if you do not.",
         [
             ("Save", (int)CloseChoice.Save, true, false),
             ("Discard", (int)CloseChoice.Discard, false, false),

@@ -15,13 +15,15 @@ namespace Tinysnap.App.Capturing;
 
 /// <summary>A capture floating in the bottom right corner of its monitor instead of opening the
 /// editor. A click edits it, dragging drops it into another app, the buttons copy, save or pin
-/// it. Left alone for 5 seconds, or swiped right, it slides away onto the clipboard, the library
-/// being off until milestone 4, so it is never lost.</summary>
+/// it. Left alone for 5 seconds, or swiped right, it slides away, kept in the library; with the
+/// library off it lands on the clipboard instead, so it is never lost.</summary>
 internal sealed class CaptureThumbnail : Window
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(5);
 
     private readonly Document document;
+    /// <summary>The library entry that keeps the capture, so the thumbnail need not copy it.</summary>
+    private readonly LibraryEntry? entry;
     private readonly EditorServices services;
     private readonly PixelPoint? on;
     private readonly bool animate;
@@ -49,9 +51,10 @@ internal sealed class CaptureThumbnail : Window
     /// <param name="animate">False when the person asked for less motion: it appears and goes
     /// without sliding.</param>
     public CaptureThumbnail(Document document, EditorServices services, PixelPoint? on = null, bool animate = true,
-                            TimeProvider? time = null)
+                            TimeProvider? time = null, LibraryEntry? entry = null)
     {
         this.document = document;
+        this.entry = entry;
         this.services = services;
         this.on = on;
         this.animate = animate;
@@ -149,14 +152,15 @@ internal sealed class CaptureThumbnail : Window
     // Leaving
 
     /// <summary>Every way out comes through here. <paramref name="copying"/> is the time out, the
-    /// swipe and a new capture, which copy only onto an unchanged clipboard; the close button, a
-    /// click to edit, the buttons and a drag out leave the clipboard alone.</summary>
+    /// swipe and a new capture, which copy only when the library did not keep the capture, and
+    /// only onto an unchanged clipboard; the close button, a click to edit, the buttons and a
+    /// drag out leave the clipboard alone.</summary>
     public void Dismiss(bool copying)
     {
         if (IsGone) return;
         IsGone = true;
         timer.Dispose();
-        if (copying && services.Clipboard.ChangeCount == clipboardCount) CopyNow();
+        if (copying && entry is null && services.Clipboard.ChangeCount == clipboardCount) CopyNow();
         Slide(Position, new PixelPoint(Position.X + (int)(Bounds.Width * DesktopScaling) + 40, Position.Y), Close);
     }
 
@@ -208,7 +212,7 @@ internal sealed class CaptureThumbnail : Window
     internal void Pin()
     {
         if (services.Pin is not { } pin || Exported(ExportScale.Native) is not var (exported, _)) return;
-        pin(exported, document.Resize is not null);
+        pin(exported, document.Resize is not null, entry);
         Dismiss(copying: false);
     }
 

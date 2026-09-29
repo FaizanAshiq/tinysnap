@@ -58,6 +58,14 @@ internal sealed class EditorWindow : Window
     /// <summary>Set once the capture may close without asking: saved or discarded in the prompt,
     /// or pinned.</summary>
     private bool closingForGood;
+    /// <summary>What the library holds: the edits last written and the document its image
+    /// was last drawn from.</summary>
+    private Document keptDocument, renderedDocument;
+    private ITimer? pendingKeep;
+
+    /// <summary>The library entry this editor keeps up to date. Null for a capture while the
+    /// library is off, a damaged entry opened flat, or one the library could not take.</summary>
+    internal LibraryEntry? Entry { get; }
 
     public CanvasControl Canvas { get; }
     public StyleBar StyleBar { get; }
@@ -73,10 +81,13 @@ internal sealed class EditorWindow : Window
 
     /// <param name="around">Where the capture was taken, in physical pixels, so the editor opens
     /// on that monitor.</param>
-    public EditorWindow(EditorSession session, DateTimeOffset captured, EditorServices services, PixelRect? around = null)
+    public EditorWindow(EditorSession session, DateTimeOffset captured, EditorServices services, PixelRect? around = null,
+                        LibraryEntry? entry = null)
     {
         this.around = around;
         this.services = services;
+        Entry = entry;
+        keptDocument = renderedDocument = session.History.Document;
         Title = TitleFor(captured, DateTimeOffset.Now, TimeZoneInfo.Local, CultureInfo.CurrentCulture);
         MinHeight = 280;
 
@@ -161,6 +172,7 @@ internal sealed class EditorWindow : Window
         ActualThemeVariantChanged += (_, _) => PaintGround();
 
         Canvas.Changed += Refresh;
+        Canvas.Changed += DocumentChanged;
         Canvas.ZoomRequested += notches => ZoomTo(notches > 0 ? EditorFit.ZoomIn(Canvas.Zoom) : EditorFit.ZoomOut(Canvas.Zoom));
         Canvas.CloseRequested += Close;
         Canvas.PointerColor += ShowColor;
@@ -176,6 +188,8 @@ internal sealed class EditorWindow : Window
         };
         Closed += (_, _) =>
         {
+            Keep(renderingImage: false);
+            pendingKeep?.Dispose();
             RememberStyles();
             Open.Remove(this);
         };
@@ -447,7 +461,7 @@ internal sealed class EditorWindow : Window
     private void PinImage()
     {
         if (services.Pin is not { } pin || Finished(ExportScale.Native) is not var (exported, _)) return;
-        pin(exported, Canvas.Session.Display.Resize is not null);
+        pin(exported, Canvas.Session.Display.Resize is not null, Entry);
         Canvas.Session.MarkSaved();
         closingForGood = true;
         Close();
@@ -492,16 +506,18 @@ internal sealed class EditorWindow : Window
         return Output.TemporaryFile(png, DateTimeOffset.Now);
     }
 
-    /// <summary>Unsaved edits are not lost without asking: Save saves and closes, Discard closes,
-    /// Cancel keeps the editor.</summary>
+    /// <summary>Unsaved edits are not lost without asking, unless the library took them: Save
+    /// saves and closes, Discard closes, Cancel keeps the editor. When the library could not be
+    /// written it asks as it would with no library, so a full disk never loses the edits.</summary>
     protected override async void OnClosing(WindowClosingEventArgs e)
     {
         base.OnClosing(e);
         if (closingForGood || e.Cancel) return;
         Canvas.Session.FinishTyping();
         Canvas.SessionChanged();
+        if (Entry is not null && Keep(renderingImage: false)) return;
         if (!Canvas.Session.IsUnsaved) return;
-        var asking = services.Dialogs.AskToSave(this);
+        var asking = services.Dialogs.AskToSave(this, libraryFailed: Entry is not null);
         // An answer already given decides this close; closing again from inside it would re-enter.
         if (asking.IsCompleted)
         {
@@ -520,14 +536,67 @@ internal sealed class EditorWindow : Window
     {
         Canvas.Session.FinishTyping();
         Canvas.SessionChanged();
-        if (Canvas.Session.IsUnsaved)
+        var kept = Entry is not null && Keep(renderingImage: true);
+        if (!kept && Canvas.Session.IsUnsaved)
         {
             Activate();
-            if (!MayClose(await services.Dialogs.AskToSave(this))) return false;
+            if (!MayClose(await services.Dialogs.AskToSave(this, libraryFailed: Entry is not null))) return false;
         }
         closingForGood = true;
         Close();
         return true;
+    }
+
+    // Library
+
+    /// <summary>An edit is written one second after the last one, so a burst of nudges or a
+    /// colour drag writes once, and a crash loses at most that second.</summary>
+    private void DocumentChanged()
+    {
+        if (Entry is null || Canvas.Session.History.Document == keptDocument) return;
+        pendingKeep ??= (services.Time ?? TimeProvider.System).CreateTimer(
+            _ => Dispatcher.UIThread.Post(() => Keep(renderingImage: false)), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        pendingKeep.Change(TimeSpan.FromSeconds(1), Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>Writes the edits now, and with <paramref name="renderingImage"/> the image too,
+    /// which the library grid, its preview and a drag from it show. The image is rendered when
+    /// asked and on Quit, not on every edit, since a large capture takes a moment to encode; on
+    /// close the app renders it off the UI thread instead (<see cref="PendingRender"/>).
+    /// It never ends typing: the timer fires mid-word. False when the library could not be
+    /// written, so closing and quitting ask instead of trusting a copy that is not there.</summary>
+    internal bool Keep(bool renderingImage)
+    {
+        pendingKeep?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        if (Entry is not { } entry || services.Library is not { } library) return true;
+        var document = Canvas.Session.History.Document;
+        try
+        {
+            if (document != keptDocument)
+            {
+                library.SaveEdits(document, entry);
+                keptDocument = document;
+            }
+            if (renderingImage && document != renderedDocument)
+            {
+                library.SaveImage(document, entry);
+                renderedDocument = document;
+                services.LibraryChanged?.Invoke();
+            }
+            return true;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The entry's edits and document when its image is behind them, for the app to
+    /// render once this editor has closed.</summary>
+    internal (Document Document, LibraryEntry Entry)? PendingRender()
+    {
+        var document = Canvas.Session.History.Document;
+        return Entry is { } entry && document != renderedDocument ? (document, entry) : null;
     }
 
     private bool MayClose(CloseChoice choice) => choice switch

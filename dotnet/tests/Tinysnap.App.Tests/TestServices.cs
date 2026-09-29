@@ -22,7 +22,7 @@ internal sealed class FakeDialogs(CloseChoice answer = CloseChoice.Cancel) : IDi
         return Task.CompletedTask;
     }
 
-    public Task<CloseChoice> AskToSave(Window owner)
+    public Task<CloseChoice> AskToSave(Window owner, bool libraryFailed = false)
     {
         Asked++;
         return Task.FromResult(Answer);
@@ -46,7 +46,7 @@ internal static class TestServices
     {
         var folder = saveFolder ?? TemporaryFolder();
         return new EditorServices(clipboard ?? new FakeClipboard(), () => Preferences.Defaults with { SaveFolder = folder },
-                                  dialogs ?? new FakeDialogs(), pin);
+                                  dialogs ?? new FakeDialogs(), pin is null ? null : (exported, keepsSize, _) => pin(exported, keepsSize));
     }
 
     /// <summary>A shown editor on a blank 400 by 300 capture at 2x, laid out and focused.</summary>
@@ -64,6 +64,9 @@ internal static class TestServices
     /// enough inside the capture that its shadow does not grow it.</summary>
     public static void Draw(EditorWindow editor)
     {
+        // An editor the controller opened may not have laid out at its placed size yet.
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        editor.UpdateLayout();
         var canvas = editor.Canvas;
         var from = canvas.TranslatePoint(new Point(60, 50), editor)!.Value;
         var to = canvas.TranslatePoint(new Point(110, 80), editor)!.Value;

@@ -44,7 +44,8 @@ public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started
             // A tray app: closing the last editor leaves it running for the next capture.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             var preferences = new PreferencesStore(Preferences.DefaultFilePath);
-            Captures = new CaptureController(Platform, preferences);
+            Captures = new CaptureController(Platform, preferences, new LibraryStore());
+            Captures.StartSweeping();
             Tray.Install(this, Captures, preferences.Current.HotKeys, desktop);
             ListenForHotkeys(preferences.Current.HotKeys);
             desktop.ShutdownRequested += (_, _) => Platform.Hotkeys.Dispose();
