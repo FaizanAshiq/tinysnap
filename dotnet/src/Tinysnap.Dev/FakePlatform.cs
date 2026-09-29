@@ -52,6 +52,8 @@ public sealed class FakePlatform(IScreenCapture screen) : IPlatform
     // Avalonia clipboard stand-in if copying on a Mac is ever wanted.
     public IClipboard Clipboard { get; } = new FakeClipboard();
 
+    public bool ReduceMotion => false;
+
     private sealed class NoHotkeys : IHotkeys
     {
         public event Action<HotKeyAction>? Pressed { add { } remove { } }

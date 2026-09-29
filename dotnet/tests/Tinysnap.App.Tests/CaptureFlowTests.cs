@@ -17,6 +17,20 @@ public class CaptureFlowTests
     private static CaptureController Controller(FrozenDesktop desktop, CorePoint pointer, double cornerRadius = 0) =>
         new(new FakePlatform(new FakeScreenCapture(() => desktop, () => pointer, cornerRadius)), () => Tinysnap.Core.Preferences.Defaults);
 
+    private static readonly Tinysnap.Core.Preferences Thumbnails = Tinysnap.Core.Preferences.Defaults with
+    {
+        AfterCapture = Tinysnap.Core.AfterCapture.Thumbnail,
+    };
+
+    /// <summary>A controller on one Retina monitor, with its clipboard and dialogs to look at.</summary>
+    private static (CaptureController Controller, FakeClipboard Clipboard) WithOutput(Tinysnap.Core.Preferences preferences,
+                                                                                     FakeDialogs? dialogs = null)
+    {
+        var platform = new FakePlatform(new FakeScreenCapture(() => Screens.Desktop(Retina), () => new CorePoint(100, 100)));
+        return (new CaptureController(platform, () => preferences, dialogs ?? new FakeDialogs(), new FakeTime()),
+                (FakeClipboard)platform.Clipboard);
+    }
+
     private static void Drag(OverlayWindow window, Point from, Point to)
     {
         window.MouseDown(from, MouseButton.Left);
@@ -112,5 +126,84 @@ public class CaptureFlowTests
         controller.Overlay!.Windows[0].KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
         Assert.Empty(controller.Editors);
         Assert.Null(controller.Overlay);
+    }
+
+    [AvaloniaFact]
+    public void TheThumbnailSettingShowsAThumbnailInsteadOfAnEditor()
+    {
+        var (controller, _) = WithOutput(Thumbnails);
+        controller.CaptureFullscreen();
+        Assert.Empty(controller.Editors);
+        Assert.NotNull(controller.Thumbnail);
+    }
+
+    [AvaloniaFact]
+    public void ANewCaptureSendsTheLastThumbnailAway()
+    {
+        var (controller, clipboard) = WithOutput(Thumbnails);
+        controller.CaptureFullscreen();
+        var first = controller.Thumbnail!;
+        controller.CaptureFullscreen();
+        Assert.True(first.IsGone);
+        Assert.NotSame(first, controller.Thumbnail);
+        // Copied on the way out, as a time out would.
+        Assert.Equal(1600, clipboard.Image!.Width);
+    }
+
+    [AvaloniaFact]
+    public void ClickingTheThumbnailOpensTheEditor()
+    {
+        var (controller, _) = WithOutput(Thumbnails);
+        controller.CaptureFullscreen();
+        var thumbnail = controller.Thumbnail!;
+        thumbnail.MouseDown(new Point(60, 60), MouseButton.Left);
+        thumbnail.MouseUp(new Point(60, 60), MouseButton.Left);
+        Assert.Equal(1600, Opened(controller).Image.Width);
+        Assert.Null(controller.Thumbnail);
+    }
+
+    [AvaloniaFact]
+    public void PinAndCloseTurnsTheEditorIntoAPin()
+    {
+        var (controller, _) = WithOutput(Tinysnap.Core.Preferences.Defaults);
+        controller.CaptureFullscreen();
+        var editor = Assert.Single(controller.Editors);
+        editor.KeyPress(Key.P, RawInputModifiers.Control, PhysicalKey.P, "p");
+        Assert.Empty(controller.Editors);
+        Assert.Equal(new Tinysnap.Core.Size(800, 600), Assert.Single(controller.Pins).ImageSize);
+    }
+
+    [AvaloniaFact]
+    public void DoubleClickingAPinOpensAnEditor()
+    {
+        var (controller, _) = WithOutput(Tinysnap.Core.Preferences.Defaults);
+        controller.CaptureFullscreen();
+        Assert.Single(controller.Editors).KeyPress(Key.P, RawInputModifiers.Control, PhysicalKey.P, "p");
+        var pin = Assert.Single(controller.Pins);
+        for (var click = 0; click < 2; click++)
+        {
+            pin.MouseDown(new Point(40, 40), MouseButton.Left);
+            pin.MouseUp(new Point(40, 40), MouseButton.Left);
+        }
+        Assert.Equal(1600, Opened(controller).Image.Width);
+    }
+
+    [AvaloniaFact]
+    public async Task QuitAsksAboutEveryEditorWithEdits()
+    {
+        var dialogs = new FakeDialogs(Tinysnap.App.CloseChoice.Cancel);
+        var (controller, _) = WithOutput(Tinysnap.Core.Preferences.Defaults, dialogs);
+        controller.CaptureFullscreen();
+        var edited = Assert.Single(controller.Editors);
+        TestServices.Draw(edited);
+        controller.CaptureFullscreen();
+        Assert.False(await controller.CloseAll());
+        Assert.Equal(1, dialogs.Asked);
+        Assert.Equal(2, controller.Editors.Count);
+
+        dialogs.Answer = Tinysnap.App.CloseChoice.Discard;
+        Assert.True(await controller.CloseAll());
+        Assert.Equal(2, dialogs.Asked);
+        Assert.Empty(controller.Editors);
     }
 }

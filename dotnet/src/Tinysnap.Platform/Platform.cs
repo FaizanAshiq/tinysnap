@@ -55,4 +55,8 @@ public interface IPlatform
     IScreenCapture Screen { get; }
     IHotkeys Hotkeys { get; }
     IClipboard Clipboard { get; }
+
+    /// <summary>True when the person turned animations off, so nothing slides; read each time,
+    /// since it can change while the app runs.</summary>
+    bool ReduceMotion { get; }
 }

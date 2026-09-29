@@ -507,6 +507,22 @@ internal sealed class EditorWindow : Window
         Close();
     }
 
+    /// <summary>Closes for Quit, asking first when there are unsaved edits, in front so the
+    /// question is plainly about this capture. False when the person chose to keep it.</summary>
+    internal async Task<bool> CloseAsking()
+    {
+        Canvas.Session.FinishTyping();
+        Canvas.SessionChanged();
+        if (Canvas.Session.IsUnsaved)
+        {
+            Activate();
+            if (!MayClose(await services.Dialogs.AskToSave(this))) return false;
+        }
+        closingForGood = true;
+        Close();
+        return true;
+    }
+
     private bool MayClose(CloseChoice choice) => choice switch
     {
         CloseChoice.Discard => true,

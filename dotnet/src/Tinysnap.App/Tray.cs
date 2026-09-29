@@ -19,10 +19,17 @@ internal static class Tray
         menu.Add(Item(HotKeyAction.Area.Title(), hotkeys.Area, captures.CaptureArea));
         menu.Add(Item(HotKeyAction.Fullscreen.Title(), hotkeys.Fullscreen, captures.CaptureFullscreen));
         menu.Add(new NativeMenuItemSeparator());
-        menu.Add(Item("Quit Tinysnap", null, () => lifetime.Shutdown()));
+        menu.Add(Item("Quit Tinysnap", null, () => _ = Quit(captures, lifetime)));
         var tray = new TrayIcon { Icon = Icon(), ToolTipText = "Tinysnap", Menu = menu, IsVisible = true };
         TrayIcon.SetIcons(app, [tray]);
         return tray;
+    }
+
+    /// <summary>Quits once every editor has closed, each with edits asking first; Cancel on any
+    /// keeps the app running.</summary>
+    private static async Task Quit(CaptureController captures, IClassicDesktopStyleApplicationLifetime lifetime)
+    {
+        if (await captures.CloseAll()) lifetime.Shutdown();
     }
 
     private static NativeMenuItem Item(string title, HotKeyBinding? binding, Action action)

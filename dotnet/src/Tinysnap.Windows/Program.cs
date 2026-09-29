@@ -9,6 +9,10 @@ internal sealed class WindowsPlatform(IScreenCapture screen, IHotkeys hotkeys, I
     public IScreenCapture Screen { get; } = screen;
     public IHotkeys Hotkeys { get; } = hotkeys;
     public IClipboard Clipboard { get; } = clipboard;
+
+    /// <summary>Settings, Accessibility, Visual effects, Animation effects off.</summary>
+    public bool ReduceMotion =>
+        Native.SystemParametersInfoW(Native.SPI_GETCLIENTAREAANIMATION, 0, out var animate, 0) && !animate;
 }
 
 internal static class Program
