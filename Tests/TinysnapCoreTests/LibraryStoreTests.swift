@@ -35,6 +35,13 @@ struct LibraryStoreTests {
 
     private func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }
 
+    @Test func aFractionalScaleComesBackFromThePNG() throws {
+        // A Windows display at 150% writes 108 DPI. Rounded to a whole number it read as 2.
+        let library = try store()
+        let entry = try library.add(Fixture.capture(width: 30, height: 20, scale: 1.5), captured: captured, timeZone: utc)
+        #expect(LibraryStore.readImage(entry.originalURL)?.scale == 1.5)
+    }
+
     @Test func anEntryReopensWithItsSizeAndItsImageIsDrawnAtIt() throws {
         let library = try store()
         let entry = try library.add(Fixture.capture(width: 40, height: 30, scale: 2), captured: captured, timeZone: utc)

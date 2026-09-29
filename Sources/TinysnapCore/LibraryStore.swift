@@ -193,6 +193,8 @@ public struct LibraryStore: Sendable {
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
         let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
         let dpi = (properties?[kCGImagePropertyDPIWidth] as? NSNumber)?.doubleValue ?? 72
-        return (image, max(1, CGFloat(dpi / 72).rounded()))
+        // Kept to two decimals rather than whole numbers, so a 150% Windows display's 108 DPI
+        // reads 1.5, not 2.
+        return (image, max(1, (CGFloat(dpi / 72) * 100).rounded() / 100))
     }
 }
