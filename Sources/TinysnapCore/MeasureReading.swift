@@ -10,7 +10,8 @@ public struct MeasureSettings: Equatable, Sendable {
     public var edgeContrast: Double
     public var guideSeen: Bool
 
-    /// Caliper's default edge contrast, so the two agree.
+    /// An 8% step in brightness. A fainter edge, such as a card a shade off its page, needs
+    /// the contrast lowered by hand.
     public static let defaults = MeasureSettings(across: true, down: false, edgeContrast: 0.08, guideSeen: false)
     public static let contrastRange: ClosedRange<Double> = 0.01...0.9
 

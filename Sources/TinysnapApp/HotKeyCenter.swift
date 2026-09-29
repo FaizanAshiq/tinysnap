@@ -6,7 +6,7 @@ import TinysnapCore
 /// Accessibility permission.
 ///
 /// One handler serves every hotkey and dispatches on the id Carbon hands back. A handler
-/// per hotkey, the way Caliper does it for its single one, breaks with several: every
+/// per hotkey, which is enough for a single one, breaks with several: every
 /// handler hears every press, and the first to answer swallows it, so one hotkey would
 /// fire another's action.
 @MainActor
