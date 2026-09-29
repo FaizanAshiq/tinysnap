@@ -1,0 +1,506 @@
+namespace Tinysnap.Core;
+
+/// <summary>Named for the Mac's keys. The Windows app maps Alt to <c>Option</c> and Ctrl to
+/// <c>Command</c>.</summary>
+[Flags]
+public enum Modifiers
+{
+    None = 0,
+    /// <summary>Squares boxes and snaps lines to 45 degrees.</summary>
+    Shift = 1,
+    /// <summary>Draws boxes out from where the drag began, as their centre.</summary>
+    Option = 2,
+    /// <summary>Held while drawing: moves the shape being drawn instead of resizing it.</summary>
+    Space = 4,
+    /// <summary>Held with any tool: picks up what is already applied, the way Photoshop's
+    /// Command gives the move tool for as long as it is held.</summary>
+    Command = 8,
+}
+
+public enum EscapeResult { FinishedTyping, Deselected, Close }
+
+/// <summary>What the pointer is doing to the document, if anything.</summary>
+public abstract record EditorPhase
+{
+    private EditorPhase() { }
+
+    public static readonly EditorPhase Idle = new IdlePhase();
+
+    public sealed record IdlePhase : EditorPhase;
+    public sealed record Drawing(Guid Id, Point Anchor, Point Last) : EditorPhase;
+    public sealed record Moving(Guid Id, Point Last) : EditorPhase;
+    public sealed record Resizing(Annotation Original, Handle Handle) : EditorPhase;
+    public sealed record Cropping(Rect Original, Handle Handle, Point Last) : EditorPhase;
+    public sealed record Typing(Guid Id) : EditorPhase;
+}
+
+/// <summary>Everything the editor does with the pointer and the keyboard, with no UI
+/// framework in it. The canvas view turns events into these calls and draws <c>Display</c>.</summary>
+public sealed class EditorSession
+{
+    private readonly Dictionary<Tool, Style> styles;
+
+    public EditHistory History { get; }
+
+    /// <summary>What the canvas draws: the committed document, or the one a gesture is changing.</summary>
+    public Document Display { get; private set; }
+
+    public Tool Tool { get; private set; }
+    public Guid? Selection { get; private set; }
+    public EditorPhase Phase { get; private set; } = EditorPhase.Idle;
+
+    /// <summary>The last style used with each tool, so each one remembers its own.</summary>
+    public IReadOnlyDictionary<Tool, Style> Styles => styles;
+
+    /// <summary>One colour for every tool: the last one picked, with whichever tool. Sizes and
+    /// box shapes stay each tool's own.</summary>
+    public string ColorHex { get; private set; }
+
+    public EditorSession(Document document, Tool tool = Tool.Arrow, IReadOnlyDictionary<Tool, Style>? styles = null,
+                         string colorHex = Palette.Red)
+    {
+        History = new EditHistory(document);
+        Display = document;
+        Tool = tool;
+        this.styles = styles is null ? [] : new Dictionary<Tool, Style>(styles);
+        ColorHex = colorHex;
+    }
+
+    public double Scale => Display.Scale;
+    public bool IsUnsaved => History.IsUnsaved;
+
+    public Annotation? SelectedAnnotation => Selection is { } id ? Display.Annotation(id) : null;
+
+    /// <summary>The annotation whose text is being typed, which the canvas hides while its
+    /// text field is showing.</summary>
+    public Guid? TypingId => Phase is EditorPhase.Typing typing ? typing.Id : null;
+
+    private bool IsIdle => Phase is EditorPhase.IdlePhase;
+
+    public Style StyleFor(Tool tool) =>
+        (styles.TryGetValue(tool, out var style) ? style : tool.DefaultStyle()) with { ColorHex = ColorHex };
+
+    // Tools and styles
+
+    /// <summary>Picking another tool lets go of the selection, so the next drag draws.</summary>
+    public void Choose(Tool tool)
+    {
+        FinishTyping();
+        if (tool != Tool || tool == Tool.Crop) Selection = null;
+        Tool = tool;
+    }
+
+    /// <summary>What is under <paramref name="point"/>, for the hover border that shows what
+    /// is applied where, with any tool: the annotation itself, or its border, which a filled
+    /// box does not cover. Nothing while the crop tool is out, which only moves the crop.</summary>
+    public Guid? Hovered(Point point, double reach = 0)
+    {
+        if (!IsIdle || Tool == Tool.Crop) return null;
+        return Display.Topmost(point) ?? Display.BorderHit(point, reach);
+    }
+
+    /// <summary>Changes part of the style: the selection's, or the next annotation's when
+    /// nothing is selected. Either way the tool remembers it.
+    ///
+    /// Only the part <paramref name="change"/> touches moves. Applying a whole style copied
+    /// when the popover opened turned a large filled box into a small outline when only its
+    /// colour was picked. <paramref name="merging"/> is for the colour panel, whose stream of
+    /// changes to one annotation undoes as one step.</summary>
+    public void Restyle(Func<Style, Style> change, bool merging = false)
+    {
+        if (Selection is not { } id || Display.Annotation(id) is not { } annotation)
+        {
+            var style = change(StyleFor(Tool));
+            styles[Tool] = style;
+            ColorHex = style.ColorHex;
+            return;
+        }
+        var before = annotation.Style.ColorHex;
+        annotation = annotation with { Style = change(annotation.Style) };
+        styles[annotation.Tool] = annotation.Style;
+        // Only a colour that was picked becomes the shared one. Stepping an old red
+        // annotation's size leaves a blue shared colour alone.
+        if (annotation.Style.ColorHex != before) ColorHex = annotation.Style.ColorHex;
+        Display = Display.Replacing(annotation);
+        // A text still being typed is committed when typing ends, as one step.
+        if (TypingId is null) History.Commit(Display, merging ? $"style {id}" : null);
+    }
+
+    // Measure
+
+    /// <summary>The Measure tool's live reading, kept: one measurement a line, in one undo
+    /// step, and none of them selected, so the next click measures again.</summary>
+    public void Keep(IReadOnlyList<MeasureLine> lines)
+    {
+        if (lines.Count == 0) return;
+        var style = StyleFor(Tool.Measure);
+        var width = Tool.Measure.Points(style.Size) ?? 2;
+        var kept = MeasureShape.ClearTags(lines, width, Display.Scale)
+            .Select(line => Annotation.New(new AnnotationKind.Measure(line.From, line.To), style, line.LabelAt));
+        Display = Display with { Annotations = Display.Annotations.AddRange(kept) };
+        History.Commit(Display);
+        Selection = null;
+    }
+
+    // Backdrop
+
+    /// <summary>Sets or clears the backdrop as one undoable step. <paramref name="merging"/>
+    /// is for the colour panel's stream of changes, which undoes as one.</summary>
+    public void SetBackdrop(Backdrop? backdrop, bool merging = false)
+    {
+        Display = Display with { Backdrop = backdrop };
+        History.Commit(Display, merging ? "backdrop" : null);
+    }
+
+    // Size
+
+    /// <summary>Sets the export size as one undoable step, held to the limits. Null follows
+    /// the Export setting again.</summary>
+    public void SetResize(double? resize)
+    {
+        Display = Display with { Resize = resize is { } value ? Display.ClampedResize(value) : null };
+        History.Commit(Display);
+    }
+
+    // Magnifier
+
+    /// <summary>The topmost magnifier under <paramref name="point"/>, which the scroll wheel zooms.</summary>
+    public Guid? Magnifier(Point point) =>
+        Display.Annotations.LastOrDefault(a => a.Kind is AnnotationKind.Magnifier && a.Contains(point, Scale))?.Id;
+
+    /// <summary>Zooms a magnifier half a step per scroll step, from 1.5x to 4x. A run of
+    /// scroll steps on one lens undoes as one step.</summary>
+    public void ZoomMagnifier(Guid id, int steps)
+    {
+        if (!IsIdle || Display.Annotation(id) is not { Kind: AnnotationKind.Magnifier(var center, var radius, var zoom) } lens)
+            return;
+        var zoomed = Math.Min(Math.Max(zoom + 0.5 * steps, 1.5), 4);
+        Display = Display.Replacing(lens with { Kind = new AnnotationKind.Magnifier(center, radius, zoomed) });
+        History.Commit(Display, $"zoom {id}");
+    }
+
+    // Pointer
+
+    /// <summary><paramref name="reach"/> is how close, in capture pixels, a click must land to
+    /// grab a handle.</summary>
+    public void PointerDown(Point point, Modifiers modifiers = Modifiers.None, int clickCount = 1, double reach = 0)
+    {
+        // Clicking away ends typing, and that click does nothing else.
+        if (TypingId is not null)
+        {
+            FinishTyping();
+            return;
+        }
+
+        if (Tool == Tool.Crop)
+        {
+            var rect = Display.OutputRect;
+            Phase = HandleNear(point, rect.HandlePoints, reach) is { } cropHandle
+                ? new EditorPhase.Cropping(rect, cropHandle, point)
+                : new EditorPhase.Cropping(new Rect(point, Size.Zero), Handle.BottomRight, point);
+            return;
+        }
+
+        if (SelectedAnnotation is { } selected && HandleNear(point, selected.Handles(Scale), reach) is { } handle)
+        {
+            Phase = new EditorPhase.Resizing(selected, handle);
+            return;
+        }
+
+        if (clickCount >= 2 && Display.Topmost(point) is { } doubleClicked
+            && Display.Annotation(doubleClicked)?.Kind is AnnotationKind.Text)
+        {
+            Selection = doubleClicked;
+            Phase = new EditorPhase.Typing(doubleClicked);
+            return;
+        }
+
+        // The select tool, or Command held with any other, picks up what is applied.
+        if (Tool is Tool.Select or Tool.Image || modifiers.HasFlag(Modifiers.Command))
+        {
+            Selection = Display.Topmost(point);
+            Phase = Selection is { } picked ? new EditorPhase.Moving(picked, point) : EditorPhase.Idle;
+            return;
+        }
+
+        // With the text tool, clicking existing text edits it rather than starting a new one
+        // on top.
+        if (Tool == Tool.Text && Display.Topmost(point) is { } text && Display.Annotation(text)?.Kind is AnnotationKind.Text)
+        {
+            Selection = text;
+            Phase = new EditorPhase.Typing(text);
+            return;
+        }
+
+        // The selection is picked up anywhere on it, so a box just drawn moves at once.
+        if (Selection is { } id && Display.Annotation(id)?.Contains(point, Scale) == true)
+        {
+            Phase = new EditorPhase.Moving(id, point);
+            return;
+        }
+
+        // A click on an annotation, or on its hover border, picks it up with any tool,
+        // Command or not. The empty middle of an outline, or of a spotlight, still draws.
+        if (Display.PickUp(point, reach) is { } under)
+        {
+            Selection = under;
+            Phase = new EditorPhase.Moving(under, point);
+            return;
+        }
+
+        StartDrawing(point);
+    }
+
+    /// <summary>Held keys work the way they do in Photoshop while a shape is drawn: Shift
+    /// constrains, Option draws a box from its centre, and Space moves the whole shape, after
+    /// which the drag carries on resizing from the new place.</summary>
+    public void PointerDragged(Point point, Modifiers modifiers = Modifiers.None)
+    {
+        var constrained = modifiers.HasFlag(Modifiers.Shift);
+        Vector Delta(Point last) => new(point.X - last.X, point.Y - last.Y);
+        switch (Phase)
+        {
+            case EditorPhase.Drawing(var id, var anchor, var last):
+            {
+                if (Display.Annotation(id) is not { } annotation) return;
+                if (modifiers.HasFlag(Modifiers.Space))
+                {
+                    var move = Delta(last);
+                    Display = Display.Replacing(annotation.Moved(move));
+                    Phase = new EditorPhase.Drawing(id, anchor.Offset(move), point);
+                    return;
+                }
+                var kind = Drawn(annotation.Kind, anchor, point, constrained, modifiers.HasFlag(Modifiers.Option));
+                Display = Display.Replacing(annotation with { Kind = kind });
+                Phase = new EditorPhase.Drawing(id, anchor, point);
+                break;
+            }
+            case EditorPhase.Moving(var id, var last):
+            {
+                if (Display.Annotation(id) is not { } annotation) return;
+                Display = Display.Replacing(annotation.Moved(Delta(last)));
+                Phase = new EditorPhase.Moving(id, point);
+                break;
+            }
+            case EditorPhase.Resizing(var original, var handle):
+                Display = Display.Replacing(original.Resized(handle, point, constrained));
+                break;
+            case EditorPhase.Cropping(var original, var handle, var last):
+            {
+                // The whole canvas, grown part included, can be cropped.
+                var bounds = Display.Extent;
+                if (modifiers.HasFlag(Modifiers.Space))
+                {
+                    // Moved as a whole, and stopped at the capture's edge rather than shrunk.
+                    var output = Display.OutputRect;
+                    var move = output.AllowedMove(Delta(last), bounds);
+                    Display = Display with { Crop = output.Offset(move.Dx, move.Dy) };
+                    Phase = new EditorPhase.Cropping(original.Offset(move.Dx, move.Dy), handle, last.Offset(move));
+                    return;
+                }
+                // A new crop, drawn from nothing, follows the same keys as a box. Dragging an
+                // existing crop's handle only takes Shift.
+                var isNew = original.Size == Size.Zero;
+                var rect = (isNew
+                        ? Rect.Dragged(original.Origin, point, constrained, modifiers.HasFlag(Modifiers.Option))
+                        : original.Resized(handle, point, constrained))
+                    .Intersection(bounds).WholePixels;
+                if (rect.Width >= 1 && rect.Height >= 1) Display = Display with { Crop = rect };
+                Phase = new EditorPhase.Cropping(original, handle, point);
+                break;
+            }
+        }
+    }
+
+    public void PointerUp()
+    {
+        switch (Phase)
+        {
+            case EditorPhase.Drawing(var id, _, _):
+                Phase = EditorPhase.Idle;
+                if (Display.Annotation(id) is not { } annotation) return;
+                if (annotation.IsDegenerate(Scale))
+                {
+                    Display = Display.Removing(id);
+                    Selection = null;
+                    return;
+                }
+                History.Commit(Display);
+                Selection = id;
+                break;
+            case EditorPhase.Moving or EditorPhase.Resizing or EditorPhase.Cropping:
+                Phase = EditorPhase.Idle;
+                History.Commit(Display);
+                break;
+        }
+    }
+
+    private void StartDrawing(Point point)
+    {
+        var zero = new Rect(point, Size.Zero);
+        AnnotationKind kind;
+        switch (Tool)
+        {
+            case Tool.Arrow: kind = new AnnotationKind.Arrow(point, point); break;
+            case Tool.Line: kind = new AnnotationKind.Line(point, point); break;
+            case Tool.Highlighter: kind = new AnnotationKind.Highlighter(point, point); break;
+            case Tool.Rectangle: kind = new AnnotationKind.Rectangle(zero); break;
+            case Tool.Oval: kind = new AnnotationKind.Oval(zero); break;
+            case Tool.Spotlight: kind = new AnnotationKind.Spotlight(zero); break;
+            case Tool.Blur: kind = new AnnotationKind.Blur(zero); break;
+            case Tool.Pixelate: kind = new AnnotationKind.Pixelate(zero); break;
+            case Tool.Erase: kind = new AnnotationKind.Erase(zero); break;
+            case Tool.Freehand: kind = new AnnotationKind.Freehand([point]); break;
+            case Tool.Step: kind = new AnnotationKind.Step(point); break;
+            case Tool.Magnifier: kind = new AnnotationKind.Magnifier(point, ToolInfo.MagnifierRadiusPoints * Scale, 2); break;
+            case Tool.Text: kind = new AnnotationKind.Text(point, ""); break;
+            case Tool.Measure:
+                // Nothing to drag out. A click that picks nothing up lets go of the selection,
+                // and the canvas keeps its live reading.
+                Selection = null;
+                return;
+            default:
+                // Select, image and crop draw nothing.
+                return;
+        }
+
+        var annotation = Annotation.New(kind, StyleFor(Tool));
+        Display = Display with { Annotations = Display.Annotations.Add(annotation) };
+        Selection = annotation.Id;
+        Phase = Tool == Tool.Text
+            ? new EditorPhase.Typing(annotation.Id)
+            : new EditorPhase.Drawing(annotation.Id, point, point);
+    }
+
+    /// <summary><paramref name="fromCentre"/> applies to boxes only: Photoshop's line tool
+    /// does not centre either.</summary>
+    private static AnnotationKind Drawn(AnnotationKind kind, Point anchor, Point point, bool constrained, bool fromCentre)
+    {
+        var end = constrained ? point.Snapped45(anchor) : point;
+        var box = Rect.Dragged(anchor, point, constrained, fromCentre);
+        return kind switch
+        {
+            AnnotationKind.Arrow => new AnnotationKind.Arrow(anchor, end),
+            AnnotationKind.Line => new AnnotationKind.Line(anchor, end),
+            AnnotationKind.Highlighter => new AnnotationKind.Highlighter(anchor, end),
+            AnnotationKind.Measure => new AnnotationKind.Measure(anchor, end),
+            AnnotationKind.Rectangle => new AnnotationKind.Rectangle(box),
+            AnnotationKind.Oval => new AnnotationKind.Oval(box),
+            AnnotationKind.Spotlight => new AnnotationKind.Spotlight(box),
+            AnnotationKind.Blur => new AnnotationKind.Blur(box),
+            AnnotationKind.Pixelate => new AnnotationKind.Pixelate(box),
+            AnnotationKind.Erase => new AnnotationKind.Erase(box),
+            AnnotationKind.Freehand(var points) => points.IsEmpty || points[^1].Distance(point) < 1
+                ? kind
+                : new AnnotationKind.Freehand(points.Add(point)),
+            AnnotationKind.Step => new AnnotationKind.Step(point),
+            AnnotationKind.Magnifier(_, var radius, var zoom) => new AnnotationKind.Magnifier(point, radius, zoom),
+            _ => kind,
+        };
+    }
+
+    private static Handle? HandleNear(Point point, IReadOnlyList<(Handle Handle, Point Point)> handles, double reach) =>
+        handles
+            .Select(h => (h.Handle, Distance: h.Point.Distance(point)))
+            .Where(h => h.Distance <= reach)
+            .OrderBy(h => h.Distance)
+            .Select(h => (Handle?)h.Handle)
+            .FirstOrDefault();
+
+    // Text
+
+    public void UpdateTyping(string text)
+    {
+        if (TypingId is not { } id || Display.Annotation(id) is not { Kind: AnnotationKind.Text(var origin, _) } annotation)
+            return;
+        Display = Display.Replacing(annotation with { Kind = new AnnotationKind.Text(origin, text) });
+    }
+
+    /// <summary>Ends typing. Text left empty is removed: a new one leaves no trace in undo, an
+    /// existing one emptied out is an ordinary, undoable delete.</summary>
+    public void FinishTyping()
+    {
+        if (TypingId is not { } id) return;
+        Phase = EditorPhase.Idle;
+        if (Display.Annotation(id)?.IsDegenerate(Scale) == true)
+        {
+            Display = Display.Removing(id);
+            Selection = null;
+        }
+        History.Commit(Display);
+    }
+
+    // Keyboard
+
+    public void DeleteSelection()
+    {
+        if (!IsIdle || Selection is not { } id) return;
+        Display = Display.Removing(id);
+        Selection = null;
+        History.Commit(Display);
+    }
+
+    public void Nudge(double dx, double dy)
+    {
+        if (!IsIdle || SelectedAnnotation is not { } annotation) return;
+        Display = Display.Replacing(annotation.Moved(new Vector(dx, dy)));
+        History.Commit(Display);
+    }
+
+    public EscapeResult Escape()
+    {
+        if (TypingId is not null)
+        {
+            FinishTyping();
+            return EscapeResult.FinishedTyping;
+        }
+        if (Selection is not null)
+        {
+            Selection = null;
+            return EscapeResult.Deselected;
+        }
+        return EscapeResult.Close;
+    }
+
+    public void Undo()
+    {
+        if (!IsIdle) return;
+        History.Undo();
+        Display = History.Document;
+        if (Selection is { } id && Display.Annotation(id) is null) Selection = null;
+    }
+
+    public void Redo()
+    {
+        if (!IsIdle) return;
+        History.Redo();
+        Display = History.Document;
+        if (Selection is { } id && Display.Annotation(id) is null) Selection = null;
+    }
+
+    // Images
+
+    /// <summary>Adds a pasted or dropped image, centred at its own point size and scaled down
+    /// to fit the capture if it is larger. It is then selected, and the tool in hand stays: a
+    /// selection moves under any tool.</summary>
+    public void Insert(PastedImage image, Size pointSize)
+    {
+        if (pointSize.Width <= 0 || pointSize.Height <= 0) return;
+        FinishTyping();
+        var bounds = Display.Capture.Bounds;
+        var natural = new Size(pointSize.Width * Scale, pointSize.Height * Scale);
+        var fit = Math.Min(1, Math.Min(bounds.Width / natural.Width, bounds.Height / natural.Height));
+        var size = new Size(natural.Width * fit, natural.Height * fit);
+        var rect = new Rect(bounds.MidX - size.Width / 2, bounds.MidY - size.Height / 2, size.Width, size.Height);
+
+        // Corners carry over from the last image; see-through and difference do not, so a new
+        // paste is never a faint or inverted surprise.
+        var style = StyleFor(Tool.Image) with { Opacity = 1, Difference = false };
+        var annotation = Annotation.New(new AnnotationKind.Image(rect, image), style);
+        Display = Display with { Annotations = Display.Annotations.Add(annotation) };
+        History.Commit(Display);
+        Selection = annotation.Id;
+    }
+
+    public void MarkSaved() => History.MarkSaved();
+}

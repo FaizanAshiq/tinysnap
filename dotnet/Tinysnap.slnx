@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Tinysnap.Core/Tinysnap.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Tinysnap.Core.Tests/Tinysnap.Core.Tests.csproj" />
+  </Folder>
+</Solution>
