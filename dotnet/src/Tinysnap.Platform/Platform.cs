@@ -50,8 +50,29 @@ public interface IClipboard
     uint ChangeCount { get; }
 }
 
+public interface IFileActions
+{
+    /// <summary>To the Recycle Bin rather than gone, so a slip of the Delete key can be undone.
+    /// False when it could not be moved.</summary>
+    bool MoveToRecycleBin(string path);
+
+    /// <summary>The file manager on the folder holding <paramref name="path"/>, with it selected.</summary>
+    void Reveal(string path);
+}
+
+public interface IStartup
+{
+    /// <summary>Asked of the system each time, so it never disagrees with the system's own list.</summary>
+    bool IsEnabled { get; }
+
+    /// <summary>False when the system refused the change.</summary>
+    bool SetEnabled(bool enabled);
+}
+
 public interface IPlatform
 {
+    IFileActions Files { get; }
+    IStartup Startup { get; }
     IScreenCapture Screen { get; }
     IHotkeys Hotkeys { get; }
     IClipboard Clipboard { get; }

@@ -40,6 +40,41 @@ public sealed class FakeClipboard : IClipboard
     }
 }
 
+/// <summary>A recycle bin of its own in the temporary folder, so neither the tests nor the
+/// development build ever fill the real one, and a record of what was revealed.</summary>
+public sealed class FakeFiles : IFileActions
+{
+    public static string Bin => Path.Combine(Path.GetTempPath(), "tinysnap-recycle-bin");
+
+    public List<string> Recycled { get; } = [];
+
+    public List<string> Revealed { get; } = [];
+
+    public bool MoveToRecycleBin(string path)
+    {
+        if (!Directory.Exists(path) && !File.Exists(path)) return false;
+        Directory.CreateDirectory(Bin);
+        var target = Path.Combine(Bin, $"{Path.GetFileName(path)} {Guid.NewGuid():N}");
+        if (Directory.Exists(path)) Directory.Move(path, target);
+        else File.Move(path, target);
+        Recycled.Add(path);
+        return true;
+    }
+
+    public void Reveal(string path) => Revealed.Add(path);
+}
+
+public sealed class FakeStartup : IStartup
+{
+    public bool IsEnabled { get; private set; }
+
+    public bool SetEnabled(bool enabled)
+    {
+        IsEnabled = enabled;
+        return true;
+    }
+}
+
 /// <summary>The fake screens and clipboard with no global hotkeys: the development launcher's
 /// buttons stand in for them.</summary>
 public sealed class FakePlatform(IScreenCapture screen) : IPlatform
@@ -53,6 +88,10 @@ public sealed class FakePlatform(IScreenCapture screen) : IPlatform
     public IClipboard Clipboard { get; } = new FakeClipboard();
 
     public bool ReduceMotion => false;
+
+    public IFileActions Files { get; } = new FakeFiles();
+
+    public IStartup Startup { get; } = new FakeStartup();
 
     private sealed class NoHotkeys : IHotkeys
     {

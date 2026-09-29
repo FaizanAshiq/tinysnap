@@ -9,6 +9,8 @@ internal sealed class WindowsPlatform(IScreenCapture screen, IHotkeys hotkeys, I
     public IScreenCapture Screen { get; } = screen;
     public IHotkeys Hotkeys { get; } = hotkeys;
     public IClipboard Clipboard { get; } = clipboard;
+    public IFileActions Files { get; } = new Win32Files();
+    public IStartup Startup { get; } = new Win32Startup();
 
     /// <summary>Settings, Accessibility, Visual effects, Animation effects off.</summary>
     public bool ReduceMotion =>
