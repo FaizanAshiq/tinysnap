@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tinysnap.Core\Tinysnap.Core.csproj" />
+  </ItemGroup>
+
+</Project>

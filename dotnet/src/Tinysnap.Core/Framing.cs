@@ -12,8 +12,18 @@ public static partial class Renderer
     public static SKImage? RenderOutput(Document document, double outputScale = 1, IReadOnlySet<Guid>? hidden = null)
     {
         if (OutputCut(document, outputScale) is not { } cut) return null;
-        using var full = Render(document, document.Extent, outputScale, hidden);
-        return full?.Subset(cut.ToSKRectI());
+        var full = Render(document, document.Extent, outputScale, hidden);
+        return full is null ? null : Cut(full, cut);
+    }
+
+    /// <summary>The part of <paramref name="image"/> under <paramref name="cut"/>, with the image
+    /// itself disposed unless it is the part: a cut the size of the whole image hands back the
+    /// same object, and disposing it left the caller a dead image.</summary>
+    internal static SKImage? Cut(SKImage image, Rect cut)
+    {
+        var part = image.Subset(cut.ToSKRectI());
+        if (!ReferenceEquals(part, image)) image.Dispose();
+        return part;
     }
 
     /// <summary>Where the output is cut from a render of the whole extent, on whole output
@@ -84,9 +94,9 @@ public static partial class Renderer
 
     private static SKPath RoundedBox(FramePlacement place)
     {
-        using var builder = new SKPathBuilder();
-        builder.AddRoundRect(place.Box.ToSK(), (float)place.Corner, (float)place.Corner, SKPathDirection.Clockwise);
-        return builder.Detach();
+        var path = new SKPath();
+        path.AddRoundRect(place.Box.ToSK(), (float)place.Corner, (float)place.Corner, SKPathDirection.Clockwise);
+        return path;
     }
 
     /// <summary>The fill over everything, then the shadow <paramref name="caster"/> throws under

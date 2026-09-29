@@ -1,5 +1,7 @@
 .build/
 .swiftpm/
 *.app
+# The Windows app's project folder, which *.app matches on a case-insensitive file system.
+!dotnet/src/Tinysnap.App/
 dist/
 .DS_Store
