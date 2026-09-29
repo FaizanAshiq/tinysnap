@@ -1,7 +1,18 @@
+using System.Globalization;
+
 namespace Tinysnap.Core.Tests;
 
 public class GeometryTests
 {
+    /// <summary>A rect is printed by every failed assertion on one, so printing it must not
+    /// follow Standardized, which is itself a rect, forever.</summary>
+    [Fact]
+    public void ARectPrintsItsFourNumbers()
+    {
+        Assert.Equal("Rect { X = 1, Y = 2, Width = -3, Height = 4 }",
+                     new Rect(1, 2, -3, 4).ToString().Replace(CultureInfo.CurrentCulture.NumberFormat.NegativeSign, "-"));
+    }
+
     [Fact]
     public void SnapsToTheNearestAxisExactly()
     {
