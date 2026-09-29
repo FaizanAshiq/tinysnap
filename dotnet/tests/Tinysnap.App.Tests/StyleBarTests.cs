@@ -16,7 +16,7 @@ public class StyleBarTests
     private static EditorWindow WithShape(Tool tool)
     {
         var session = new EditorSession(new Document(CanvasHost.Blank(400, 300)), tool);
-        var editor = new EditorWindow(session, DateTimeOffset.Now);
+        var editor = new EditorWindow(session, DateTimeOffset.Now, TestServices.Make());
         editor.Show();
         // The editor sizes itself as it opens, which moves the canvas.
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
@@ -39,7 +39,7 @@ public class StyleBarTests
     public void TheStyleBarShowsOnlyWhatTheToolHas()
     {
         var session = new EditorSession(new Document(CanvasHost.Blank(400, 300)), Tool.Arrow);
-        var editor = new EditorWindow(session, DateTimeOffset.Now);
+        var editor = new EditorWindow(session, DateTimeOffset.Now, TestServices.Make());
         editor.Show();
         var bar = editor.StyleBar;
         Assert.True(bar.IsVisible);

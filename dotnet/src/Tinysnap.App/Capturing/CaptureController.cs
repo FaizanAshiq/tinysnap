@@ -13,6 +13,7 @@ namespace Tinysnap.App.Capturing;
 public sealed class CaptureController(IPlatform platform, Func<Preferences> preferences)
 {
     private readonly List<EditorWindow> editors = [];
+    private readonly EditorServices services = new(platform.Clipboard, preferences, new AvaloniaDialogs());
 
     internal AreaOverlay? Overlay { get; private set; }
 
@@ -92,7 +93,7 @@ public sealed class CaptureController(IPlatform platform, Func<Preferences> pref
     {
         var remembered = preferences();
         var session = new EditorSession(new Document(capture), styles: remembered.Styles, colorHex: remembered.ColorHex);
-        var editor = new EditorWindow(session, DateTimeOffset.Now,
+        var editor = new EditorWindow(session, DateTimeOffset.Now, services,
                                       new PixelRect((int)around.X, (int)around.Y, (int)around.Width, (int)around.Height));
         editors.Add(editor);
         editor.Closed += (_, _) => editors.Remove(editor);
