@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -23,9 +24,12 @@ public static class Json
     public static double? Number(JsonObject o, string key) => Number(o[key]);
 
     /// <summary>Null for anything but a finite number. .NET reads 1e400 as infinity, which the
-    /// Mac's decoder refuses, and one infinite value breaks every sum it reaches.</summary>
+    /// Mac's decoder refuses, and one infinite value breaks every sum it reaches. Read from the
+    /// number's text, so a node built in memory from an int or a uint reads as well as a parsed
+    /// one; asked for a double, those gave nothing.</summary>
     public static double? Number(JsonNode? node) =>
-        node is JsonValue v && v.GetValueKind() == JsonValueKind.Number && v.TryGetValue<double>(out var d)
+        node is JsonValue v && v.GetValueKind() == JsonValueKind.Number
+        && double.TryParse(v.ToJsonString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var d)
         && double.IsFinite(d) ? d : null;
 
     public static int? Integer(JsonObject o, string key) =>

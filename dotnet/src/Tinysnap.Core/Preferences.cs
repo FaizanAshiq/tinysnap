@@ -15,12 +15,21 @@ public sealed record HotKeyBinding(uint KeyCode, ImmutableArray<ModifierKey> Mod
     private static readonly (ModifierKey Key, string Name)[] SystemOrder =
         [(ModifierKey.Control, "Ctrl"), (ModifierKey.Alt, "Alt"), (ModifierKey.Shift, "Shift"), (ModifierKey.Windows, "Win")];
 
+    private readonly ImmutableArray<ModifierKey> modifiers = Modifiers.IsDefault ? [] : Modifiers;
+
+    /// <summary>Never a default array, however the binding was made.</summary>
+    public ImmutableArray<ModifierKey> Modifiers
+    {
+        get => modifiers;
+        init => modifiers = value.IsDefault ? [] : value;
+    }
+
     public bool Equals(HotKeyBinding? other) =>
         other is not null && KeyCode == other.KeyCode && Mask == other.Mask;
 
     public override int GetHashCode() => HashCode.Combine(KeyCode, Mask);
 
-    private int Mask => Modifiers.IsDefault ? 0 : Modifiers.Aggregate(0, (mask, key) => mask | 1 << (int)key);
+    private int Mask => Modifiers.Aggregate(0, (mask, key) => mask | 1 << (int)key);
 
     /// <summary>The binding written the way Windows prints it in a menu, for example
     /// <c>Ctrl+Shift+2</c>, with the modifiers in the system order however they were stored.</summary>

@@ -111,7 +111,12 @@ public struct LibraryStore: Sendable {
     public func open(_ entry: LibraryEntry) -> OpenedEntry? {
         if let original = Self.readImage(entry.originalURL),
            let json = try? Data(contentsOf: entry.editsURL),
-           let edits = try? DocumentArchive.decode(json, image: { Self.readImage(entry.folder.appendingPathComponent($0))?.image }) {
+           let edits = try? DocumentArchive.decode(json, image: { name in
+               // Only a file in the entry's own folder: a name read from edits.json with a path
+               // in it could reach a picture anywhere on disk.
+               guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.contains("\\") else { return nil }
+               return Self.readImage(entry.folder.appendingPathComponent(name))?.image
+           }) {
             let capture = Capture(image: original.image, scale: edits.scale)
             var document = Document(capture: capture, crop: edits.crop, annotations: edits.annotations, backdrop: edits.backdrop)
             // Held to the limits the Size panel holds it to, whatever the file asks for.

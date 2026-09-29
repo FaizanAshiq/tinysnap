@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using SkiaSharp;
 using SkiaSharp.HarfBuzz;
@@ -42,7 +43,7 @@ public static class TextLayout
     /// whatever face the system matches to the character, which is how emoji and scripts the
     /// UI font lacks still draw instead of showing boxes. Joiners, variation selectors and
     /// combining marks stay with the run before them.</summary>
-    private static List<(string Text, SKFont Font)> Runs(string line, SKFont primary)
+    internal static List<(string Text, SKFont Font)> Runs(string line, SKFont primary)
     {
         var runs = new List<(string, SKFont)>();
         var start = 0;
@@ -55,8 +56,10 @@ public static class TextLayout
             SKFont font;
             if (current is not null && Joins(codepoint)) font = current;
             else if (primary.ContainsGlyph(codepoint)) font = primary;
+            // Staying in the run's own fallback face spares asking the system for every letter.
+            else if (current is not null && !ReferenceEquals(current, primary) && current.ContainsGlyph(codepoint)) font = current;
             else font = Fallback(codepoint, primary) ?? primary;
-            if (current is not null && !ReferenceEquals(font.Typeface, current.Typeface))
+            if (current is not null && !ReferenceEquals(font, current))
             {
                 runs.Add((line[start..index], current));
                 start = index;
@@ -72,10 +75,17 @@ public static class TextLayout
         codepoint is 0x200D or (>= 0xFE00 and <= 0xFE0F) or (>= 0x1F3FB and <= 0x1F3FF)
         || CharUnicodeInfo.GetUnicodeCategory(codepoint) is UnicodeCategory.NonSpacingMark or UnicodeCategory.EnclosingMark;
 
-    private static SKFont? Fallback(int codepoint, SKFont primary) =>
-        SKFontManager.Default.MatchCharacter(null, primary.Typeface.FontStyle, null, codepoint) is { } face
-            ? new SKFont(face, primary.Size) { Subpixel = true, Edging = SKFontEdging.Antialias }
-            : null;
+    /// <summary>One font per face and size, kept for the life of the app. Sizes come from the
+    /// tools' fixed size tables, so there are only ever a few.</summary>
+    private static readonly ConcurrentDictionary<(string Family, int Weight, int Width, SKFontStyleSlant Slant, float Size), SKFont>
+        FallbackFonts = new();
+
+    private static SKFont? Fallback(int codepoint, SKFont primary)
+    {
+        if (SKFontManager.Default.MatchCharacter(null, primary.Typeface.FontStyle, null, codepoint) is not { } face) return null;
+        var key = (face.FamilyName, face.FontWeight, face.FontWidth, face.FontSlant, primary.Size);
+        return FallbackFonts.GetOrAdd(key, _ => new SKFont(face, primary.Size) { Subpixel = true, Edging = SKFontEdging.Antialias });
+    }
 
     private static double Width(string line, SKFont font)
     {

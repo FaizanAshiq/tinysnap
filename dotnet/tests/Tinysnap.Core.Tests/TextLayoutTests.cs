@@ -5,6 +5,19 @@ namespace Tinysnap.Core.Tests;
 public class TextLayoutTests
 {
     [Fact]
+    public void AFallbackFontIsMadeOnceAndShared()
+    {
+        // Made fresh for every character, fonts piled up for the finalizer on long Urdu text.
+        // Emoji are in no UI font, on either platform, so they always fall back.
+        using var primary = TextLayout.Font(20);
+        var first = TextLayout.Runs("\U0001F600\U0001F601", primary);
+        var again = TextLayout.Runs("\U0001F600", primary);
+        Assert.Single(first);
+        Assert.NotSame(primary, first[0].Font);
+        Assert.Same(first[0].Font, again[0].Font);
+    }
+
+    [Fact]
     public void TextBoundsGrowWithEachLineAndAnEmptyStringIsStillFindable()
     {
         var one = TextLayout.Size("Hello", 16, 2);

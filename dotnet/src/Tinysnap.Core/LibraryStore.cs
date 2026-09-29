@@ -123,14 +123,19 @@ public sealed class LibraryStore(string? root = null)
     {
         try
         {
+            // Only a file in the entry's own folder: a name read from edits.json with a path in
+            // it could reach a picture anywhere on disk.
             return DocumentArchive.Decode(File.ReadAllBytes(entry.EditsPath),
-                                          name => ReadImage(Path.Combine(entry.Folder, name))?.Image);
+                                          name => IsPlainName(name) ? ReadImage(Path.Combine(entry.Folder, name))?.Image : null);
         }
         catch (Exception error) when (error is ArchiveException or IOException or UnauthorizedAccessException)
         {
             return null;
         }
     }
+
+    private static bool IsPlainName(string name) =>
+        name.Length > 0 && name is not "." and not ".." && name.IndexOfAny(['/', '\\']) < 0 && Path.GetFileName(name) == name;
 
     /// <summary>True after a crash between an edit and the next render: the edits are newer
     /// than the image, so the image is rendered again before it is shown. Anything closer than

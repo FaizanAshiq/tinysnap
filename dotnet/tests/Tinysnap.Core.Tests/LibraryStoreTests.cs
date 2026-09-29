@@ -226,4 +226,24 @@ public class LibraryStoreTests
         Assert.Equal([kept.Name], library.Entries().Select(entry => entry.Name));
         Assert.True(library.Size() < before);
     }
+
+    [Fact]
+    public void AnEditsFileCannotReachAnImageOutsideItsEntry()
+    {
+        // A pasted image's file name is read from edits.json. Joined unchecked, a tampered name
+        // read a picture from anywhere on disk into the document.
+        var library = Store();
+        var entry = library.Add(Fixture.Capture(40, 30, 2), Captured, Utc);
+        var pasted = Fixture.Annotation(new AnnotationKind.Image(new Rect(0, 0, 4, 4), new PastedImage(Fixture.CaptureImage(4, 4))));
+        library.SaveEdits(Opened(library, entry).Document with { Annotations = [pasted] }, entry);
+        var name = $"pasted-{Json.Uuid(pasted.Id)}.png";
+        var outside = Path.Combine(library.Root, "outside.png");
+        File.Copy(Path.Combine(entry.Folder, name), outside);
+        var json = File.ReadAllText(entry.EditsPath);
+        foreach (var tampered in new[] { "../outside.png", outside })
+        {
+            File.WriteAllText(entry.EditsPath, json.Replace(name, tampered.Replace("\\", "\\\\")));
+            Assert.False(Opened(library, entry).IsEditable, tampered);
+        }
+    }
 }

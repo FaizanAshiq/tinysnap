@@ -221,6 +221,16 @@ public class PreferencesTests
     }
 
     [Fact]
+    public void ABindingMadeWithoutAModifierListStillPrintsAndSaves()
+    {
+        // A default array threw the moment it was written or listed.
+        var binding = new HotKeyBinding(0x32, default);
+        Assert.Empty(binding.Modifiers);
+        Assert.Equal("2", binding.DisplayString);
+        Assert.Equal(binding, HotKeyBinding.FromJson(binding.ToJson()));
+    }
+
+    [Fact]
     public void PrintsHotkeysTheWayWindowsDoes()
     {
         Assert.Equal("Ctrl+Shift+2", HotKeys.Defaults.Area?.DisplayString);

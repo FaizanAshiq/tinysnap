@@ -36,13 +36,14 @@ public static partial class Renderer
     public static SKImage? RenderFramed(Document document, double outputScale = 1, IReadOnlySet<Guid>? hidden = null)
     {
         FrameGround? ground = null;
-        return RenderFramed(document, outputScale, hidden, ref ground);
+        try { return RenderFramed(document, outputScale, hidden, ref ground); }
+        finally { ground?.Dispose(); }
     }
 
     /// <summary>The same, drawn over <paramref name="ground"/> while it still fits, and over a
     /// new one kept there when it does not. The shadow was most of what a frame cost, and a
     /// stroke, an undo or a restyle never moves it, so the canvas keeps one ground and pays
-    /// for the output.</summary>
+    /// for the output. The ground belongs to the caller, and one this replaces is disposed.</summary>
     public static SKImage? RenderFramed(Document document, double outputScale, IReadOnlySet<Guid>? hidden,
                                         ref FrameGround? ground)
     {
@@ -58,6 +59,8 @@ public static partial class Renderer
             // corners shape it, the marks drawn on top do not.
             using var bare = RenderOutput(document, outputScale, document.Annotations.Select(a => a.Id).ToHashSet());
             var image = MakeGround(bare ?? content, place, backdrop, document.Capture, perPoint);
+            // A full screen ground is tens of megabytes the collector cannot see.
+            ground?.Dispose();
             ground = image is null ? null : new FrameGround(image, key);
         }
         if (ground is null) return null;
@@ -195,7 +198,7 @@ public static partial class Renderer
 
 /// <summary>A frame without its output: the backdrop's fill and the shadow the output throws
 /// on it.</summary>
-public sealed class FrameGround
+public sealed class FrameGround : IDisposable
 {
     public SKImage Image { get; }
     internal Key GroundKey { get; }
@@ -205,6 +208,8 @@ public sealed class FrameGround
         Image = image;
         GroundKey = key;
     }
+
+    public void Dispose() => Image.Dispose();
 
     /// <summary>Everything the ground depends on. The annotations are not in it, which is the point.</summary>
     internal sealed record Key(Backdrop Backdrop, Capture Capture, Rect Output, Rect Extent, double OutputScale);

@@ -42,6 +42,24 @@ struct LibraryStoreTests {
         #expect(LibraryStore.readImage(entry.originalURL)?.scale == 1.5)
     }
 
+    @Test func anEditsFileCannotReachAnImageOutsideItsEntry() throws {
+        // A pasted image's file name is read from edits.json. Joined unchecked, a tampered name
+        // read a picture from elsewhere on disk into the document.
+        let library = try store()
+        let entry = try library.add(Fixture.capture(width: 40, height: 30, scale: 2), captured: captured, timeZone: utc)
+        let pasted = Fixture.annotation(.image(CGRect(x: 0, y: 0, width: 4, height: 4),
+                                               PastedImage(Fixture.capture(width: 4, height: 4).image)))
+        var document = try #require(library.open(entry)).document
+        document.annotations = [pasted]
+        try library.saveEdits(document, to: entry)
+        let name = "pasted-\(pasted.id.uuidString).png"
+        try FileManager.default.copyItem(at: entry.folder.appendingPathComponent(name),
+                                         to: library.root.appendingPathComponent("outside.png"))
+        let json = try String(contentsOf: entry.editsURL, encoding: .utf8)
+        try json.replacingOccurrences(of: name, with: "../outside.png").write(to: entry.editsURL, atomically: true, encoding: .utf8)
+        #expect(try #require(library.open(entry)).isEditable == false)
+    }
+
     @Test func anEntryReopensWithItsSizeAndItsImageIsDrawnAtIt() throws {
         let library = try store()
         let entry = try library.add(Fixture.capture(width: 40, height: 30, scale: 2), captured: captured, timeZone: utc)

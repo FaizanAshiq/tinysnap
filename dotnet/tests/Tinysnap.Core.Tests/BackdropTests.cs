@@ -99,10 +99,14 @@ public class BackdropTests
         FrameGround? ground = null;
         Renderer.RenderFramed(document, 1, null, ref ground);
         var first = ground!.Image;
+        var firstWidth = first.Width;
         document = document with { Crop = new Rect(0, 0, 100, 50) };
         Renderer.RenderFramed(document, 1, null, ref ground);
         var second = ground!.Image;
-        Assert.True(!ReferenceEquals(second, first) && second.Width < first.Width);
+        Assert.True(!ReferenceEquals(second, first) && second.Width < firstWidth);
+        // The ground it replaces is let go at once: a full screen frame is tens of megabytes
+        // outside the collector's sight, and a stream of backdrop changes piled them up.
+        Assert.Equal(IntPtr.Zero, first.Handle);
         document = document with { Backdrop = document.Backdrop! with { Padding = BackdropPadding.Large } };
         Renderer.RenderFramed(document, 1, null, ref ground);
         Assert.NotSame(second, ground!.Image);
