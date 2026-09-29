@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Tinysnap.App.Capturing;
 using Tinysnap.App.Editing;
 using Tinysnap.Core;
 using Tinysnap.Dev;
@@ -29,8 +30,24 @@ internal sealed class FakeDialogs(CloseChoice answer = CloseChoice.Cancel) : IDi
     }
 }
 
+/// <summary>A controller on one Retina monitor 400 by 300 pixels, with a library, clipboard,
+/// dialogs, files and timers of its own for a test to look at.</summary>
+internal sealed record AppSetup(CaptureController Controller, LibraryStore Library, FakeClipboard Clipboard, FakeDialogs Dialogs,
+                                FakeTime Time, FakeFiles Files);
+
 internal static class TestServices
 {
+    public static AppSetup Launch(Preferences? preferences = null)
+    {
+        var retina = Screens.Frozen(new Tinysnap.Core.Rect(0, 0, 400, 300), 2, SkiaSharp.SKColors.Blue);
+        var platform = new FakePlatform(new FakeScreenCapture(() => Screens.Desktop(retina), () => new Tinysnap.Core.Point(100, 100)));
+        var library = new LibraryStore(TemporaryFolder());
+        var dialogs = new FakeDialogs();
+        var time = new FakeTime();
+        var controller = new CaptureController(platform, Store(preferences), library, dialogs, time);
+        return new AppSetup(controller, library, (FakeClipboard)platform.Clipboard, dialogs, time, (FakeFiles)platform.Files);
+    }
+
     public static string TemporaryFolder() => Path.Combine(Path.GetTempPath(), $"tinysnap-saves-{Guid.NewGuid()}");
 
     /// <summary>A store in a folder of its own holding <paramref name="preferences"/>.</summary>

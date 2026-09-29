@@ -15,27 +15,13 @@ namespace Tinysnap.App.Tests;
 
 public class LibraryFlowTests
 {
-    private sealed record Setup(CaptureController Controller, LibraryStore Library, FakeClipboard Clipboard, FakeDialogs Dialogs,
-                                FakeTime Time);
-
-    private static Setup Make(Preferences? preferences = null)
-    {
-        var retina = Screens.Frozen(new CoreRect(0, 0, 400, 300), 2, SKColors.Blue);
-        var platform = new FakePlatform(new FakeScreenCapture(() => Screens.Desktop(retina), () => new CorePoint(100, 100)));
-        var library = new LibraryStore(TemporaryFolder());
-        var dialogs = new FakeDialogs();
-        var time = new FakeTime();
-        var controller = new CaptureController(platform, Store(preferences), library, dialogs, time);
-        return new Setup(controller, library, (FakeClipboard)platform.Clipboard, dialogs, time);
-    }
-
     private static int Annotations(LibraryStore library, LibraryEntry entry) =>
         library.Open(entry)!.Document.Annotations.Length;
 
     [AvaloniaFact]
     public void ACaptureIsKeptInTheLibrary()
     {
-        var setup = Make();
+        var setup = Launch();
         setup.Controller.CaptureFullscreen();
         var entry = Assert.Single(setup.Library.Entries());
         Assert.Equal(entry, Assert.Single(setup.Controller.Editors).Entry);
@@ -44,7 +30,7 @@ public class LibraryFlowTests
     [AvaloniaFact]
     public void WithTheLibraryOffNothingIsKept()
     {
-        var setup = Make(Preferences.Defaults with { KeepLibrary = false });
+        var setup = Launch(Preferences.Defaults with { KeepLibrary = false });
         setup.Controller.CaptureFullscreen();
         Assert.Empty(setup.Library.Entries());
         Assert.Null(Assert.Single(setup.Controller.Editors).Entry);
@@ -53,7 +39,7 @@ public class LibraryFlowTests
     [AvaloniaFact]
     public void EditsAreKeptASecondAfterTheLastChange()
     {
-        var setup = Make();
+        var setup = Launch();
         setup.Controller.CaptureFullscreen();
         var editor = Assert.Single(setup.Controller.Editors);
         Draw(editor);
@@ -65,7 +51,7 @@ public class LibraryFlowTests
     [AvaloniaFact]
     public void AKeptCaptureClosesWithoutAsking()
     {
-        var setup = Make();
+        var setup = Launch();
         setup.Controller.CaptureFullscreen();
         var editor = Assert.Single(setup.Controller.Editors);
         var entry = editor.Entry!;
@@ -79,7 +65,7 @@ public class LibraryFlowTests
     [AvaloniaFact]
     public void AFailedLibraryWriteStillAsksBeforeClosing()
     {
-        var setup = Make();
+        var setup = Launch();
         setup.Controller.CaptureFullscreen();
         var editor = Assert.Single(setup.Controller.Editors);
         Directory.Delete(editor.Entry!.Folder, recursive: true);
@@ -92,7 +78,7 @@ public class LibraryFlowTests
     [AvaloniaFact]
     public async Task ClosingRendersTheImage()
     {
-        var setup = Make();
+        var setup = Launch();
         setup.Controller.CaptureFullscreen();
         var editor = Assert.Single(setup.Controller.Editors);
         var entry = editor.Entry!;
@@ -107,7 +93,7 @@ public class LibraryFlowTests
     [AvaloniaFact]
     public void AKeptThumbnailLeavesTheClipboardAlone()
     {
-        var setup = Make(Preferences.Defaults with { AfterCapture = AfterCapture.Thumbnail });
+        var setup = Launch(Preferences.Defaults with { AfterCapture = AfterCapture.Thumbnail });
         setup.Controller.CaptureFullscreen();
         var thumbnail = setup.Controller.Thumbnail!;
         setup.Time.Elapse();
@@ -118,7 +104,7 @@ public class LibraryFlowTests
     [AvaloniaFact]
     public void OpeningAnOpenEntryBringsItsEditorForward()
     {
-        var setup = Make();
+        var setup = Launch();
         setup.Controller.CaptureFullscreen();
         var entry = Assert.Single(setup.Controller.Editors).Entry!;
         setup.Controller.Open(entry);
@@ -128,7 +114,7 @@ public class LibraryFlowTests
     [AvaloniaFact]
     public void AnEntryReopensEditable()
     {
-        var setup = Make();
+        var setup = Launch();
         setup.Controller.CaptureFullscreen();
         var editor = Assert.Single(setup.Controller.Editors);
         var entry = editor.Entry!;
@@ -143,7 +129,7 @@ public class LibraryFlowTests
     [AvaloniaFact]
     public void ThePinOfAKeptCaptureReopensItsEntry()
     {
-        var setup = Make();
+        var setup = Launch();
         setup.Controller.CaptureFullscreen();
         var editor = Assert.Single(setup.Controller.Editors);
         var entry = editor.Entry!;
@@ -160,7 +146,7 @@ public class LibraryFlowTests
     [AvaloniaFact]
     public async Task TheSweepSparesOpenCaptures()
     {
-        var setup = Make();
+        var setup = Launch();
         setup.Controller.CaptureFullscreen();
         var editor = Assert.Single(setup.Controller.Editors);
         Draw(editor);

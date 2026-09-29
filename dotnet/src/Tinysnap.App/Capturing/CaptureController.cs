@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Threading;
 using SkiaSharp;
 using Tinysnap.App.Editing;
+using Tinysnap.App.Library;
 using Tinysnap.App.Pinning;
 using Tinysnap.Core;
 using Tinysnap.Platform;
@@ -223,6 +224,42 @@ public sealed class CaptureController
     }
 
     // Library
+
+    private LibraryWindow? libraryWindow;
+
+    internal EditorServices Services => services;
+
+    internal IFileActions Files => platform.Files;
+
+    /// <summary>The one library window, made when first asked for, shown and brought forward.</summary>
+    internal LibraryWindow ShowLibrary()
+    {
+        if (libraryWindow is null)
+        {
+            libraryWindow = new LibraryWindow(this);
+            libraryWindow.Closed += (_, _) => libraryWindow = null;
+        }
+        libraryWindow.ShowInFront();
+        return libraryWindow;
+    }
+
+    /// <summary>For the library window, after it moved an entry to the Recycle Bin.</summary>
+    internal void NotifyLibraryChanged() => LibraryChanged?.Invoke();
+
+    /// <summary>Has an entry's open editor write its edits and image now, so nothing handed out
+    /// from the library lags behind edits still on screen, a redaction least of all.</summary>
+    internal void Flush(LibraryEntry entry) => editors.FirstOrDefault(e => e.Entry == entry)?.Keep(renderingImage: true);
+
+    /// <summary>The entry drawn from its edits, brought up to date with any editor still open on
+    /// it, pinned at its size when it has one. False when it could not be drawn.</summary>
+    internal bool PinEntry(LibraryEntry entry)
+    {
+        Flush(entry);
+        if (library.Open(entry)?.Document is not { } document || Output.Export(document, ExportScale.Native) is not var (exported, _))
+            return false;
+        Pin(exported, document.Resize is not null, entry);
+        return true;
+    }
 
     /// <summary>Entries open in an editor or being drawn, which are never swept, cleared or
     /// drawn a second time.</summary>
