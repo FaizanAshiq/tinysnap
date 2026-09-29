@@ -43,10 +43,10 @@ public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started
         {
             // A tray app: closing the last editor leaves it running for the next capture.
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            var preferences = LoadPreferences();
-            Captures = new CaptureController(Platform, LoadPreferences);
-            Tray.Install(this, Captures, preferences.HotKeys, desktop);
-            ListenForHotkeys(preferences.HotKeys);
+            var preferences = new PreferencesStore(Preferences.DefaultFilePath);
+            Captures = new CaptureController(Platform, preferences);
+            Tray.Install(this, Captures, preferences.Current.HotKeys, desktop);
+            ListenForHotkeys(preferences.Current.HotKeys);
             desktop.ShutdownRequested += (_, _) => Platform.Hotkeys.Dispose();
             started?.Invoke(this);
         }
@@ -64,19 +64,5 @@ public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started
             if (action == HotKeyAction.Area) Captures?.CaptureArea();
             else if (action == HotKeyAction.Fullscreen) Captures?.CaptureFullscreen();
         });
-    }
-
-    /// <summary>Read fresh each time, so a capture uses what Settings last saved. A damaged file
-    /// reads as the defaults rather than stopping a capture.</summary>
-    private static Preferences LoadPreferences()
-    {
-        try
-        {
-            return Preferences.Load(Preferences.DefaultFilePath);
-        }
-        catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
-        {
-            return Preferences.Defaults;
-        }
     }
 }

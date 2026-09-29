@@ -8,5 +8,8 @@ namespace Tinysnap.App.Editing;
 /// editor that made it.</summary>
 /// <param name="Pin">Takes the export, whose image it then owns, and whether the capture had a
 /// size of its own, which the pin's copies and saves then keep.</param>
+/// <param name="RememberStyles">Takes the session's styles and colour once a change is
+/// finished, so the next capture starts with them.</param>
 internal sealed record EditorServices(IClipboard Clipboard, Func<Preferences> Preferences, IDialogs Dialogs,
-                                      Action<ExportedImage, bool>? Pin = null);
+                                      Action<ExportedImage, bool>? Pin = null,
+                                      Action<IReadOnlyDictionary<Tool, Style>, string>? RememberStyles = null);

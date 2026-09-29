@@ -166,6 +166,7 @@ internal sealed class EditorWindow : Window
         Canvas.PointerColor += ShowColor;
         Canvas.CopyColorRequested += CopyColor;
         Canvas.ImagePickRequested += () => _ = PickImage();
+        Canvas.StylesCommitted += RememberStyles;
         Opened += (_, _) =>
         {
             Toolbar.Measure(Avalonia.Size.Infinity);
@@ -173,7 +174,11 @@ internal sealed class EditorWindow : Window
             Place();
             Canvas.Focus();
         };
-        Closed += (_, _) => Open.Remove(this);
+        Closed += (_, _) =>
+        {
+            RememberStyles();
+            Open.Remove(this);
+        };
         Open.Add(this);
         Refresh();
     }
@@ -217,6 +222,8 @@ internal sealed class EditorWindow : Window
         Margin = new Thickness(6, 0),
         [!BackgroundProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
     };
+
+    private void RememberStyles() => services.RememberStyles?.Invoke(Canvas.Session.Styles, Canvas.Session.ColorHex);
 
     private void Refresh()
     {

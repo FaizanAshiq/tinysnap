@@ -33,6 +33,14 @@ internal static class TestServices
 {
     public static string TemporaryFolder() => Path.Combine(Path.GetTempPath(), $"tinysnap-saves-{Guid.NewGuid()}");
 
+    /// <summary>A store in a folder of its own holding <paramref name="preferences"/>.</summary>
+    public static PreferencesStore Store(Preferences? preferences = null)
+    {
+        var store = new PreferencesStore(Path.Combine(TemporaryFolder(), "preferences.json"));
+        if (preferences is not null) store.Update(_ => preferences);
+        return store;
+    }
+
     public static EditorServices Make(FakeClipboard? clipboard = null, FakeDialogs? dialogs = null, string? saveFolder = null,
                                       Action<ExportedImage, bool>? pin = null)
     {

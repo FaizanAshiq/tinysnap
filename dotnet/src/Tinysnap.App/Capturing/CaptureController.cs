@@ -15,22 +15,21 @@ namespace Tinysnap.App.Capturing;
 public sealed class CaptureController
 {
     private readonly IPlatform platform;
-    private readonly Func<Preferences> preferences;
+    private readonly PreferencesStore preferences;
     private readonly TimeProvider? time;
     private readonly EditorServices services;
     private readonly List<EditorWindow> editors = [];
     private readonly List<PinWindow> pins = [];
 
-    public CaptureController(IPlatform platform, Func<Preferences> preferences)
-        : this(platform, preferences, new AvaloniaDialogs(), null) { }
-
+    /// <param name="dialogs">Null for the app's own; tests answer them.</param>
     /// <param name="time">Null for the system clock; tests fire the thumbnail's timer themselves.</param>
-    internal CaptureController(IPlatform platform, Func<Preferences> preferences, IDialogs dialogs, TimeProvider? time)
+    internal CaptureController(IPlatform platform, PreferencesStore preferences, IDialogs? dialogs = null, TimeProvider? time = null)
     {
         this.platform = platform;
         this.preferences = preferences;
         this.time = time;
-        services = new EditorServices(platform.Clipboard, preferences, dialogs, Pin);
+        services = new EditorServices(platform.Clipboard, () => preferences.Current, dialogs ?? new AvaloniaDialogs(), Pin,
+                                      preferences.RememberStyles);
     }
 
     internal AreaOverlay? Overlay { get; private set; }
@@ -119,7 +118,7 @@ public sealed class CaptureController
     {
         Thumbnail?.Dismiss(copying: true);
         var at = new PixelRect((int)around.X, (int)around.Y, (int)around.Width, (int)around.Height);
-        if (preferences().AfterCapture == AfterCapture.Thumbnail)
+        if (preferences.Current.AfterCapture == AfterCapture.Thumbnail)
             ShowThumbnail(new Document(capture), at);
         else
             OpenEditor(new Document(capture), at);
@@ -127,7 +126,7 @@ public sealed class CaptureController
 
     private void OpenEditor(Document document, PixelRect? around)
     {
-        var remembered = preferences();
+        var remembered = preferences.Current;
         var session = new EditorSession(document, styles: remembered.Styles, colorHex: remembered.ColorHex);
         var editor = new EditorWindow(session, DateTimeOffset.Now, services, around);
         editors.Add(editor);

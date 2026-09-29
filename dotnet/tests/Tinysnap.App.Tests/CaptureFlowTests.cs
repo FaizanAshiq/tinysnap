@@ -15,7 +15,7 @@ namespace Tinysnap.App.Tests;
 public class CaptureFlowTests
 {
     private static CaptureController Controller(FrozenDesktop desktop, CorePoint pointer, double cornerRadius = 0) =>
-        new(new FakePlatform(new FakeScreenCapture(() => desktop, () => pointer, cornerRadius)), () => Tinysnap.Core.Preferences.Defaults);
+        new(new FakePlatform(new FakeScreenCapture(() => desktop, () => pointer, cornerRadius)), TestServices.Store());
 
     private static readonly Tinysnap.Core.Preferences Thumbnails = Tinysnap.Core.Preferences.Defaults with
     {
@@ -27,7 +27,7 @@ public class CaptureFlowTests
                                                                                      FakeDialogs? dialogs = null)
     {
         var platform = new FakePlatform(new FakeScreenCapture(() => Screens.Desktop(Retina), () => new CorePoint(100, 100)));
-        return (new CaptureController(platform, () => preferences, dialogs ?? new FakeDialogs(), new FakeTime()),
+        return (new CaptureController(platform, TestServices.Store(preferences), dialogs ?? new FakeDialogs(), new FakeTime()),
                 (FakeClipboard)platform.Clipboard);
     }
 
