@@ -68,6 +68,10 @@ public sealed class LibraryStore(string? root = null)
             if (!File.Exists(path)) WriteAtomically(path, Png(image, 1));
         }
         WriteAtomically(entry.EditsPath, json);
+        // A file time moves only with the clock's tick, 15 ms on Windows, so edits written just
+        // after the image can carry its time. Dated a moment past it, they read as newer.
+        if (Modified(entry.ImagePath) is { } rendered && Modified(entry.EditsPath) <= rendered)
+            File.SetLastWriteTimeUtc(entry.EditsPath, rendered.UtcDateTime.AddMilliseconds(1));
         foreach (var path in Directory.EnumerateFiles(entry.Folder))
         {
             var file = Path.GetFileName(path);

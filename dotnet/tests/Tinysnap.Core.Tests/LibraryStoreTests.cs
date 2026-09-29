@@ -147,6 +147,20 @@ public class LibraryStoreTests
         Assert.False(File.Exists(pastedPath));
     }
 
+    /// <summary>A file time only moves with the clock's tick, 15 ms on Windows, so edits written
+    /// just after the image can carry its time or an earlier one. They still make it stale.</summary>
+    [Fact]
+    public void EditsWrittenAfterTheImageMakeItStaleWhateverTheClockSays()
+    {
+        var library = Store();
+        var entry = library.Add(Fixture.Capture(100, 80, 2), Captured, Utc);
+        var document = Opened(library, entry).Document;
+        library.SaveImage(document, entry, editsAsOf: DateTimeOffset.UtcNow.AddHours(1));
+        Assert.False(library.ImageIsStale(entry));
+        library.SaveEdits(document with { Crop = new Rect(0, 0, 50, 40) }, entry);
+        Assert.True(library.ImageIsStale(entry));
+    }
+
     [Fact]
     public void TheImageIsTheRenderedCropAndGoesStaleWhenEditsAreNewer()
     {
