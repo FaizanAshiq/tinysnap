@@ -118,7 +118,8 @@ internal sealed partial class CanvasControl
         Session.Restyle(change, merging);
         if (!merging) StylesCommitted?.Invoke();
         SessionChanged();
-        Focus();
+        // A stream from the colour spectrum keeps its drag; a finished change hands the keys back.
+        if (!merging) Focus();
     }
 
     public void DeleteSelection()

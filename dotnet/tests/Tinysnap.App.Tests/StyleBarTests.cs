@@ -97,4 +97,20 @@ public class StyleBarTests
         Click(bar.DeleteChip!);
         Assert.Empty(editor.Canvas.Session.Display.Annotations);
     }
+
+    [AvaloniaFact]
+    public void ACustomColourStreamsIntoOneUndoAndKeepsItsButton()
+    {
+        // Rebuilding the bar on every colour replaced the button the palette hangs from, which
+        // closed it mid drag.
+        var editor = WithShape(Tool.Arrow);
+        var bar = editor.StyleBar;
+        var button = bar.ColorButton;
+        bar.CustomColor!.Color = Avalonia.Media.Color.Parse("#123456");
+        bar.CustomColor.Color = Avalonia.Media.Color.Parse("#654321");
+        Assert.Equal("#654321", Selected(editor).ColorHex);
+        Assert.Same(button, bar.ColorButton);
+        editor.Canvas.Session.Undo();
+        Assert.Equal(Palette.Red, Selected(editor).ColorHex);
+    }
 }

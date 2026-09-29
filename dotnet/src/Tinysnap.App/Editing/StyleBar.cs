@@ -34,6 +34,15 @@ internal sealed class StyleBar : Border
     public ToggleButton? DifferenceChip { get; private set; }
     public Button? DeleteChip { get; private set; }
 
+    /// <summary>The colour spectrum for anything the swatches do not have.</summary>
+    public ColorView? CustomColor { get; private set; }
+
+    private Border? colorSwatch;
+
+    /// <summary>Set while the spectrum is moved to match a colour picked elsewhere, so that move
+    /// is not taken for a pick.</summary>
+    private bool syncing;
+
     public StyleBar(CanvasControl canvas)
     {
         this.canvas = canvas;
@@ -61,6 +70,15 @@ internal sealed class StyleBar : Border
         IsVisible = Shows(tool);
         var now = (tool, style, selected is not null);
         if (shown == now) return;
+        // Only the colour changed: redrawn where it stands. Rebuilding replaced the button the
+        // palette hangs from, which closed the palette in the middle of a drag on the spectrum.
+        if (shown is { } before && before.Tool == tool && before.Selected == now.Item3
+            && before.Style with { ColorHex = style.ColorHex } == style)
+        {
+            shown = now;
+            Recolor(style.ColorHex);
+            return;
+        }
         shown = now;
         Rebuild(tool, style, selected is not null);
     }
@@ -70,6 +88,8 @@ internal sealed class StyleBar : Border
         row.Children.Clear();
         ColorButton = null;
         Swatches = [];
+        CustomColor = null;
+        colorSwatch = null;
         DifferenceChip = null;
         DeleteChip = null;
         if (tool.HasColor()) row.Children.Add(ColorButton = MakeColorButton(style.ColorHex));
@@ -161,11 +181,28 @@ internal sealed class StyleBar : Border
         };
         var grid = new UniformGrid { Columns = 4 };
         foreach (var swatch in swatches) grid.Children.Add(swatch);
-        var palette = new StackPanel { Spacing = 10, Margin = new Thickness(4), Children = { grid, field } };
+        CustomColor = new ColorView
+        {
+            Color = Color.Parse(hex),
+            IsColorPaletteVisible = false,
+            IsColorComponentsVisible = false,
+            IsAlphaEnabled = false,
+            IsAlphaVisible = false,
+            IsAccentColorsVisible = false,
+            Width = 240,
+        };
+        // A drag on the spectrum sends a stream of colours, which undoes as one step.
+        CustomColor.ColorChanged += (_, e) =>
+        {
+            if (syncing) return;
+            var picked = $"#{e.NewColor.R:X2}{e.NewColor.G:X2}{e.NewColor.B:X2}";
+            canvas.Restyle(style => style with { ColorHex = picked }, merging: true);
+        };
+        var palette = new StackPanel { Spacing = 10, Margin = new Thickness(4), Children = { grid, field, CustomColor } };
 
         var button = new Button
         {
-            Content = new Border
+            Content = colorSwatch = new Border
             {
                 Width = 22,
                 Height = 16,
@@ -182,6 +219,23 @@ internal sealed class StyleBar : Border
         ToolTip.SetTip(button, $"Colour {hex}");
         AutomationProperties.SetName(button, $"Colour {hex}");
         return button;
+    }
+
+    /// <summary>The colour button, swatch outlines and spectrum brought to <paramref name="hex"/>.</summary>
+    private void Recolor(string hex)
+    {
+        var color = Color.Parse(hex);
+        if (colorSwatch is not null) colorSwatch.Background = new SolidColorBrush(color);
+        if (ColorButton is not null)
+        {
+            ToolTip.SetTip(ColorButton, $"Colour {hex}");
+            AutomationProperties.SetName(ColorButton, $"Colour {hex}");
+        }
+        foreach (var swatch in Swatches) swatch.BorderThickness = new Thickness((string?)swatch.Tag == hex ? 2.5 : 0.5);
+        if (CustomColor is null || CustomColor.Color == color) return;
+        syncing = true;
+        CustomColor.Color = color;
+        syncing = false;
     }
 
     private void ChooseColor(string hex)

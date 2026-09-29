@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
@@ -23,6 +24,11 @@ public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started
     public override void Initialize()
     {
         Styles.Add(new FluentTheme());
+        // The colour picker ships its own theme, kept apart from Avalonia's main packages.
+        Styles.Add(new StyleInclude(new Uri("avares://Tinysnap.App/"))
+        {
+            Source = new Uri("avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml"),
+        });
         // Tooltips after 0.3 s rather than the system's second, which felt slow on a toolbar
         // of seventeen tools.
         Styles.Add(new Style(selector => selector.Is<Control>())
