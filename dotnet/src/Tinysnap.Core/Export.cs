@@ -45,11 +45,12 @@ public static class Exporter
         if (output is null || area is not { } box) return output;
         var origin = document.OutputPixelRect.Origin;
         var cut = box.Offset(-origin.X, -origin.Y).Integral.Intersection(new Rect(0, 0, output.Width, output.Height));
-        using (output)
+        if (cut.IsNull || cut.Width < 1 || cut.Height < 1)
         {
-            if (cut.IsNull || cut.Width < 1 || cut.Height < 1) return null;
-            return output.Subset(cut.ToSKRectI());
+            output.Dispose();
+            return null;
         }
+        return Renderer.Cut(output, cut);
     }
 
     public static byte[]? PngData(ExportedImage exported) => Png.Encode(exported.Image, exported.Dpi);

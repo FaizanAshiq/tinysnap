@@ -1,8 +1,14 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Tinysnap.App/Tinysnap.App.csproj" />
     <Project Path="src/Tinysnap.Core/Tinysnap.Core.csproj" />
+    <Project Path="src/Tinysnap.Dev/Tinysnap.Dev.csproj" />
+    <Project Path="src/Tinysnap.Platform/Tinysnap.Platform.csproj" />
+    <Project Path="src/Tinysnap.Windows/Tinysnap.Windows.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Tinysnap.App.Tests/Tinysnap.App.Tests.csproj" />
     <Project Path="tests/Tinysnap.Core.Tests/Tinysnap.Core.Tests.csproj" />
+    <Project Path="tests/Tinysnap.Windows.Tests/Tinysnap.Windows.Tests.csproj" />
   </Folder>
 </Solution>

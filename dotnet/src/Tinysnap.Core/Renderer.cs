@@ -215,10 +215,9 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
 
     private void ClipRounded(Rect rect, double corner)
     {
-        using var path = new SKPathBuilder();
+        using var path = new SKPath();
         path.AddRoundRect(rect.ToSK(), (float)corner, (float)corner, SKPathDirection.Clockwise);
-        using var clip = path.Detach();
-        Context.ClipPath(clip, SKClipOperation.Intersect, antialias: true);
+        Context.ClipPath(path, SKClipOperation.Intersect, antialias: true);
     }
 
     public void Spotlight(IReadOnlyList<(Rect Rect, CornerSize Corners)> rects)
@@ -323,11 +322,10 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
         var lens = new Rect(center.X - radius, center.Y - radius, radius * 2, radius * 2);
 
         Context.Save();
-        using (var path = new SKPathBuilder())
+        using (var path = new SKPath())
         {
             path.AddOval(lens.ToSK(), SKPathDirection.Clockwise);
-            using var clip = path.Detach();
-            Context.ClipPath(clip, SKClipOperation.Intersect, antialias: true);
+            Context.ClipPath(path, SKClipOperation.Intersect, antialias: true);
         }
         Context.Translate((float)center.X, (float)center.Y);
         Context.Scale((float)zoom);

@@ -14,9 +14,9 @@ internal static class ArrowShape
 
     public static SKPath Path(Point tail, Point tip, double width)
     {
-        using var path = new SKPathBuilder();
+        var path = new SKPath();
         var length = tail.Distance(tip);
-        if (length <= 0) return path.Detach();
+        if (length <= 0) return path;
 
         var ux = (tip.X - tail.X) / length;
         var uy = (tip.Y - tail.Y) / length;
@@ -37,7 +37,7 @@ internal static class ArrowShape
             At(tail, tailHalf), At(baseAt, neckHalf), At(barb, headHalf), tip.ToSK(),
             At(barb, -headHalf), At(baseAt, -neckHalf), At(tail, -tailHalf),
         ], close: true);
-        return path.Detach();
+        return path;
     }
 }
 
@@ -46,13 +46,13 @@ internal static class Smoothing
 {
     public static SKPath Path(IReadOnlyList<Point> points)
     {
-        using var path = new SKPathBuilder();
-        if (points.Count == 0) return path.Detach();
+        var path = new SKPath();
+        if (points.Count == 0) return path;
         path.MoveTo(points[0].ToSK());
         if (points.Count <= 2)
         {
             foreach (var point in points.Skip(1)) path.LineTo(point.ToSK());
-            return path.Detach();
+            return path;
         }
         for (var index = 0; index < points.Count - 1; index++)
         {
@@ -65,6 +65,6 @@ internal static class Smoothing
                 new SKPoint((float)(p2.X - (p3.X - p1.X) / 6), (float)(p2.Y - (p3.Y - p1.Y) / 6)),
                 p2.ToSK());
         }
-        return path.Detach();
+        return path;
     }
 }

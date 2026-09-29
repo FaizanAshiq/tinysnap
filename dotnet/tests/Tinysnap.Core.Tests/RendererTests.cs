@@ -290,4 +290,17 @@ public class RendererTests
         Assert.True(Fixture.IsClose(Fixture.Pixel(image, 175, 25), White));
         Assert.True(Fixture.IsClose(Fixture.Pixel(image, 25, 175), White));
     }
+
+    [Fact]
+    public void AnOutputCutFromTheWholeRenderIsStillUsable()
+    {
+        // On SkiaSharp 3 a subset covering the whole image is the image itself, and the render
+        // was disposed as the cut came back, which crashed the first read of it.
+        var image = Renderer.RenderOutput(new Document(Fixture.Capture(40, 30)));
+        Assert.NotNull(image);
+        Assert.NotEqual(IntPtr.Zero, image.Handle);
+        var reading = Exporter.ReadingImage(new Document(Fixture.Capture(40, 30)), new Rect(0, 0, 40, 30));
+        Assert.NotNull(reading);
+        Assert.NotEqual(IntPtr.Zero, reading.Handle);
+    }
 }
