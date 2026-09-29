@@ -33,7 +33,7 @@ public struct LuminanceBuffer: Sendable {
 
 /// Finds where the region under a point ends, by walking out from it until the
 /// brightness differs from the point's by at least `threshold` and stays different for
-/// `runLength` pixels. Ported from Caliper, which does the same on a live screen.
+/// `runLength` pixels.
 public struct EdgeDetector: Sendable {
     public enum Direction: Sendable {
         case left, right, up, down
