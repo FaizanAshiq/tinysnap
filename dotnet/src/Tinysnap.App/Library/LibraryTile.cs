@@ -20,7 +20,9 @@ namespace Tinysnap.App.Library;
 internal sealed class LibraryTile : Border
 {
     private static readonly TimeSpan In = TimeSpan.FromSeconds(0.24), Out = TimeSpan.FromSeconds(0.16);
+    // The same kind of step at both ends, so the slide interpolates between them.
     private static readonly ITransform Lowered = TransformOperations.Parse("translateY(40px)");
+    private static readonly ITransform Raised = TransformOperations.Parse("translateY(0px)");
 
     private readonly Border fade;
     private readonly StackPanel actions;
@@ -43,7 +45,7 @@ internal sealed class LibraryTile : Border
         CornerRadius = new CornerRadius(10);
         BorderThickness = new Thickness(2);
         BorderBrush = Brushes.Transparent;
-        this[!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundBaseLowBrush");
+        this[!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundListLowBrush");
         AutomationProperties.SetName(this, $"Capture at {entry.Captured.ToLocalTime():T}");
 
         fade = new Border
@@ -159,7 +161,7 @@ internal sealed class LibraryTile : Border
         ];
         fade.Opacity = shown ? 1 : 0;
         actions.Opacity = shown ? 1 : 0;
-        actions.RenderTransform = shown ? TransformOperations.Identity : Lowered;
+        actions.RenderTransform = shown ? Raised : Lowered;
         actions.IsHitTestVisible = shown;
     }
 }
