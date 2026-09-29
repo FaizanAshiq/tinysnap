@@ -92,6 +92,14 @@ public readonly record struct Rect(double X, double Y, double Width, double Heig
     public bool IsNull => double.IsPositiveInfinity(X) || double.IsPositiveInfinity(Y);
     public bool IsEmpty => IsNull || Width == 0 || Height == 0;
 
+    /// <summary>Only the four numbers. The generated printer also prints every computed rect,
+    /// such as <see cref="Standardized"/>, which prints its own, and never ends.</summary>
+    private bool PrintMembers(System.Text.StringBuilder builder)
+    {
+        builder.Append($"X = {X}, Y = {Y}, Width = {Width}, Height = {Height}");
+        return true;
+    }
+
     public Rect Standardized => IsNull
         ? this
         : new Rect(Width < 0 ? X + Width : X, Height < 0 ? Y + Height : Y, Math.Abs(Width), Math.Abs(Height));

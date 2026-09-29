@@ -4,10 +4,15 @@ using Tinysnap.Platform;
 
 namespace Tinysnap.Windows;
 
-internal sealed class WindowsPlatform(IScreenCapture screen, IHotkeys hotkeys) : IPlatform
+internal sealed class WindowsPlatform(IScreenCapture screen, IHotkeys hotkeys, IClipboard clipboard) : IPlatform
 {
     public IScreenCapture Screen { get; } = screen;
     public IHotkeys Hotkeys { get; } = hotkeys;
+    public IClipboard Clipboard { get; } = clipboard;
+
+    /// <summary>Settings, Accessibility, Visual effects, Animation effects off.</summary>
+    public bool ReduceMotion =>
+        Native.SystemParametersInfoW(Native.SPI_GETCLIENTAREAANIMATION, 0, out var animate, 0) && !animate;
 }
 
 internal static class Program
@@ -17,7 +22,8 @@ internal static class Program
     {
         // Made here, on the thread that becomes the UI thread, whose message loop delivers the hotkeys.
         using var hotkeys = new Win32Hotkeys();
-        var platform = new WindowsPlatform(new GdiScreenCapture(), hotkeys);
+        using var clipboard = new Win32Clipboard();
+        var platform = new WindowsPlatform(new GdiScreenCapture(), hotkeys, clipboard);
         AppBuilder.Configure(() => new TinysnapApp(platform))
             .UsePlatformDetect()
             .LogToTrace()

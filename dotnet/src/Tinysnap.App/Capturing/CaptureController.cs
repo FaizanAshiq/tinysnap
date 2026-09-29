@@ -1,6 +1,7 @@
 using Avalonia;
 using SkiaSharp;
 using Tinysnap.App.Editing;
+using Tinysnap.App.Pinning;
 using Tinysnap.Core;
 using Tinysnap.Platform;
 using Rect = Tinysnap.Core.Rect;
@@ -8,15 +9,40 @@ using Rect = Tinysnap.Core.Rect;
 namespace Tinysnap.App.Capturing;
 
 /// <summary>Every way into a capture: an area or a window picked on the frozen screen, or the whole
-/// monitor under the pointer, each opened in an editor. Nothing is kept yet; the library comes
-/// with milestone 4.</summary>
-public sealed class CaptureController(IPlatform platform, Func<Preferences> preferences)
+/// monitor under the pointer, each opened in an editor or shown as a thumbnail as After Capture
+/// says. It owns what a capture turns into: editors, the thumbnail and pins. Nothing is kept yet;
+/// the library comes with milestone 4.</summary>
+public sealed class CaptureController
 {
+    private readonly IPlatform platform;
+    private readonly Func<Preferences> preferences;
+    private readonly TimeProvider? time;
+    private readonly EditorServices services;
     private readonly List<EditorWindow> editors = [];
+    private readonly List<PinWindow> pins = [];
+
+    public CaptureController(IPlatform platform, Func<Preferences> preferences)
+        : this(platform, preferences, new AvaloniaDialogs(), null) { }
+
+    /// <param name="time">Null for the system clock; tests fire the thumbnail's timer themselves.</param>
+    internal CaptureController(IPlatform platform, Func<Preferences> preferences, IDialogs dialogs, TimeProvider? time)
+    {
+        this.platform = platform;
+        this.preferences = preferences;
+        this.time = time;
+        services = new EditorServices(platform.Clipboard, preferences, dialogs, Pin);
+    }
 
     internal AreaOverlay? Overlay { get; private set; }
 
     internal IReadOnlyList<EditorWindow> Editors => editors;
+
+    internal IReadOnlyList<PinWindow> Pins => pins;
+
+    private CaptureThumbnail? thumbnail;
+
+    /// <summary>The thumbnail showing now, if any, not one sliding away. One at a time.</summary>
+    internal CaptureThumbnail? Thumbnail => thumbnail is { IsGone: false } ? thumbnail : null;
 
     /// <summary>Freezes every monitor, then puts the area overlay over the frozen image.</summary>
     public void CaptureArea()
@@ -86,18 +112,64 @@ public sealed class CaptureController(IPlatform platform, Func<Preferences> pref
         return new Capture(surface.Snapshot(), screen.Scale);
     }
 
-    /// <summary>An editor on <paramref name="capture"/>, opened on the monitor it came from.
-    /// <paramref name="around"/> is where it was taken, in physical pixels.</summary>
-    internal EditorWindow Open(Capture capture, Rect around)
+    /// <summary>An editor or a thumbnail on <paramref name="capture"/>, on the monitor it came
+    /// from. <paramref name="around"/> is where it was taken, in physical pixels. A thumbnail
+    /// still showing goes first, copied as a time out would.</summary>
+    private void Open(Capture capture, Rect around)
+    {
+        Thumbnail?.Dismiss(copying: true);
+        var at = new PixelRect((int)around.X, (int)around.Y, (int)around.Width, (int)around.Height);
+        if (preferences().AfterCapture == AfterCapture.Thumbnail)
+            ShowThumbnail(new Document(capture), at);
+        else
+            OpenEditor(new Document(capture), at);
+    }
+
+    private void OpenEditor(Document document, PixelRect? around)
     {
         var remembered = preferences();
-        var session = new EditorSession(new Document(capture), styles: remembered.Styles, colorHex: remembered.ColorHex);
-        var editor = new EditorWindow(session, DateTimeOffset.Now,
-                                      new PixelRect((int)around.X, (int)around.Y, (int)around.Width, (int)around.Height));
+        var session = new EditorSession(document, styles: remembered.Styles, colorHex: remembered.ColorHex);
+        var editor = new EditorWindow(session, DateTimeOffset.Now, services, around);
         editors.Add(editor);
         editor.Closed += (_, _) => editors.Remove(editor);
         editor.Show();
         editor.Activate();
-        return editor;
+    }
+
+    private void ShowThumbnail(Document document, PixelRect around)
+    {
+        var shown = new CaptureThumbnail(document, services, around.Center, !platform.ReduceMotion, time);
+        shown.OpenRequested += opened => OpenEditor(opened, around);
+        // Let go of its capture once it has slid away.
+        shown.Closed += (_, _) =>
+        {
+            if (thumbnail == shown) thumbnail = null;
+        };
+        thumbnail = shown;
+        shown.Show();
+    }
+
+    /// <summary>A pin of a finished image, from an editor or the thumbnail. It owns the image.</summary>
+    private void Pin(ExportedImage exported, bool keepsSize)
+    {
+        var pointer = platform.Screen.PointerPosition();
+        var pin = new PinWindow(exported.Image, exported.Dpi / 72, keepsSize, services,
+                                new PixelPoint((int)pointer.X, (int)pointer.Y));
+        pin.OpenRequested += (image, scale) => OpenEditor(new Document(new Capture(image, scale)), null);
+        pins.Add(pin);
+        pin.Closed += (_, _) => pins.Remove(pin);
+        pin.Show();
+    }
+
+    /// <summary>Everything closed for Quit. Each editor with edits asks first, and Cancel on any
+    /// of them keeps the app running with that editor and those after it open. A thumbnail still
+    /// showing copies itself on the way out, as a time out would.</summary>
+    internal async Task<bool> CloseAll()
+    {
+        foreach (var editor in editors.ToList())
+            if (!await editor.CloseAsking()) return false;
+        Thumbnail?.Dismiss(copying: true);
+        foreach (var pin in pins.ToList()) pin.Close();
+        return true;
     }
 }

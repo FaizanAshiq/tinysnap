@@ -15,7 +15,7 @@ public class EditorWindowTests
     private static EditorWindow Open(Tool tool = Tool.Arrow)
     {
         var session = new EditorSession(new Document(CanvasHost.Blank(400, 300)), tool);
-        var editor = new EditorWindow(session, DateTimeOffset.Now);
+        var editor = new EditorWindow(session, DateTimeOffset.Now, TestServices.Make());
         editor.Show();
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         editor.UpdateLayout();
