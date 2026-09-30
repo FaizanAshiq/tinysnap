@@ -15,4 +15,13 @@ public class ShellTests
         window.Show();
         Assert.Equal(300, ToolTip.GetShowDelay(button));
     }
+
+    [AvaloniaFact]
+    public void EveryWindowCarriesTheAppIcon()
+    {
+        var window = new Window();
+        window.Show();
+        Assert.NotNull(window.Icon);
+        Assert.NotNull(TestServices.Editor(TestServices.Make()).Icon);
+    }
 }
