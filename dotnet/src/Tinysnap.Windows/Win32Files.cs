@@ -27,6 +27,9 @@ internal sealed class Win32Files : IFileActions
 
     public void Reveal(string path) =>
         Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+
+    /// <summary>Only http and https reach here: a reading offers Open Link for nothing else.</summary>
+    public void Open(Uri link) => Process.Start(new ProcessStartInfo(link.AbsoluteUri) { UseShellExecute = true });
 }
 
 /// <summary>Start at login through the per-user Run key, which needs no admin rights.</summary>

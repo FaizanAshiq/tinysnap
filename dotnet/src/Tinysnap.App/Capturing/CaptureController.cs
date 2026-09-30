@@ -333,6 +333,34 @@ public sealed class CaptureController
         pin.Show();
     }
 
+    // Text and codes
+
+    /// <summary>The toast showing what was last copied, if it is still up.</summary>
+    internal TextToast? Toast { get; private set; }
+
+    /// <summary>Reads <paramref name="image"/> for text or, with <paramref name="codes"/>, for QR
+    /// codes on a worker thread, copies what it found, and says so in a toast at the top of the
+    /// monitor holding <paramref name="on"/>. The image stays the caller's.</summary>
+    internal async Task ReadAndCopy(SKImage image, bool codes, PixelPoint? on)
+    {
+        var reading = await Task.Run(() => platform.Text.Read(image, codes));
+        Toast?.Dismiss();
+        string title, shown = "";
+        if (reading is null)
+            title = codes ? "Could not scan for a QR code" : "Could not read text";
+        else if (reading.IsEmpty)
+            title = codes ? "No QR code found" : "No text found";
+        else if (!services.Clipboard.SetText(reading.Text))
+            title = "Tinysnap could not copy to the clipboard";
+        else
+        {
+            shown = string.Join("\n", reading.Text.Split('\n').Take(4));
+            title = !codes ? "Text copied" : reading.Codes.Length == 1 ? "QR code copied" : $"{reading.Codes.Length} QR codes copied";
+        }
+        Toast = new TextToast(title, shown, shown.Length > 0 ? reading : null, services.Clipboard, platform.Files, on, time);
+        Toast.Show();
+    }
+
     // Library
 
     private LibraryWindow? libraryWindow;

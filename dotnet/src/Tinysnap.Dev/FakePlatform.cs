@@ -62,6 +62,10 @@ public sealed class FakeFiles : IFileActions
     }
 
     public void Reveal(string path) => Revealed.Add(path);
+
+    public List<Uri> Opened { get; } = [];
+
+    public void Open(Uri link) => Opened.Add(link);
 }
 
 public sealed class FakeStartup : IStartup

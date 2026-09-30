@@ -58,6 +58,9 @@ public interface IFileActions
 
     /// <summary>The file manager on the folder holding <paramref name="path"/>, with it selected.</summary>
     void Reveal(string path);
+
+    /// <summary>A web address in the person's browser.</summary>
+    void Open(Uri link);
 }
 
 public interface IStartup
