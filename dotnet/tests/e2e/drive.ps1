@@ -48,6 +48,7 @@ public static class Desk
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr window, StringBuilder text, int max);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window, out Box box);
+    [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out Box box, int size);
 
     private const uint KeyUp = 0x2, Move = 0x1, LeftDown = 0x2, LeftUp = 0x4, Absolute = 0x8000;
 
@@ -62,8 +63,9 @@ public static class Desk
             if (owner != process || !IsWindowVisible(window)) return true;
             var title = new StringBuilder(512);
             GetWindowText(window, title, title.Capacity);
+            // What shows on screen, without the invisible borders a window is resized by.
             Box box;
-            GetWindowRect(window, out box);
+            if (DwmGetWindowAttribute(window, 9, out box, Marshal.SizeOf(typeof(Box))) != 0) GetWindowRect(window, out box);
             found.Add(new Win { Handle = window, Title = title.ToString(), X = box.Left, Y = box.Top,
                                 Width = box.Right - box.Left, Height = box.Bottom - box.Top });
             return true;
@@ -170,15 +172,49 @@ function Until([scriptblock] $condition, [double] $seconds = 15)
     return $null
 }
 
-function Shot([string] $name)
+function Grab
 {
-    $script:shot++
     $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     $graphics.CopyFromScreen($screen.Left, $screen.Top, 0, 0, $bitmap.Size)
-    $bitmap.Save((Join-Path $Shots ('{0}-{1}.png' -f $script:shot, $name)), [System.Drawing.Imaging.ImageFormat]::Png)
     $graphics.Dispose()
+    return $bitmap
+}
+
+function Shot([string] $name)
+{
+    $script:shot++
+    $bitmap = Grab
+    $bitmap.Save((Join-Path $Shots ('{0}-{1}.png' -f $script:shot, $name)), [System.Drawing.Imaging.ImageFormat]::Png)
     $bitmap.Dispose()
+}
+
+# Where a window shows, if any of it is off the monitor's work area.
+function OffScreen($window)
+{
+    $work = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+    $now = [Desk]::Windows($script:app.Id) | Where-Object Handle -eq $window.Handle | Select-Object -First 1
+    if (-not $now) { return 'gone' }
+    if ($now.X -lt $work.Left -or $now.Y -lt $work.Top -or $now.X + $now.Width -gt $work.Right -or $now.Y + $now.Height -gt $work.Bottom)
+    {
+        '{0} by {1} at {2},{3} on a {4} by {5} work area' -f $now.Width, $now.Height, $now.X, $now.Y, $work.Width, $work.Height
+    }
+}
+
+# A window's corners, just inside it, as they showed and as the screen showed without it: a
+# see-through corner shows what is behind, where one drawn black or grey does not.
+function Opaque($window, $with, $without)
+{
+    $inset = 2
+    foreach ($corner in @(@($window.X, $window.Y), @(($window.X + $window.Width - 1), $window.Y),
+                          @($window.X, ($window.Y + $window.Height - 1)), @(($window.X + $window.Width - 1), ($window.Y + $window.Height - 1))))
+    {
+        $x = [Math]::Min([Math]::Max($corner[0] + ($(if ($corner[0] -eq $window.X) { $inset } else { -$inset })), 0), $screen.Width - 1)
+        $y = [Math]::Min([Math]::Max($corner[1] + ($(if ($corner[1] -eq $window.Y) { $inset } else { -$inset })), 0), $screen.Height - 1)
+        $shown, $behind = $with.GetPixel($x, $y), $without.GetPixel($x, $y)
+        $far = [Math]::Max([Math]::Abs($shown.R - $behind.R), [Math]::Max([Math]::Abs($shown.G - $behind.G), [Math]::Abs($shown.B - $behind.B)))
+        if ($far -gt 24) { return "at $x,$y it shows $($shown.Name) over $($behind.Name)" }
+    }
 }
 
 function Press { [Desk]::Keys([byte[]]$args) }
@@ -300,6 +336,7 @@ if ($editor)
     }
     Start-Sleep -Seconds 1
     Shot 'fullscreen-editor'
+    Check 'the editor for the whole screen fits on it' { OffScreen $editor }
     Front $editor
     $saved = SaveFront
     Check 'Ctrl+S saves a PNG the size of the screen' {
@@ -347,6 +384,7 @@ if ($overlay)
     {
         Start-Sleep -Seconds 1
         Shot 'area-editor'
+        Check 'the editor for a small area fits on the screen' { OffScreen $editor }
         Front $editor
         $script:area = SaveFront
         Check 'the saved area is the 400 by 150 pixels dragged' {
@@ -362,6 +400,7 @@ if ($overlay)
 # 6. Text: the overlay again, and the words in the area on the clipboard
 
 [System.Windows.Forms.Clipboard]::Clear()
+$plain = Grab
 Press $Ctrl $Shift 0x4F
 $overlay = Until { Overlay } 10
 Check 'Ctrl+Shift+O covers the screen to pick text' { if (-not $overlay) { 'no overlay' } }
@@ -370,8 +409,13 @@ if ($overlay)
     Start-Sleep -Milliseconds 500
     [Desk]::Drag(70, 70, 950, 290)
     $text = Until { $t = ClipboardText; if ($t -match 'reads this line') { $t } } 20
+    $toast = Until { [Desk]::Windows($script:app.Id) | Where-Object Title -eq 'Text copied' | Select-Object -First 1 } 5
+    Start-Sleep -Milliseconds 500
+    $toast = [Desk]::Windows($script:app.Id) | Where-Object Title -eq 'Text copied' | Select-Object -First 1
+    $withToast = Grab
     Shot 'text-read'
     Check 'the text in the area is read and copied' { if (-not $text) { "clipboard holds '$(ClipboardText)'" } }
+    Check 'a toast says so, its rounded corners see-through' { if (-not $toast) { 'no toast' } else { Opaque $toast $withToast $plain } }
 }
 
 # 7. Opening a picture with Tinysnap while it runs: the running copy opens it
@@ -388,7 +432,16 @@ if ($script:area)
         Start-Sleep -Seconds 1
         Shot 'opened-file'
         Front $opened
-        Press $Ctrl 0x57
+        Press $Ctrl 0x50
+        $pin = Until { [Desk]::Windows($script:app.Id) | Where-Object Title -eq 'Pinned capture' | Select-Object -First 1 } 5
+        Check 'Ctrl+P pins it and closes the editor' {
+            if (-not $pin) { return 'no pin' }
+            if ([Desk]::Windows($script:app.Id) | Where-Object Title -eq $name) { 'the editor stayed' }
+        }
+        Start-Sleep -Milliseconds 500
+        $pin = [Desk]::Windows($script:app.Id) | Where-Object Title -eq 'Pinned capture' | Select-Object -First 1
+        $withPin = Grab
+        Shot 'pinned'
     }
 }
 
@@ -396,6 +449,12 @@ if ($script:area)
 
 $kept = (LibraryEntries).Count
 Stop-Process -Id $script:app.Id -Force -ErrorAction SilentlyContinue
+if ($pin)
+{
+    Start-Sleep -Seconds 1
+    $unpinned = Grab
+    Check 'the shadow round a pin is see-through' { Opaque $pin $withPin $unpinned }
+}
 Stop-Process -Id $page.Id -Force -ErrorAction SilentlyContinue
 Check 'uninstalling removes the app, its Start menu entry and its Open with entries' {
     $update = Start-Process (Join-Path $install 'Update.exe') -ArgumentList '--silent', 'uninstall' -PassThru
