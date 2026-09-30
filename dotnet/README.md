@@ -30,12 +30,17 @@ dotnet test dotnet/Tinysnap.slnx                 # on Windows, the platform test
 dotnet run --project dotnet/src/Tinysnap.Dev     # the app on a Mac
 ```
 
-CI runs every test on Windows and the Core and app tests on macOS. What only a person on a
-Windows machine can check: that the hotkeys reach the app while other apps are in front,
-capture on real monitors at mixed scales, pasting into other apps, dragging out, how a pin
-resizes on a real wheel and touchpad, the thumbnail's slide and swipe, the tray menu, start at
-login, the Recycle Bin, a second launch bringing the first forward, text read from real apps in
-the person's own languages, the desktop picture as a backdrop, and how it all feels.
+CI runs every test on Windows and the Core and app tests on macOS. Its `e2e` job then installs
+the x64 `Setup.exe` it just built on a Windows desktop and drives it with real keys and a real
+mouse (`tests/e2e/drive.ps1`): the hotkeys, the area overlay, saving, copying, the library,
+reading text, opening a file with a second launch, pinning, editors fitting a 1024 by 768
+screen, and uninstalling. It keeps a screenshot of each step as the `e2e-screenshots` artifact.
+
+What only a person on a Windows machine can check: capture on real monitors at mixed scales,
+pasting into other apps, dragging out, how a pin resizes on a real wheel and touchpad, the
+thumbnail's slide and swipe, the tray menu, start at login, the Recycle Bin, a second launch
+with no file bringing the first forward, text in the person's own languages, the desktop
+picture as a backdrop, the ARM64 build, and how it all feels.
 
 ## Packaging and releasing
 
