@@ -47,7 +47,7 @@ GitHub release.
 1. Run the build on a real Windows machine first: install `Tinysnap-win-x64-Setup.exe` from the
    artifacts and go through the checks above.
 2. Tag and release as the Mac app does, then attach the Windows files from the tag's run:
-   `gh release upload vX.Y.Z Tinysnap-win-x64-Setup.exe Tinysnap-win-x64.zip Tinysnap-win-arm64-Setup.exe Tinysnap-win-arm64.zip`.
+   `gh release upload vX.Y.Z Tinysnap-win-x64-Setup.exe Tinysnap-win-x64-Portable.zip Tinysnap-win-arm64-Setup.exe Tinysnap-win-arm64-Portable.zip`.
 3. Copy `packaging/winget/FaizanAshiq.Tinysnap/<version>` for the new version, fill in each
    installer's `InstallerSha256` (`Get-FileHash .\Tinysnap-win-x64-Setup.exe`), run
    `winget validate` on the folder, and send it to `microsoft/winget-pkgs` with `wingetcreate submit`.

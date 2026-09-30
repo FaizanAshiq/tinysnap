@@ -38,6 +38,11 @@ internal static class Program
             .OnAfterUpdateFastCallback(_ => Installed(new Win32FileTypes()))
             .OnBeforeUninstallFastCallback(_ => Uninstalling(new Win32Startup(), new Win32FileTypes()))
             .Run();
+        if (args is ["--self-check", var report])
+        {
+            Environment.ExitCode = SelfCheck.Run(report);
+            return;
+        }
         using var instance = new SingleInstance();
         if (!instance.IsFirst)
         {

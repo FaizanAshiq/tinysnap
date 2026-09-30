@@ -23,6 +23,8 @@ public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started
 
     public CaptureController? Captures { get; private set; }
 
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "The colour picker's styles are compiled XAML the trimmed build keeps; Tinysnap.exe self-check loads them.")]
     public override void Initialize()
     {
         Styles.Add(new FluentTheme());

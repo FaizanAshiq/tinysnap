@@ -47,6 +47,16 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Publish
         run: dotnet publish dotnet/src/Tinysnap.Windows --configuration Release --runtime ${{ matrix.runtime }} --self-contained --output publish
+      # The tests run the full build; this runs the trimmed one that ships, on each path trimming
+      # could break. ARM64 cannot run on this x64 machine, and is trimmed the same way.
+      - name: Self-check
+        if: matrix.runtime == 'win-x64'
+        shell: pwsh
+        run: |
+          $check = Start-Process publish\Tinysnap.exe -ArgumentList '--self-check', "$pwd\self-check.txt" -PassThru
+          $check | Wait-Process -Timeout 180
+          if (Test-Path self-check.txt) { Get-Content self-check.txt }
+          if (-not $check.HasExited -or $check.ExitCode -ne 0) { exit 1 }
       - name: Pack
         shell: pwsh
         run: |
