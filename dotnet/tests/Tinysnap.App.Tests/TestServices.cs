@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Tinysnap.App.Capturing;
 using Tinysnap.App.Editing;
 using Tinysnap.Core;
 using Tinysnap.Dev;
@@ -22,23 +23,52 @@ internal sealed class FakeDialogs(CloseChoice answer = CloseChoice.Cancel) : IDi
         return Task.CompletedTask;
     }
 
-    public Task<CloseChoice> AskToSave(Window owner)
+    /// <summary>What every confirmation is answered.</summary>
+    public bool Confirmation { get; set; }
+
+    public Task<bool> Confirm(Window owner, string message, string detail, string action) => Task.FromResult(Confirmation);
+
+    public Task<CloseChoice> AskToSave(Window owner, bool libraryFailed = false)
     {
         Asked++;
         return Task.FromResult(Answer);
     }
 }
 
+/// <summary>A controller on one Retina monitor 400 by 300 pixels, with a library, clipboard,
+/// dialogs, files and timers of its own for a test to look at.</summary>
+internal sealed record AppSetup(CaptureController Controller, LibraryStore Library, FakeClipboard Clipboard, FakeDialogs Dialogs,
+                                FakeTime Time, FakeFiles Files, FakePlatform Platform);
+
 internal static class TestServices
 {
+    public static AppSetup Launch(Preferences? preferences = null)
+    {
+        var retina = Screens.Frozen(new Tinysnap.Core.Rect(0, 0, 400, 300), 2, SkiaSharp.SKColors.Blue);
+        var platform = new FakePlatform(new FakeScreenCapture(() => Screens.Desktop(retina), () => new Tinysnap.Core.Point(100, 100)));
+        var library = new LibraryStore(TemporaryFolder());
+        var dialogs = new FakeDialogs();
+        var time = new FakeTime();
+        var controller = new CaptureController(platform, Store(preferences), library, dialogs, time);
+        return new AppSetup(controller, library, (FakeClipboard)platform.Clipboard, dialogs, time, (FakeFiles)platform.Files, platform);
+    }
+
     public static string TemporaryFolder() => Path.Combine(Path.GetTempPath(), $"tinysnap-saves-{Guid.NewGuid()}");
+
+    /// <summary>A store in a folder of its own holding <paramref name="preferences"/>.</summary>
+    public static PreferencesStore Store(Preferences? preferences = null)
+    {
+        var store = new PreferencesStore(Path.Combine(TemporaryFolder(), "preferences.json"));
+        if (preferences is not null) store.Update(_ => preferences);
+        return store;
+    }
 
     public static EditorServices Make(FakeClipboard? clipboard = null, FakeDialogs? dialogs = null, string? saveFolder = null,
                                       Action<ExportedImage, bool>? pin = null)
     {
         var folder = saveFolder ?? TemporaryFolder();
         return new EditorServices(clipboard ?? new FakeClipboard(), () => Preferences.Defaults with { SaveFolder = folder },
-                                  dialogs ?? new FakeDialogs(), pin);
+                                  dialogs ?? new FakeDialogs(), pin is null ? null : (exported, keepsSize, _) => pin(exported, keepsSize));
     }
 
     /// <summary>A shown editor on a blank 400 by 300 capture at 2x, laid out and focused.</summary>
@@ -56,6 +86,9 @@ internal static class TestServices
     /// enough inside the capture that its shadow does not grow it.</summary>
     public static void Draw(EditorWindow editor)
     {
+        // An editor the controller opened may not have laid out at its placed size yet.
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        editor.UpdateLayout();
         var canvas = editor.Canvas;
         var from = canvas.TranslatePoint(new Point(60, 50), editor)!.Value;
         var to = canvas.TranslatePoint(new Point(110, 80), editor)!.Value;

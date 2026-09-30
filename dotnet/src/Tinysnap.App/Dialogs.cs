@@ -14,8 +14,13 @@ internal interface IDialogs
     /// <summary>A notice with OK, over <paramref name="owner"/> when there is one.</summary>
     Task Tell(Window? owner, string message);
 
-    /// <summary>Save, Discard or Cancel, for closing a capture whose edits would be lost.</summary>
-    Task<CloseChoice> AskToSave(Window owner);
+    /// <summary>Save, Discard or Cancel, for closing a capture whose edits would be lost.
+    /// <paramref name="libraryFailed"/> says why for a capture the library could not keep.</summary>
+    Task<CloseChoice> AskToSave(Window owner, bool libraryFailed = false);
+
+    /// <summary><paramref name="action"/> or Cancel, for something that cannot be undone. True
+    /// only for the action; Cancel is the default.</summary>
+    Task<bool> Confirm(Window owner, string message, string detail, string action);
 }
 
 internal sealed class AvaloniaDialogs : IDialogs
@@ -27,9 +32,11 @@ internal sealed class AvaloniaDialogs : IDialogs
         else await dialog.ShowDialog<int?>(owner);
     }
 
-    public async Task<CloseChoice> AskToSave(Window owner)
+    public async Task<CloseChoice> AskToSave(Window owner, bool libraryFailed = false)
     {
-        var dialog = Dialog("Save this capture before closing?", "Its annotations and crop are lost if you do not.",
+        var dialog = Dialog("Save this capture before closing?", libraryFailed
+            ? "Tinysnap could not keep it in the library, so its annotations and crop are lost if you do not."
+            : "Its annotations and crop are lost if you do not.",
         [
             ("Save", (int)CloseChoice.Save, true, false),
             ("Discard", (int)CloseChoice.Discard, false, false),
@@ -37,6 +44,12 @@ internal sealed class AvaloniaDialogs : IDialogs
         ]);
         // Closed without an answer is Cancel: nothing is lost.
         return await dialog.ShowDialog<int?>(owner) is { } choice ? (CloseChoice)choice : CloseChoice.Cancel;
+    }
+
+    public async Task<bool> Confirm(Window owner, string message, string detail, string action)
+    {
+        var dialog = Dialog(message, detail, [(action, 1, false, false), ("Cancel", 0, true, true)]);
+        return await dialog.ShowDialog<int?>(owner) == 1;
     }
 
     /// <summary>A small window with the message, an optional line under it, and buttons along the

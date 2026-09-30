@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using SkiaSharp;
 using Tinysnap.App.Capturing;
+using Tinysnap.Core;
 using Tinysnap.Dev;
 using Tinysnap.Platform;
 using CorePoint = Tinysnap.Core.Point;
@@ -15,7 +16,8 @@ namespace Tinysnap.App.Tests;
 public class CaptureFlowTests
 {
     private static CaptureController Controller(FrozenDesktop desktop, CorePoint pointer, double cornerRadius = 0) =>
-        new(new FakePlatform(new FakeScreenCapture(() => desktop, () => pointer, cornerRadius)), () => Tinysnap.Core.Preferences.Defaults);
+        new(new FakePlatform(new FakeScreenCapture(() => desktop, () => pointer, cornerRadius)), TestServices.Store(),
+            new LibraryStore(TestServices.TemporaryFolder()));
 
     private static readonly Tinysnap.Core.Preferences Thumbnails = Tinysnap.Core.Preferences.Defaults with
     {
@@ -27,7 +29,8 @@ public class CaptureFlowTests
                                                                                      FakeDialogs? dialogs = null)
     {
         var platform = new FakePlatform(new FakeScreenCapture(() => Screens.Desktop(Retina), () => new CorePoint(100, 100)));
-        return (new CaptureController(platform, () => preferences, dialogs ?? new FakeDialogs(), new FakeTime()),
+        return (new CaptureController(platform, TestServices.Store(preferences), new LibraryStore(TestServices.TemporaryFolder()),
+                                      dialogs ?? new FakeDialogs(), new FakeTime()),
                 (FakeClipboard)platform.Clipboard);
     }
 
@@ -140,13 +143,13 @@ public class CaptureFlowTests
     [AvaloniaFact]
     public void ANewCaptureSendsTheLastThumbnailAway()
     {
-        var (controller, clipboard) = WithOutput(Thumbnails);
+        var (controller, clipboard) = WithOutput(Thumbnails with { KeepLibrary = false });
         controller.CaptureFullscreen();
         var first = controller.Thumbnail!;
         controller.CaptureFullscreen();
         Assert.True(first.IsGone);
         Assert.NotSame(first, controller.Thumbnail);
-        // Copied on the way out, as a time out would.
+        // Copied on the way out, as a time out would with the library off.
         Assert.Equal(1600, clipboard.Image!.Width);
     }
 
@@ -192,7 +195,7 @@ public class CaptureFlowTests
     public async Task QuitAsksAboutEveryEditorWithEdits()
     {
         var dialogs = new FakeDialogs(Tinysnap.App.CloseChoice.Cancel);
-        var (controller, _) = WithOutput(Tinysnap.Core.Preferences.Defaults, dialogs);
+        var (controller, _) = WithOutput(Tinysnap.Core.Preferences.Defaults with { KeepLibrary = false }, dialogs);
         controller.CaptureFullscreen();
         var edited = Assert.Single(controller.Editors);
         TestServices.Draw(edited);
