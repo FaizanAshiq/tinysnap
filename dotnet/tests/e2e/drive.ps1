@@ -1,0 +1,415 @@
+<#
+  The installed app driven the way a person uses it: Setup.exe installs it, real hotkeys and
+  keys reach it, and what lands on disk, on the clipboard and on screen is checked. Uninstalling
+  ends the run. A screenshot of each step goes to the shots folder.
+
+  Needs an interactive desktop, as CI's Windows runners have, and Windows PowerShell, whose
+  clipboard access runs on a single-threaded apartment:
+
+    powershell -File drive.ps1 -Setup Tinysnap-win-x64-Setup.exe -Shots shots
+#>
+param(
+    [Parameter(Mandatory)] [string] $Setup,
+    [string] $Shots = 'shots'
+)
+
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class Desk
+{
+    public class Win
+    {
+        public IntPtr Handle;
+        public string Title;
+        public int X, Y, Width, Height;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Box { public int Left, Top, Right, Bottom; }
+
+    private delegate bool EnumProc(IntPtr window, IntPtr data);
+
+    [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
+    [DllImport("user32.dll")] private static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
+    [DllImport("user32.dll")] private static extern void mouse_event(uint flags, int x, int y, uint data, UIntPtr extra);
+    [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
+    [DllImport("user32.dll")] private static extern bool RegisterHotKey(IntPtr window, int id, uint modifiers, uint key);
+    [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr window, int id);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumProc proc, IntPtr data);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr window, StringBuilder text, int max);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window, out Box box);
+
+    private const uint KeyUp = 0x2, Move = 0x1, LeftDown = 0x2, LeftUp = 0x4, Absolute = 0x8000;
+
+    /// <summary>The visible top level windows of one process, front to back.</summary>
+    public static List<Win> Windows(int process)
+    {
+        var found = new List<Win>();
+        EnumWindows(delegate (IntPtr window, IntPtr data)
+        {
+            uint owner;
+            GetWindowThreadProcessId(window, out owner);
+            if (owner != process || !IsWindowVisible(window)) return true;
+            var title = new StringBuilder(512);
+            GetWindowText(window, title, title.Capacity);
+            Box box;
+            GetWindowRect(window, out box);
+            found.Add(new Win { Handle = window, Title = title.ToString(), X = box.Left, Y = box.Top,
+                                Width = box.Right - box.Left, Height = box.Bottom - box.Top });
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+
+    public static string Title(IntPtr window)
+    {
+        var title = new StringBuilder(512);
+        GetWindowText(window, title, title.Capacity);
+        return title.ToString();
+    }
+
+    /// <summary>Holds each key down in order, then lets them go in reverse, as fingers would.</summary>
+    public static void Keys(params byte[] keys)
+    {
+        foreach (var key in keys) { keybd_event(key, 0, 0, UIntPtr.Zero); System.Threading.Thread.Sleep(30); }
+        for (var i = keys.Length - 1; i >= 0; i--) { keybd_event(keys[i], 0, KeyUp, UIntPtr.Zero); System.Threading.Thread.Sleep(30); }
+    }
+
+    /// <summary>The pointer to a pixel on the primary monitor.</summary>
+    public static void MoveTo(int x, int y)
+    {
+        var width = GetSystemMetrics(0);
+        var height = GetSystemMetrics(1);
+        mouse_event(Move | Absolute, x * 65535 / (width - 1), y * 65535 / (height - 1), 0, UIntPtr.Zero);
+    }
+
+    public static void Down() { mouse_event(LeftDown, 0, 0, 0, UIntPtr.Zero); }
+
+    public static void Up() { mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero); }
+
+    /// <summary>A left drag in small steps, as a hand would make it.</summary>
+    public static void Drag(int fromX, int fromY, int toX, int toY)
+    {
+        MoveTo(fromX, fromY);
+        System.Threading.Thread.Sleep(150);
+        Down();
+        for (var step = 1; step <= 12; step++)
+        {
+            System.Threading.Thread.Sleep(25);
+            MoveTo(fromX + (toX - fromX) * step / 12, fromY + (toY - fromY) * step / 12);
+        }
+        System.Threading.Thread.Sleep(150);
+        Up();
+    }
+
+    /// <summary>True when another app holds the combination: registering it fails.</summary>
+    public static bool HotkeyTaken(uint modifiers, uint key)
+    {
+        if (!RegisterHotKey(IntPtr.Zero, 0xBEEF, modifiers, key)) return true;
+        UnregisterHotKey(IntPtr.Zero, 0xBEEF);
+        return false;
+    }
+
+    /// <summary>Brings a window forward even when this process is not in front: a tapped Alt
+    /// counts as input, which lets the next call take the foreground.</summary>
+    public static bool Focus(IntPtr window)
+    {
+        keybd_event(0x12, 0, 0, UIntPtr.Zero);
+        keybd_event(0x12, 0, KeyUp, UIntPtr.Zero);
+        return SetForegroundWindow(window);
+    }
+}
+'@
+[void][Desk]::SetProcessDPIAware()
+
+$Ctrl, $Shift = 0x11, 0x10
+$ModControl, $ModShift = 0x2, 0x4
+
+$install = Join-Path $env:LOCALAPPDATA 'Tinysnap'
+$exe = Join-Path $install 'current\Tinysnap.exe'
+$library = Join-Path $env:APPDATA 'Tinysnap\Library'
+$saves = Join-Path $env:USERPROFILE 'Pictures\Screenshots'
+$startMenu = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Tinysnap.lnk'
+$uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Tinysnap'
+$screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+New-Item -ItemType Directory -Force $Shots | Out-Null
+
+$results = New-Object System.Collections.Generic.List[string]
+$script:failed = $false
+$script:shot = 0
+
+# A check is a block that returns nothing when it holds, or what went wrong.
+function Check([string] $name, [scriptblock] $check)
+{
+    try { $problem = & $check } catch { $problem = "$($_.Exception.GetType().Name): $($_.Exception.Message)" }
+    if ($problem) { $script:failed = $true; $line = "FAILED  ${name}: $problem" } else { $line = "ok      $name" }
+    $results.Add($line)
+    Write-Host $line
+}
+
+# The first thing the block returns within the time, or nothing.
+function Until([scriptblock] $condition, [double] $seconds = 15)
+{
+    $deadline = (Get-Date).AddSeconds($seconds)
+    do
+    {
+        try { $value = & $condition } catch { $value = $null }
+        if ($value) { return $value }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+    return $null
+}
+
+function Shot([string] $name)
+{
+    $script:shot++
+    $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    $graphics.CopyFromScreen($screen.Left, $screen.Top, 0, 0, $bitmap.Size)
+    $bitmap.Save((Join-Path $Shots ('{0}-{1}.png' -f $script:shot, $name)), [System.Drawing.Imaging.ImageFormat]::Png)
+    $graphics.Dispose()
+    $bitmap.Dispose()
+}
+
+function Press { [Desk]::Keys([byte[]]$args) }
+
+function Editors { @([Desk]::Windows($script:app.Id) | Where-Object { $_.Title -like 'Capture at*' }) }
+
+# The overlay: the window of Tinysnap's that covers the whole monitor and is no editor.
+function Overlay
+{
+    [Desk]::Windows($script:app.Id) |
+        Where-Object { $_.Title -notlike 'Capture at*' -and $_.Width -ge $screen.Width -and $_.Height -ge $screen.Height } |
+        Select-Object -First 1
+}
+
+function SavedPngs { @(Get-ChildItem $saves -Filter *.png -ErrorAction SilentlyContinue | ForEach-Object FullName) }
+
+function LibraryEntries { @(Get-ChildItem $library -Directory -ErrorAction SilentlyContinue) }
+
+function PngSize([string] $path)
+{
+    $image = [System.Drawing.Image]::FromFile($path)
+    try { return '{0}x{1}' -f $image.Width, $image.Height } finally { $image.Dispose() }
+}
+
+# The editor in front for keys to reach it. Whether it came forward by itself is its own check.
+function Front($window)
+{
+    if ([Desk]::GetForegroundWindow() -ne $window.Handle) { [void][Desk]::Focus($window.Handle) }
+    Start-Sleep -Milliseconds 300
+}
+
+# Saves the front editor with Ctrl+S and returns the new file.
+function SaveFront
+{
+    $before = SavedPngs
+    Press $Ctrl 0x53
+    Until { SavedPngs | Where-Object { $before -notcontains $_ } | Select-Object -First 1 } 10
+}
+
+function ClipboardText { try { [System.Windows.Forms.Clipboard]::GetText() } catch { $null } }
+
+# The results to a file beside the shots and to the run's summary page, and the exit code.
+# The marks are built from code points: Windows PowerShell reads this file as ANSI.
+function Finish
+{
+    $results | Set-Content (Join-Path $Shots 'results.txt')
+    if ($env:GITHUB_STEP_SUMMARY)
+    {
+        $pass, $fail = [char]0x2705, [char]0x274C
+        $lines = $results | ForEach-Object { if ($_ -like 'ok*') { "- $pass $($_.Substring(8))" } else { "- $fail $($_.Substring(8))" } }
+        (@('### Installed app, end to end', '') + $lines) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY -Encoding UTF8
+    }
+    exit [int]$script:failed
+}
+
+# 1. Installing
+
+Check 'Setup.exe installs silently' {
+    $setup = Start-Process $Setup -ArgumentList '--silent' -PassThru
+    $null = $setup.Handle
+    if (-not $setup.WaitForExit(180000)) { return 'still running after 3 minutes' }
+    if ($setup.ExitCode -ne 0) { return "exited with $($setup.ExitCode)" }
+    if (-not (Test-Path $exe)) { return "nothing at $exe" }
+}
+Check 'Installed apps lists it' {
+    $name = (Get-ItemProperty $uninstallKey -ErrorAction SilentlyContinue).DisplayName
+    if ($name -ne 'Tinysnap') { "listed as '$name'" }
+}
+Check 'the Start menu has it' { if (-not (Test-Path $startMenu)) { "no $startMenu" } }
+Check 'Open with offers it for PNG and JPEG' {
+    foreach ($extension in '.png', '.jpg', '.jpeg')
+    {
+        $progIds = Get-Item "HKCU:\Software\Classes\$extension\OpenWithProgids" -ErrorAction SilentlyContinue
+        if (-not $progIds -or $progIds.GetValueNames() -notcontains 'Tinysnap.Picture') { return "not for $extension" }
+    }
+    $command = (Get-ItemProperty 'HKCU:\Software\Classes\Tinysnap.Picture\shell\open\command').'(default)'
+    if ($command -notlike "*$exe*") { "opens with $command" }
+}
+if (-not (Test-Path $exe)) { Finish }
+Write-Host "Screen $($screen.Width) by $($screen.Height)"
+
+# 2. Something to capture: a window of dark text on white, in a process of its own.
+
+$target = @'
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+$form = New-Object Windows.Forms.Form
+$form.FormBorderStyle = 'None'; $form.StartPosition = 'Manual'; $form.BackColor = 'White'
+$form.Location = New-Object Drawing.Point(80, 80); $form.Size = New-Object Drawing.Size(860, 200)
+$label = New-Object Windows.Forms.Label
+$label.Text = 'Tinysnap reads this line'; $label.Font = New-Object Drawing.Font('Segoe UI', 36)
+$label.ForeColor = 'Black'; $label.AutoSize = $true; $label.Location = New-Object Drawing.Point(40, 60)
+$form.Controls.Add($label)
+[Windows.Forms.Application]::Run($form)
+'@
+$page = Start-Process powershell -PassThru -ArgumentList '-NoProfile', '-EncodedCommand', ([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($target)))
+[void](Until { [Desk]::Windows($page.Id).Count } 20)
+
+# 3. Starting
+
+$script:app = Start-Process $exe -PassThru
+Check 'Tinysnap starts and holds its hotkeys' {
+    if (-not (Until { [Desk]::HotkeyTaken($ModControl + $ModShift, 0x31) } 30)) { return 'Ctrl+Shift+1 is free' }
+    if (-not [Desk]::HotkeyTaken($ModControl + $ModShift, 0x32)) { return 'Ctrl+Shift+2 is free' }
+    if (-not [Desk]::HotkeyTaken($ModControl + $ModShift, 0x4F)) { return 'Ctrl+Shift+O is free' }
+}
+Start-Sleep -Seconds 1
+Shot 'started'
+
+# 4. Fullscreen: capture, save, copy, keep, close
+
+Press $Ctrl $Shift 0x31
+$editor = Until { Editors | Select-Object -First 1 }
+Check 'Ctrl+Shift+1 opens the screen in an editor' { if (-not $editor) { 'no editor' } }
+if ($editor)
+{
+    Check 'the editor comes to the front' {
+        $front = [Desk]::GetForegroundWindow()
+        if ($front -ne $editor.Handle) { "in front: '$([Desk]::Title($front))'" }
+    }
+    Start-Sleep -Seconds 1
+    Shot 'fullscreen-editor'
+    Front $editor
+    $saved = SaveFront
+    Check 'Ctrl+S saves a PNG the size of the screen' {
+        if (-not $saved) { return "nothing new in $saves" }
+        $size = PngSize $saved
+        if ($size -ne ('{0}x{1}' -f $screen.Width, $screen.Height)) { "saved $size" }
+    }
+    [System.Windows.Forms.Clipboard]::Clear()
+    Press $Ctrl 0x43
+    Check 'Ctrl+C copies it as a PNG and as a bitmap' {
+        $formats = Until { $data = [System.Windows.Forms.Clipboard]::GetDataObject(); if ($data.GetFormats() -contains 'PNG') { $data.GetFormats() } } 5
+        if (-not $formats) { return 'no PNG on the clipboard' }
+        if (-not [System.Windows.Forms.Clipboard]::ContainsImage()) { "no bitmap among $($formats -join ', ')" }
+    }
+    Check 'the capture is kept in the library' {
+        $entry = LibraryEntries | Select-Object -First 1
+        if (-not $entry) { return "nothing in $library" }
+        foreach ($file in 'original.png', 'image.png', 'edits.json')
+        {
+            if (-not (Test-Path (Join-Path $entry.FullName $file))) { return "no $file in $($entry.Name)" }
+        }
+    }
+    Press $Ctrl 0x57
+    Check 'Ctrl+W closes a saved editor without asking' { if (-not (Until { (Editors).Count -eq 0 } 5)) { 'still open' } }
+}
+
+# 5. An area: the overlay, a drag, the editor, the saved size
+
+Press $Ctrl $Shift 0x32
+$overlay = Until { Overlay } 10
+Check 'Ctrl+Shift+2 covers the screen with the area overlay' { if (-not $overlay) { 'no overlay' } }
+if ($overlay)
+{
+    Start-Sleep -Milliseconds 500
+    [Desk]::MoveTo(100, 100)
+    Start-Sleep -Milliseconds 150
+    [Desk]::Down()
+    foreach ($step in 1..12) { Start-Sleep -Milliseconds 25; [Desk]::MoveTo(100 + 400 * $step / 12, 100 + 150 * $step / 12) }
+    Start-Sleep -Milliseconds 300
+    Shot 'area-overlay'
+    [Desk]::Up()
+    $editor = Until { Editors | Select-Object -First 1 }
+    Check 'dragging out an area opens it in an editor' { if (-not $editor) { 'no editor' } }
+    if ($editor)
+    {
+        Start-Sleep -Seconds 1
+        Shot 'area-editor'
+        Front $editor
+        $script:area = SaveFront
+        Check 'the saved area is the 400 by 150 pixels dragged' {
+            if (-not $script:area) { return "nothing new in $saves" }
+            $size = PngSize $script:area
+            if ($size -ne '400x150') { "saved $size" }
+        }
+        Press $Ctrl 0x57
+        [void](Until { (Editors).Count -eq 0 } 5)
+    }
+}
+
+# 6. Text: the overlay again, and the words in the area on the clipboard
+
+[System.Windows.Forms.Clipboard]::Clear()
+Press $Ctrl $Shift 0x4F
+$overlay = Until { Overlay } 10
+Check 'Ctrl+Shift+O covers the screen to pick text' { if (-not $overlay) { 'no overlay' } }
+if ($overlay)
+{
+    Start-Sleep -Milliseconds 500
+    [Desk]::Drag(70, 70, 950, 290)
+    $text = Until { $t = ClipboardText; if ($t -match 'reads this line') { $t } } 20
+    Shot 'text-read'
+    Check 'the text in the area is read and copied' { if (-not $text) { "clipboard holds '$(ClipboardText)'" } }
+}
+
+# 7. Opening a picture with Tinysnap while it runs: the running copy opens it
+
+if ($script:area)
+{
+    $name = Split-Path -Leaf $script:area
+    $second = Start-Process $exe -ArgumentList ('"{0}"' -f $script:area) -PassThru
+    $opened = Until { [Desk]::Windows($script:app.Id) | Where-Object Title -eq $name | Select-Object -First 1 } 15
+    Check 'opening a PNG with Tinysnap opens it in the running copy' { if (-not $opened) { "no editor titled $name" } }
+    Check 'the second copy quits' { if (-not $second.WaitForExit(10000)) { 'still running' } }
+    if ($opened)
+    {
+        Start-Sleep -Seconds 1
+        Shot 'opened-file'
+        Front $opened
+        Press $Ctrl 0x57
+    }
+}
+
+# 8. Uninstalling: the app goes, the captures stay
+
+$kept = (LibraryEntries).Count
+Stop-Process -Id $script:app.Id -Force -ErrorAction SilentlyContinue
+Stop-Process -Id $page.Id -Force -ErrorAction SilentlyContinue
+Check 'uninstalling removes the app, its Start menu entry and its Open with entries' {
+    $update = Start-Process (Join-Path $install 'Update.exe') -ArgumentList '--silent', 'uninstall' -PassThru
+    $null = $update.Handle
+    if (-not $update.WaitForExit(120000)) { return 'still running after 2 minutes' }
+    if (-not (Until { -not (Test-Path $exe) } 30)) { return "$exe is still there" }
+    if (Test-Path $uninstallKey) { return 'still in Installed apps' }
+    if (Test-Path $startMenu) { return 'still in the Start menu' }
+    if (Test-Path 'HKCU:\Software\Classes\Tinysnap.Picture') { return 'still offered in Open with' }
+}
+Check 'uninstalling keeps the library' {
+    if ($kept -eq 0) { return "the library was empty before, at $library" }
+    $left = (LibraryEntries).Count
+    if ($left -ne $kept) { "$kept entries before, $left after" }
+}
+
+Finish

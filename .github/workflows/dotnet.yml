@@ -71,3 +71,25 @@ jobs:
           name: Tinysnap-${{ matrix.runtime }}
           path: releases/*
           retention-days: 14
+
+  # The installer that was just built, installed and driven like a person would: real hotkeys,
+  # real windows, real files, then uninstalled. A screenshot of each step is kept.
+  e2e:
+    needs: package
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: Tinysnap-win-x64
+          path: releases
+      - name: Drive the installed app
+        shell: powershell
+        run: dotnet/tests/e2e/drive.ps1 -Setup releases/Tinysnap-win-x64-Setup.exe -Shots shots
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-screenshots
+          path: shots/*
+          retention-days: 14
