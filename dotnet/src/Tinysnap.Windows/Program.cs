@@ -15,7 +15,7 @@ internal sealed class WindowsPlatform(IScreenCapture screen, IHotkeys hotkeys, I
     public IStartup Startup { get; } = new Win32Startup();
     public ITextReader Text { get; } = new WinRtTextReader();
 
-    public event Action? Reopened
+    public event Action<IReadOnlyList<string>>? Reopened
     {
         add => instance.Reopened += value;
         remove => instance.Reopened -= value;
@@ -33,23 +33,36 @@ internal static class Program
     {
         // First of all: the installer runs the exe to install and uninstall, and those runs end
         // here. No update is ever checked for; winget brings new versions.
-        VelopackApp.Build().OnBeforeUninstallFastCallback(_ => Uninstalling(new Win32Startup())).Run();
+        VelopackApp.Build()
+            .OnAfterInstallFastCallback(_ => Installed(new Win32FileTypes()))
+            .OnAfterUpdateFastCallback(_ => Installed(new Win32FileTypes()))
+            .OnBeforeUninstallFastCallback(_ => Uninstalling(new Win32Startup(), new Win32FileTypes()))
+            .Run();
         using var instance = new SingleInstance();
         if (!instance.IsFirst)
         {
-            instance.AskFirstToReopen();
+            // Opened again, from "Open with" or the Start menu: the running copy takes it from here.
+            instance.AskFirstToReopen(args);
             return;
         }
         // Made here, on the thread that becomes the UI thread, whose message loop delivers the hotkeys.
         using var hotkeys = new Win32Hotkeys();
         using var clipboard = new Win32Clipboard();
         var platform = new WindowsPlatform(new GdiScreenCapture(), hotkeys, clipboard, instance);
-        AppBuilder.Configure(() => new TinysnapApp(platform))
+        AppBuilder.Configure(() => new TinysnapApp(platform, files: args))
             .UsePlatformDetect()
             .LogToTrace()
             .StartWithClassicDesktopLifetime(args);
     }
 
-    /// <summary>Uninstalling leaves no start-at-login entry pointing at a removed exe.</summary>
-    internal static void Uninstalling(IStartup startup) => startup.SetEnabled(false);
+    /// <summary>Installing, or updating to a new place, puts Tinysnap in "Open with" for pictures.</summary>
+    internal static void Installed(Win32FileTypes types) => types.Register(Environment.ProcessPath!);
+
+    /// <summary>Uninstalling leaves no start-at-login entry, and no "Open with" entry, pointing at a
+    /// removed exe.</summary>
+    internal static void Uninstalling(IStartup startup, Win32FileTypes types)
+    {
+        startup.SetEnabled(false);
+        types.Unregister();
+    }
 }

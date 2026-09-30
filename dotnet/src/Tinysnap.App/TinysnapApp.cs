@@ -15,7 +15,9 @@ namespace Tinysnap.App;
 /// <summary>The whole app, on whichever platform layer it is given: Windows' own, or the
 /// stand-in the Mac runs during development.</summary>
 /// <param name="started">Called once the app is up, for the development launcher.</param>
-public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started = null) : Application
+/// <param name="files">Pictures the app was opened with, from "Open with", each opened in an editor.</param>
+public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started = null, IReadOnlyList<string>? files = null)
+    : Application
 {
     public IPlatform Platform { get; } = platform;
 
@@ -53,6 +55,7 @@ public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started
             var preferences = new PreferencesStore(Preferences.DefaultFilePath);
             Captures = new CaptureController(Platform, preferences, new LibraryStore());
             Captures.StartSweeping();
+            if (files is { Count: > 0 }) Captures.OpenFiles(files);
             Tray.Install(this, Captures, desktop);
             desktop.ShutdownRequested += (_, _) => Platform.Hotkeys.Dispose();
             started?.Invoke(this);

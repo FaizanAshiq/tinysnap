@@ -115,14 +115,16 @@ internal sealed class EditorWindow : Window
 
     /// <param name="around">Where the capture was taken, in physical pixels, so the editor opens
     /// on that monitor.</param>
+    /// <param name="title">The file's name for a picture opened from disk; a capture is named for
+    /// when it was taken.</param>
     public EditorWindow(EditorSession session, DateTimeOffset captured, EditorServices services, PixelRect? around = null,
-                        LibraryEntry? entry = null)
+                        LibraryEntry? entry = null, string? title = null)
     {
         this.around = around;
         this.services = services;
         Entry = entry;
         keptDocument = renderedDocument = session.History.Document;
-        Title = TitleFor(captured, DateTimeOffset.Now, TimeZoneInfo.Local, CultureInfo.CurrentCulture);
+        Title = title ?? TitleFor(captured, DateTimeOffset.Now, TimeZoneInfo.Local, CultureInfo.CurrentCulture);
         MinHeight = 280;
 
         Canvas = new CanvasControl(session)

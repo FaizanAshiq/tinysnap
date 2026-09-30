@@ -58,7 +58,7 @@ public sealed class CaptureController
             Hotkeys.Apply(applied);
         };
         platform.Hotkeys.Pressed += action => Dispatcher.UIThread.Post(() => Perform(action));
-        platform.Reopened += () => Dispatcher.UIThread.Post(Reopen);
+        platform.Reopened += files => Dispatcher.UIThread.Post(() => Reopen(files));
     }
 
     /// <summary>A hotkey or a tray item.</summary>
@@ -76,11 +76,16 @@ public sealed class CaptureController
         }
     }
 
-    /// <summary>Tinysnap opened again while running, from the Start menu or its shortcut: Settings
-    /// when nothing is open, which is the way back with the tray icon hidden, or the open
-    /// captures brought forward.</summary>
-    private void Reopen()
+    /// <summary>Tinysnap opened again while running: with files, from "Open with", each opens in
+    /// an editor; without, from the Start menu or its shortcut, Settings when nothing is open,
+    /// which is the way back with the tray icon hidden, or the open captures brought forward.</summary>
+    private void Reopen(IReadOnlyList<string> files)
     {
+        if (files.Count > 0)
+        {
+            OpenFiles(files);
+            return;
+        }
         if (editors.Count == 0)
         {
             ShowSettings();
@@ -318,11 +323,36 @@ public sealed class CaptureController
         OpenEditor(opened.Document, null, opened.IsEditable ? entry : null, entry.Captured);
     }
 
-    private void OpenEditor(Document document, PixelRect? around, LibraryEntry? entry, DateTimeOffset captured)
+    /// <summary>Pictures opened with Tinysnap, each in an editor named for its file. A PNG keeps
+    /// the scale its DPI gives; any other picture is one pixel a point. A file that is no picture
+    /// is passed over. Nothing is kept in the library: the file is already kept.</summary>
+    internal void OpenFiles(IReadOnlyList<string> paths)
+    {
+        foreach (var path in paths)
+        {
+            if (Picture(path) is not var (image, scale)) continue;
+            OpenEditor(new Document(new Capture(image, scale)), null, null, DateTimeOffset.Now, Path.GetFileName(path));
+        }
+    }
+
+    private static (SKImage Image, double Scale)? Picture(string path)
+    {
+        if (LibraryStore.ReadImage(path) is { } png) return png;
+        try
+        {
+            return File.Exists(path) && SKImage.FromEncodedData(path) is { } image ? (image, 1) : null;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private void OpenEditor(Document document, PixelRect? around, LibraryEntry? entry, DateTimeOffset captured, string? title = null)
     {
         var remembered = preferences.Current;
         var session = new EditorSession(document, styles: remembered.Styles, colorHex: remembered.ColorHex);
-        var editor = new EditorWindow(session, captured, services, around, entry);
+        var editor = new EditorWindow(session, captured, services, around, entry, title);
         editor.Canvas.MeasureSettings = remembered.Measure;
         editors.Add(editor);
         editor.Closed += (_, _) =>

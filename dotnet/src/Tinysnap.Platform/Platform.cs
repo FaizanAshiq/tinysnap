@@ -94,8 +94,9 @@ public interface IPlatform
     IHotkeys Hotkeys { get; }
     IClipboard Clipboard { get; }
 
-    /// <summary>Tinysnap was opened again while it runs; the second copy has already quit.</summary>
-    event Action? Reopened;
+    /// <summary>Tinysnap was opened again while it runs, with the files it was opened with, if any,
+    /// as "Open with" gives them; the second copy has already quit.</summary>
+    event Action<IReadOnlyList<string>>? Reopened;
 
     /// <summary>True when the person turned animations off, so nothing slides; read each time,
     /// since it can change while the app runs.</summary>
