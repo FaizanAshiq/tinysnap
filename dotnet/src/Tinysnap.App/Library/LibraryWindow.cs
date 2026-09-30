@@ -398,6 +398,7 @@ internal sealed class LibraryWindow : Window
             _ => at < 0 ? 0 : at + row,
         };
         Selected = all[Math.Clamp(next, 0, all.Count - 1)];
+        TileFor(selected!)?.Focus();
     }
 
     private void Press(LibraryTile tile, PointerPressedEventArgs e)

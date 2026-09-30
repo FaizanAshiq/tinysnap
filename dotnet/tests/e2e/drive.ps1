@@ -14,7 +14,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing, UIAutomationClient, UIAutomationTypes
 Add-Type -TypeDefinition @'
 using System;
 using System.Collections.Generic;
@@ -359,6 +359,20 @@ if ($editor)
             if (-not (Test-Path (Join-Path $entry.FullName $file))) { return "no $file in $($entry.Name)" }
         }
     }
+    Check 'the library lists the capture where a screen reader finds it' {
+        $Element = [System.Windows.Automation.AutomationElement]
+        $button = $Element::FromHandle($editor.Handle).FindFirst('Descendants',
+            (New-Object System.Windows.Automation.PropertyCondition($Element::NameProperty, 'Library')))
+        if (-not $button) { return 'no Library button' }
+        $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+        $window = Until { [Desk]::Windows($script:app.Id) | Where-Object Title -eq 'Library' | Select-Object -First 1 } 10
+        if (-not $window) { return 'no Library window' }
+        $items = New-Object System.Windows.Automation.PropertyCondition($Element::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)
+        $tiles = Until { @($Element::FromHandle($window.Handle).FindAll('Descendants', $items) | Where-Object { $_.Current.Name -like 'Capture at*' }) } 5
+        $Element::FromHandle($window.Handle).GetCurrentPattern([System.Windows.Automation.WindowPattern]::Pattern).Close()
+        if (-not $tiles) { 'no capture among its list items' }
+    }
+    Front $editor
     Press $Ctrl 0x57
     Check 'Ctrl+W closes a saved editor without asking' { if (-not (Until { (Editors).Count -eq 0 } 5)) { 'still open' } }
 }
