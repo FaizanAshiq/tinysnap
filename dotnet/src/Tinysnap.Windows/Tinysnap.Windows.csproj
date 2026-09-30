@@ -31,6 +31,12 @@
     <InternalsVisibleTo Include="Tinysnap.Windows.Tests" />
   </ItemGroup>
 
+  <!-- Kept whole when trimming: the colour picker's theme is compiled XAML found by name at
+       runtime, and trimmed it was gone, so the UI would not start. The self-check catches it. -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="Avalonia.Controls.ColorPicker" />
+  </ItemGroup>
+
   <!-- Debug symbols stay out of what ships: the graphics libraries alone brought 100 MB of them.
        So do the runtime's debugger and crash dump helpers, which only a debugger ever loads. -->
   <Target Name="LeaveOutDebugging" AfterTargets="ComputeResolvedFilesToPublishList">
