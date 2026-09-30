@@ -8,10 +8,8 @@ namespace Tinysnap.App;
 /// does not fire the capture it is being set to.</summary>
 internal sealed class HotkeyRegistrar(IHotkeys platform)
 {
-    /// <summary>The actions this build carries out. Capture Text and Scan QR Code join them with
-    /// their milestone, so a key is never held for something that does nothing.</summary>
-    public static readonly IReadOnlyList<HotKeyAction> Available =
-        [HotKeyAction.Area, HotKeyAction.Fullscreen, HotKeyAction.RepeatArea, HotKeyAction.Delayed, HotKeyAction.Library];
+    /// <summary>Every action, in the order the tray menu and Settings list them.</summary>
+    public static readonly IReadOnlyList<HotKeyAction> Available = Enum.GetValues<HotKeyAction>();
 
     private HotKeys? wanted;
     private bool paused;

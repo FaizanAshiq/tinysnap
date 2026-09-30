@@ -61,6 +61,8 @@ public sealed class CaptureController
         {
             case HotKeyAction.Area: CaptureArea(); break;
             case HotKeyAction.Fullscreen: CaptureFullscreen(); break;
+            case HotKeyAction.Text: OpenOverlay(Purpose.Text); break;
+            case HotKeyAction.Qr: OpenOverlay(Purpose.Codes); break;
             case HotKeyAction.RepeatArea: RepeatLastArea(); break;
             case HotKeyAction.Delayed: StartDelayedCapture(); break;
             case HotKeyAction.Library: ShowLibrary(); break;
@@ -169,8 +171,13 @@ public sealed class CaptureController
     /// <summary>The thumbnail showing now, if any, not one sliding away. One at a time.</summary>
     internal CaptureThumbnail? Thumbnail => thumbnail is { IsGone: false } ? thumbnail : null;
 
+    /// <summary>What a box drawn on the overlay is for.</summary>
+    private enum Purpose { Picture, Text, Codes }
+
     /// <summary>Freezes every monitor, then puts the area overlay over the frozen image.</summary>
-    public void CaptureArea()
+    public void CaptureArea() => OpenOverlay(Purpose.Picture);
+
+    private void OpenOverlay(Purpose purpose)
     {
         if (Overlay is not null) return;
         var desktop = platform.Screen.Freeze();
@@ -178,9 +185,25 @@ public sealed class CaptureController
         Overlay = new AreaOverlay(desktop, result =>
         {
             Overlay = null;
-            Finish(result, desktop);
+            Finish(result, desktop, purpose);
         }, platform.Screen.PointerPosition());
         Overlay.Show();
+    }
+
+    private Task reading = Task.CompletedTask;
+
+    /// <summary>The text or codes last asked for, landed and copied.</summary>
+    internal Task WhenRead() => reading;
+
+    /// <summary>A capture read for text or codes rather than opened, then let go.</summary>
+    private void Read(Capture capture, bool codes, Rect around)
+    {
+        reading = ReadThenRelease();
+        async Task ReadThenRelease()
+        {
+            await ReadAndCopy(capture.Image, codes, new PixelPoint((int)around.Center.X, (int)around.Center.Y));
+            capture.Image.Dispose();
+        }
     }
 
     /// <summary>The whole monitor under the pointer.</summary>
@@ -192,22 +215,27 @@ public sealed class CaptureController
         if (screen is not null) Open(new Capture(screen.Image, screen.Scale), screen.Bounds);
     }
 
-    private void Finish(AreaResult result, FrozenDesktop desktop)
+    private void Finish(AreaResult result, FrozenDesktop desktop, Purpose purpose)
     {
-        switch (result)
+        var (capture, around) = result switch
         {
-            case AreaResult.Area(var screen, var points):
-                if (Capture.Crop(screen.Image, points, screen.Scale) is { } capture)
-                {
-                    lastArea = (screen.Bounds, points);
-                    StateChanged?.Invoke();
-                    Open(capture, InPixels(screen, points));
-                }
-                break;
-            case AreaResult.PickedWindow(var picked):
-                if (CutWindow(picked, desktop) is { } window) Open(window, picked.Bounds);
-                break;
+            AreaResult.Area(var screen, var points) => (Capture.Crop(screen.Image, points, screen.Scale), InPixels(screen, points)),
+            AreaResult.PickedWindow(var picked) => (CutWindow(picked, desktop), picked.Bounds),
+            _ => (null, default),
+        };
+        if (capture is null) return;
+        if (purpose != Purpose.Picture)
+        {
+            Read(capture, purpose == Purpose.Codes, around);
+            return;
         }
+        // Repeat Last Area repeats pictures, not text grabs.
+        if (result is AreaResult.Area(var frozen, var box))
+        {
+            lastArea = (frozen.Bounds, box);
+            StateChanged?.Invoke();
+        }
+        Open(capture, around);
     }
 
     /// <summary>The window cut from the frozen monitor it most covers, its rounded corners left
