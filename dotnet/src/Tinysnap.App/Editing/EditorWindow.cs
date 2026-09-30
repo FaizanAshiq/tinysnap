@@ -79,6 +79,9 @@ internal sealed class EditorWindow : Window
     private readonly Button copyButton;
     private readonly Button saveButton;
 
+    /// <summary>Opens the library window, at the end of the toolbar.</summary>
+    internal Button LibraryButton { get; }
+
     /// <param name="around">Where the capture was taken, in physical pixels, so the editor opens
     /// on that monitor.</param>
     public EditorWindow(EditorSession session, DateTimeOffset captured, EditorServices services, PixelRect? around = null,
@@ -157,9 +160,14 @@ internal sealed class EditorWindow : Window
         };
         ToolTip.SetTip(readout, "Colour under the pointer; Tab copies it");
         bar.Children.Add(readout);
+        LibraryButton = OutputButton(ToolIcons.Library, "Library", "Library: every capture of the last 30 days",
+                                     () => services.OpenLibrary?.Invoke());
+        LibraryButton.VerticalAlignment = VerticalAlignment.Center;
+        DockPanel.SetDock(LibraryButton, Dock.Right);
         Toolbar = new Border
         {
-            Child = bar,
+            // The library at the far end, as the Mac's toolbar has it, the tools filling the rest.
+            Child = new DockPanel { Children = { LibraryButton, bar } },
             Height = ToolbarHeight,
             Padding = new Thickness(8, 0),
             [!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"),

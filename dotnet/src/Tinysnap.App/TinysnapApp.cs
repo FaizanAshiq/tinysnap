@@ -4,7 +4,6 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
-using Avalonia.Threading;
 using Tinysnap.App.Capturing;
 using Tinysnap.Core;
 using Tinysnap.Platform;
@@ -46,22 +45,10 @@ public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started
             var preferences = new PreferencesStore(Preferences.DefaultFilePath);
             Captures = new CaptureController(Platform, preferences, new LibraryStore());
             Captures.StartSweeping();
-            Tray.Install(this, Captures, preferences.Current.HotKeys, desktop);
-            ListenForHotkeys(preferences.Current.HotKeys);
+            Tray.Install(this, Captures, desktop);
             desktop.ShutdownRequested += (_, _) => Platform.Hotkeys.Dispose();
             started?.Invoke(this);
         }
         base.OnFrameworkInitializationCompleted();
-    }
-
-    /// <summary>Capture Area and Capture Fullscreen for now; the other actions register as their
-    /// milestones land, so a key is never held for something that does nothing.</summary>
-    private void ListenForHotkeys(HotKeys hotkeys)
-    {
-        Platform.Hotkeys.Pressed += action => Dispatcher.UIThread.Post(() =>
-        {
-            if (action == HotKeyAction.Area) Captures?.CaptureArea();
-            else if (action == HotKeyAction.Fullscreen) Captures?.CaptureFullscreen();
-        });
     }
 }

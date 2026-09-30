@@ -8,21 +8,49 @@ using Tinysnap.Core;
 
 namespace Tinysnap.App;
 
-/// <summary>The notification area icon. For now its menu captures and quits; the library,
-/// settings and the rest of the Mac's menu arrive with milestone 4.</summary>
+/// <summary>The notification area icon and its menu: every action with its hotkey, Settings and
+/// Quit. The menu is built again whenever what it shows changes, so the hotkeys, the countdown
+/// and what can be repeated are always current.</summary>
 internal static class Tray
 {
-    public static TrayIcon Install(Application app, CaptureController captures, HotKeys hotkeys,
-                                   IClassicDesktopStyleApplicationLifetime lifetime)
+    public static TrayIcon Install(Application app, CaptureController captures, IClassicDesktopStyleApplicationLifetime lifetime)
     {
-        var menu = new NativeMenu();
-        menu.Add(Item(HotKeyAction.Area.Title(), hotkeys.Area, captures.CaptureArea));
-        menu.Add(Item(HotKeyAction.Fullscreen.Title(), hotkeys.Fullscreen, captures.CaptureFullscreen));
-        menu.Add(new NativeMenuItemSeparator());
-        menu.Add(Item("Quit Tinysnap", null, () => _ = Quit(captures, lifetime)));
-        var tray = new TrayIcon { Icon = Icon(), ToolTipText = "Tinysnap", Menu = menu, IsVisible = true };
+        var tray = new TrayIcon { Icon = Icon() };
+        void Rebuild()
+        {
+            tray.Menu = Menu(captures, () => _ = Quit(captures, lifetime));
+            tray.IsVisible = captures.Preferences.Current.ShowTrayIcon;
+            tray.ToolTipText = captures.SecondsLeft is { } left ? $"Tinysnap, capturing in {left}" : "Tinysnap";
+        }
+        Rebuild();
+        captures.StateChanged += Rebuild;
+        captures.Hotkeys.Changed += Rebuild;
+        captures.Preferences.Changed += _ => Rebuild();
+        // Windows opens the menu on a right click only; a left click opens the library.
+        tray.Clicked += (_, _) => captures.ShowLibrary();
         TrayIcon.SetIcons(app, [tray]);
         return tray;
+    }
+
+    /// <summary>Every action this build has, with its hotkey and "(taken)" when another app holds
+    /// it. Repeat Last Area waits for a first area, and while a delayed capture counts down its
+    /// item shows the seconds left and every capture waits.</summary>
+    public static NativeMenu Menu(CaptureController captures, Action quit)
+    {
+        var menu = new NativeMenu();
+        var hotkeys = captures.Preferences.Current.HotKeys;
+        foreach (var action in HotkeyRegistrar.Available)
+        {
+            var title = action == HotKeyAction.Delayed && captures.SecondsLeft is { } left ? $"Capturing in {left}" : action.Title();
+            if (captures.Hotkeys.Taken.Contains(action)) title += " (taken)";
+            var item = Item(title, hotkeys[action], () => captures.Perform(action));
+            item.IsEnabled = captures.SecondsLeft is null && (action != HotKeyAction.RepeatArea || captures.HasLastArea);
+            menu.Add(item);
+        }
+        menu.Add(new NativeMenuItemSeparator());
+        menu.Add(Item("Settings...", null, () => captures.ShowSettings()));
+        menu.Add(Item("Quit Tinysnap", null, quit));
+        return menu;
     }
 
     /// <summary>Quits once every editor has closed, each with edits asking first; Cancel on any

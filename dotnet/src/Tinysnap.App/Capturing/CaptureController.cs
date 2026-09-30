@@ -38,7 +38,8 @@ public sealed class CaptureController
         this.library = library;
         this.time = time;
         services = new EditorServices(platform.Clipboard, () => preferences.Current, dialogs ?? new AvaloniaDialogs(), Pin,
-                                      preferences.RememberStyles, library, () => LibraryChanged?.Invoke(), time);
+                                      preferences.RememberStyles, library, () => LibraryChanged?.Invoke(), time,
+                                      () => ShowLibrary());
         Hotkeys = new HotkeyRegistrar(platform.Hotkeys);
         var applied = preferences.Current.HotKeys;
         Hotkeys.Apply(applied);
@@ -49,7 +50,99 @@ public sealed class CaptureController
             applied = changed.HotKeys;
             Hotkeys.Apply(applied);
         };
+        platform.Hotkeys.Pressed += action => Dispatcher.UIThread.Post(() => Perform(action));
+        platform.Reopened += () => Dispatcher.UIThread.Post(Reopen);
     }
+
+    /// <summary>A hotkey or a tray item.</summary>
+    public void Perform(HotKeyAction action)
+    {
+        switch (action)
+        {
+            case HotKeyAction.Area: CaptureArea(); break;
+            case HotKeyAction.Fullscreen: CaptureFullscreen(); break;
+            case HotKeyAction.RepeatArea: RepeatLastArea(); break;
+            case HotKeyAction.Delayed: StartDelayedCapture(); break;
+            case HotKeyAction.Library: ShowLibrary(); break;
+        }
+    }
+
+    /// <summary>Tinysnap opened again while running, from the Start menu or its shortcut: Settings
+    /// when nothing is open, which is the way back with the tray icon hidden, or the open
+    /// captures brought forward.</summary>
+    private void Reopen()
+    {
+        if (editors.Count == 0)
+        {
+            ShowSettings();
+            return;
+        }
+        foreach (var editor in editors) editor.Activate();
+    }
+
+    /// <summary>The countdown, the last area, or anything else the tray menu shows changed.</summary>
+    internal event Action? StateChanged;
+
+    /// <summary>The monitor and the box last captured as a picture, in that monitor's points.</summary>
+    private (Rect Screen, Rect Points)? lastArea;
+
+    internal bool HasLastArea => lastArea is not null;
+
+    /// <summary>Seconds left before a delayed capture opens the overlay; null when none is counting.</summary>
+    internal int? SecondsLeft { get; private set; }
+
+    private ITimer? countdown;
+
+    /// <summary>The last box again, from a fresh freeze of the same monitor. If that monitor is
+    /// gone, or there is no last box, the overlay opens instead.</summary>
+    internal void RepeatLastArea()
+    {
+        if (lastArea is not var (bounds, points) || SecondsLeft is not null)
+        {
+            CaptureArea();
+            return;
+        }
+        var desktop = platform.Screen.Freeze();
+        if (desktop.Screens.FirstOrDefault(s => s.Bounds == bounds) is not { } screen
+            || Capture.Crop(screen.Image, points, screen.Scale) is not { } capture)
+        {
+            CaptureArea();
+            return;
+        }
+        Open(capture, InPixels(screen, points));
+    }
+
+    /// <summary>Counts down in the tray, then opens the area overlay, so an open menu or a hover
+    /// state can be set up first and caught by the freeze.</summary>
+    internal void StartDelayedCapture()
+    {
+        if (SecondsLeft is not null) return;
+        SecondsLeft = Math.Clamp(preferences.Current.DelaySeconds, Tinysnap.Core.Preferences.DelayMin, Tinysnap.Core.Preferences.DelayMax);
+        StateChanged?.Invoke();
+        countdown = (time ?? TimeProvider.System).CreateTimer(_ => Dispatcher.UIThread.Post(Tick), null, TimeSpan.FromSeconds(1),
+                                                              Timeout.InfiniteTimeSpan);
+    }
+
+    private void Tick()
+    {
+        if (SecondsLeft is not { } left) return;
+        if (left > 1)
+        {
+            SecondsLeft = left - 1;
+            StateChanged?.Invoke();
+            countdown?.Change(TimeSpan.FromSeconds(1), Timeout.InfiniteTimeSpan);
+            return;
+        }
+        countdown?.Dispose();
+        countdown = null;
+        SecondsLeft = null;
+        StateChanged?.Invoke();
+        CaptureArea();
+    }
+
+    private static Rect InPixels(FrozenScreen screen, Rect points) =>
+        new(screen.Bounds.X + points.X * screen.Scale, screen.Bounds.Y + points.Y * screen.Scale,
+            points.Width * screen.Scale, points.Height * screen.Scale);
 
     internal PreferencesStore Preferences => preferences;
 
@@ -106,9 +199,9 @@ public sealed class CaptureController
             case AreaResult.Area(var screen, var points):
                 if (Capture.Crop(screen.Image, points, screen.Scale) is { } capture)
                 {
-                    var pixels = new Rect(screen.Bounds.X + points.X * screen.Scale, screen.Bounds.Y + points.Y * screen.Scale,
-                                          points.Width * screen.Scale, points.Height * screen.Scale);
-                    Open(capture, pixels);
+                    lastArea = (screen.Bounds, points);
+                    StateChanged?.Invoke();
+                    Open(capture, InPixels(screen, points));
                 }
                 break;
             case AreaResult.PickedWindow(var picked):
@@ -243,6 +336,10 @@ public sealed class CaptureController
     // Library
 
     private LibraryWindow? libraryWindow;
+
+    internal LibraryWindow? OpenLibraryWindow => libraryWindow;
+
+    internal SettingsWindow? OpenSettings => settingsWindow;
 
     internal EditorServices Services => services;
 

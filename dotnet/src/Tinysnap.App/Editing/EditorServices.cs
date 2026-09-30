@@ -17,4 +17,5 @@ namespace Tinysnap.App.Editing;
 internal sealed record EditorServices(IClipboard Clipboard, Func<Preferences> Preferences, IDialogs Dialogs,
                                       Action<ExportedImage, bool, LibraryEntry?>? Pin = null,
                                       Action<IReadOnlyDictionary<Tool, Style>, string>? RememberStyles = null,
-                                      LibraryStore? Library = null, Action? LibraryChanged = null, TimeProvider? Time = null);
+                                      LibraryStore? Library = null, Action? LibraryChanged = null, TimeProvider? Time = null,
+                                      Action? OpenLibrary = null);
