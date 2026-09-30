@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
@@ -47,6 +48,10 @@ internal sealed class LibraryTile : Border
         BorderBrush = Brushes.Transparent;
         this[!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundListLowBrush");
         AutomationProperties.SetName(this, $"Capture at {entry.Captured.ToLocalTime():T}");
+        // Focus moves with the selection, so a screen reader reads each capture out as the arrows reach
+        // it. The selection border already shows where it is.
+        Focusable = true;
+        FocusAdorner = null;
 
         fade = new Border
         {
@@ -163,5 +168,13 @@ internal sealed class LibraryTile : Border
         actions.Opacity = shown ? 1 : 0;
         actions.RenderTransform = shown ? Raised : Lowered;
         actions.IsHitTestVisible = shown;
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new TilePeer(this);
+
+    /// <summary>A list item, named for its capture: a plain border is left out of the accessibility tree.</summary>
+    private sealed class TilePeer(LibraryTile tile) : ControlAutomationPeer(tile)
+    {
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.ListItem;
     }
 }

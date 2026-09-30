@@ -1,4 +1,6 @@
 using Avalonia;
+using Avalonia.Automation.Peers;
+using Avalonia.Controls.Automation.Peers;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -44,6 +46,26 @@ public class LibraryWindowTests
         Assert.Equal((4, 226.0), LibraryLayout.Columns(1000));
         Assert.Equal((1, 252.0), LibraryLayout.Columns(300));
         Assert.Equal(171.0, LibraryLayout.TileHeight(226));
+    }
+
+    [AvaloniaFact]
+    public void EachTileIsAListItemNamedForItsCapture()
+    {
+        var (_, window, newer, _) = Open();
+        var peer = ControlAutomationPeer.CreatePeerForElement(window.TileFor(newer)!);
+        Assert.Equal(AutomationControlType.ListItem, peer.GetAutomationControlType());
+        Assert.True(peer.IsControlElement());
+        Assert.Equal($"Capture at {newer.Captured.ToLocalTime():T}", peer.GetName());
+    }
+
+    [AvaloniaFact]
+    public void TheArrowsMoveKeyboardFocusWithTheSelection()
+    {
+        var (_, window, newer, older) = Open();
+        window.Selected = newer;
+        window.KeyPress(Key.Right, RawInputModifiers.None, PhysicalKey.ArrowRight, null);
+        Assert.Equal(older, window.Selected);
+        Assert.Same(window.TileFor(older), window.FocusManager!.GetFocusedElement());
     }
 
     [AvaloniaFact]
