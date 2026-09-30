@@ -69,8 +69,18 @@ public interface IStartup
     bool SetEnabled(bool enabled);
 }
 
+public interface ITextReader
+{
+    /// <summary>The lines of text in <paramref name="image"/> in reading order or, with
+    /// <paramref name="codes"/>, what every QR code in it holds, each once. Asked for apart, a
+    /// caption beside a code is never taken for it. Null when the image could not be read, for
+    /// example with no recogniser for the person's languages.</summary>
+    Task<TextReading?> Read(SKImage image, bool codes);
+}
+
 public interface IPlatform
 {
+    ITextReader Text { get; }
     IFileActions Files { get; }
     IStartup Startup { get; }
     IScreenCapture Screen { get; }

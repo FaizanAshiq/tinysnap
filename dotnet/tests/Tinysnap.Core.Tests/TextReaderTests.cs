@@ -1,7 +1,7 @@
 namespace Tinysnap.Core.Tests;
 
-// The Mac's other six TextReaderTests need an OCR engine and move to milestone 5 with
-// Windows OCR: readsLinesTopToBottom, sideBySideTextReadsAcrossEachRowBeforeGoingDown,
+// The Mac's other six TextReaderTests need an OCR engine, so they run against Windows OCR in
+// Tinysnap.Windows.Tests: readsLinesTopToBottom, sideBySideTextReadsAcrossEachRowBeforeGoingDown,
 // copyingTextReadsOnlyTheTextAndScanningReadsOnlyTheCode, aBlankImageReadsAsNothing,
 // textUnderAnEraseIsNeverRead and onlyTheTextInADraggedAreaIsRead.
 public class TextReaderTests
@@ -33,5 +33,20 @@ public class TextReaderTests
             new Rect(0.55, 0.71, 0.30, 0.05), // right top
         };
         Assert.Equal(new[] { 1, 3, 2, 0 }, TextReader.ReadingOrder(boxes));
+    }
+
+    [Fact]
+    public void LinesComeBackInReadingOrder()
+    {
+        // Pixel boxes with y growing downward, as Windows' OCR reports them: a dashboard of two
+        // columns reads row by row.
+        var lines = new (string Text, Rect Box)[]
+        {
+            ("right low", new Rect(550, 700, 300, 50)),
+            ("left top", new Rect(50, 200, 300, 50)),
+            ("left low", new Rect(50, 700, 300, 50)),
+            ("right top", new Rect(550, 190, 300, 50)),
+        };
+        Assert.Equal(new[] { "left top", "right top", "left low", "right low" }, TextReader.InReadingOrder(lines).ToArray());
     }
 }

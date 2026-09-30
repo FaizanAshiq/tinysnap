@@ -97,6 +97,25 @@ public sealed class FakePlatform(IScreenCapture screen) : IPlatform
     public IFileActions Files { get; } = new FakeFiles();
 
     public IStartup Startup { get; } = new FakeStartup();
+
+    public ITextReader Text { get; } = new FakeTextReader();
+}
+
+/// <summary>Reads whatever a test says is there, and keeps what it was asked to read. With no
+/// recogniser on a Mac, the development build reads nothing.</summary>
+public sealed class FakeTextReader : ITextReader
+{
+    /// <summary>The next reading; null reads as could not read.</summary>
+    public TextReading? Reading { get; set; } = new([], []);
+
+    /// <summary>The size of each image asked about, not the image, which its owner may dispose.</summary>
+    public List<(int Width, int Height, bool Codes)> Asked { get; } = [];
+
+    public Task<TextReading?> Read(SkiaSharp.SKImage image, bool codes)
+    {
+        Asked.Add((image.Width, image.Height, codes));
+        return Task.FromResult(Reading);
+    }
 }
 
 /// <summary>Global hotkeys that go nowhere: what is registered is recorded, a binding in

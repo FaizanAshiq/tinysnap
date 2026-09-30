@@ -49,6 +49,12 @@ public static class TextReader
         return [.. rows.SelectMany(row => row.OrderBy(i => boxes[i].MinX))];
     }
 
+    /// <summary>A recogniser's lines in reading order, for boxes in pixels with y growing
+    /// downward, as Windows reports them.</summary>
+    public static ImmutableArray<string> InReadingOrder(IReadOnlyList<(string Text, Rect Box)> lines) =>
+        [.. ReadingOrder([.. lines.Select(line => new Rect(line.Box.X, -line.Box.Y - line.Box.Height, line.Box.Width, line.Box.Height))])
+            .Select(index => lines[index].Text)];
+
     /// <summary>Join Lines: every run of spaces and line breaks becomes one space.</summary>
     public static string Join(string text) =>
         string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
