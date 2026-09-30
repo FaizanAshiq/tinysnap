@@ -13,4 +13,20 @@ public class ReleaseTests
         Assert.Equal("Tinysnap", info.ProductName);
         Assert.Equal("Tinysnap.dll", Path.GetFileName(typeof(WindowsPlatform).Assembly.Location));
     }
+
+    [Fact]
+    public void UninstallClearsStartAtLogin()
+    {
+        var startup = new Win32Startup($"TinysnapTest{Guid.NewGuid():N}");
+        try
+        {
+            startup.SetEnabled(true);
+            Program.Uninstalling(startup);
+            Assert.False(startup.IsEnabled);
+        }
+        finally
+        {
+            startup.SetEnabled(false);
+        }
+    }
 }

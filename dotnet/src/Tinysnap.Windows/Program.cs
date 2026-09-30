@@ -1,6 +1,7 @@
 using Avalonia;
 using Tinysnap.App;
 using Tinysnap.Platform;
+using Velopack;
 
 namespace Tinysnap.Windows;
 
@@ -30,6 +31,9 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // First of all: the installer runs the exe to install and uninstall, and those runs end
+        // here. No update is ever checked for; winget brings new versions.
+        VelopackApp.Build().OnBeforeUninstallFastCallback(_ => Uninstalling(new Win32Startup())).Run();
         using var instance = new SingleInstance();
         if (!instance.IsFirst)
         {
@@ -45,4 +49,7 @@ internal static class Program
             .LogToTrace()
             .StartWithClassicDesktopLifetime(args);
     }
+
+    /// <summary>Uninstalling leaves no start-at-login entry pointing at a removed exe.</summary>
+    internal static void Uninstalling(IStartup startup) => startup.SetEnabled(false);
 }
