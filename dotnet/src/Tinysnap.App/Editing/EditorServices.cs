@@ -23,4 +23,5 @@ internal sealed record EditorServices(IClipboard Clipboard, Func<Preferences> Pr
                                       Action<IReadOnlyDictionary<Tool, Style>, string>? RememberStyles = null,
                                       LibraryStore? Library = null, Action? LibraryChanged = null, TimeProvider? Time = null,
                                       Action? OpenLibrary = null, Func<SKImage, bool, PixelPoint?, Task>? Read = null,
-                                      Action<MeasureSettings>? RememberMeasure = null);
+                                      Action<MeasureSettings>? RememberMeasure = null, Action<Backdrop>? RememberBackdrop = null,
+                                      Func<BackdropWallpaper?>? ReadWallpaper = null);

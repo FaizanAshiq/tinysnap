@@ -106,6 +106,6 @@ public class EditorOutputTests
     public void TheToolbarStartsWithCopySaveDragAndPin()
     {
         var editor = Editor(Make());
-        Assert.Equal(["Copy", "Save", "Drag out", "Copy Text", "Scan QR Code", "Pin and close"], editor.OutputButtons.Select(b => Avalonia.Automation.AutomationProperties.GetName(b)));
+        Assert.Equal(["Copy", "Save", "Drag out", "Copy Text", "Scan QR Code", "Pin and close", "Backdrop", "Export size"], editor.OutputButtons.Select(b => Avalonia.Automation.AutomationProperties.GetName(b)));
     }
 }

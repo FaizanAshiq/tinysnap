@@ -130,6 +130,14 @@ internal sealed partial class CanvasControl
         if (!merging) Focus();
     }
 
+    /// <summary>For the Backdrop panel. <paramref name="merging"/> is for a stream of colours from
+    /// the spectrum, which undoes as one.</summary>
+    public void SetBackdrop(Backdrop? backdrop, bool merging = false)
+    {
+        Session.SetBackdrop(backdrop, merging);
+        SessionChanged();
+    }
+
     public void DeleteSelection()
     {
         Session.DeleteSelection();

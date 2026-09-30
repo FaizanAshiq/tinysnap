@@ -61,6 +61,10 @@ public interface IFileActions
 
     /// <summary>A web address in the person's browser.</summary>
     void Open(Uri link);
+
+    /// <summary>The desktop picture, for the wallpaper backdrop, the caller's to dispose. Null when
+    /// there is no picture file to read, as with a solid colour.</summary>
+    SKImage? Wallpaper();
 }
 
 public interface IStartup

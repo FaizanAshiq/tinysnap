@@ -66,6 +66,13 @@ public sealed class FakeFiles : IFileActions
     public List<Uri> Opened { get; } = [];
 
     public void Open(Uri link) => Opened.Add(link);
+
+    /// <summary>What the desktop picture reads as; none unless a test sets one.</summary>
+    public SkiaSharp.SKImage? WallpaperImage { get; set; }
+
+    /// <summary>A copy each time, as the caller owns and disposes what it is given.</summary>
+    public SkiaSharp.SKImage? Wallpaper() =>
+        WallpaperImage is { } picture ? SkiaSharp.SKImage.FromEncodedData(picture.Encode()) : null;
 }
 
 public sealed class FakeStartup : IStartup

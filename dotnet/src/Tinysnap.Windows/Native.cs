@@ -76,7 +76,11 @@ internal static class Native
     internal static readonly nint HWND_MESSAGE = -3;
     internal static readonly nint DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4;
 
-    internal const uint SPI_GETCLIENTAREAANIMATION = 0x1042;
+    internal const uint SPI_GETCLIENTAREAANIMATION = 0x1042, SPI_GETDESKWALLPAPER = 0x0073;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SystemParametersInfoW(uint action, uint param, [Out] char[] value, uint winIni);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

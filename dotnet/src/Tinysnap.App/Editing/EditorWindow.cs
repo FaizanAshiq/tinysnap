@@ -85,6 +85,9 @@ internal sealed class EditorWindow : Window
     /// <summary>Copy Text, lit while it is on.</summary>
     internal ToggleButton CopyTextButton { get; }
 
+    /// <summary>Opens the Backdrop panel; drawn filled while a backdrop is on.</summary>
+    internal Button BackdropButton { get; }
+
     /// <summary>What Copy Text is waiting for, along the bottom of the canvas where the style bar
     /// never is.</summary>
     internal Border TextHint { get; } = new()
@@ -139,6 +142,9 @@ internal sealed class EditorWindow : Window
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(12),
+            Remembered = () => services.Preferences().Backdrop,
+            ReadWallpaper = services.ReadWallpaper,
+            Remember = services.RememberBackdrop,
         };
 
         var buttons = new List<(Tool, ToggleButton)>();
@@ -160,7 +166,9 @@ internal sealed class EditorWindow : Window
         AutomationProperties.SetName(CopyTextButton, "Copy Text");
         CopyTextButton.Click += (_, _) => CopyText();
         var scan = OutputButton(ToolIcons.ScanCode, "Scan QR Code", "Scan a QR code (Ctrl+Shift+R)", ScanCodes);
-        OutputButtons = [copyButton, saveButton, dragHandle, CopyTextButton, scan, pin];
+        BackdropButton = OutputButton(ToolIcons.BackdropOff, "Backdrop", "Backdrop", () => TogglePanel(StyleBarMode.Backdrop));
+        var size = OutputButton(ToolIcons.ExportSize, "Export size", "Export size", () => TogglePanel(StyleBarMode.Size));
+        OutputButtons = [copyButton, saveButton, dragHandle, CopyTextButton, scan, pin, BackdropButton, size];
         foreach (var control in OutputButtons) bar.Children.Add(control);
         bar.Children.Add(Divider());
         for (var group = 0; group < Groups.Length; group++)
@@ -293,6 +301,18 @@ internal sealed class EditorWindow : Window
     private void Refresh()
     {
         foreach (var (tool, button) in ToolButtons) button.IsChecked = tool == Canvas.Session.Tool;
+        var framed = Canvas.Session.Display.Backdrop is not null;
+        if (BackdropButton.Tag as bool? == framed) return;
+        BackdropButton.Tag = framed;
+        BackdropButton.Content = Glyphs.Icon(framed ? ToolIcons.BackdropOn : ToolIcons.BackdropOff);
+    }
+
+    /// <summary>The Backdrop or Size panel in the style bar's place, or back to the tool's style
+    /// when it is already showing.</summary>
+    private void TogglePanel(StyleBarMode panel)
+    {
+        StyleBar.Mode = StyleBar.Mode == panel ? StyleBarMode.Tool : panel;
+        Canvas.Focus();
     }
 
     // Ground

@@ -40,7 +40,8 @@ public sealed class CaptureController
         services = new EditorServices(platform.Clipboard, () => preferences.Current, dialogs ?? new AvaloniaDialogs(), Pin,
                                       preferences.RememberStyles, library, () => LibraryChanged?.Invoke(), time,
                                       () => ShowLibrary(), ReadAndCopy,
-                                      measure => preferences.Update(p => p with { Measure = measure }));
+                                      measure => preferences.Update(p => p with { Measure = measure }),
+                                      backdrop => preferences.Update(p => p with { Backdrop = backdrop }), ReadWallpaper);
         // A Measure setting changed in one editor reaches every other.
         preferences.Changed += changed =>
         {
@@ -366,6 +367,25 @@ public sealed class CaptureController
         pins.Add(pin);
         pin.Closed += (_, _) => pins.Remove(pin);
         pin.Show();
+    }
+
+    /// <summary>The desktop picture as a backdrop fill: read at no more than 1600 pixels across,
+    /// then softened. Null when there is none, and the gradient is drawn.</summary>
+    private BackdropWallpaper? ReadWallpaper()
+    {
+        using var picture = platform.Files.Wallpaper();
+        if (picture is null) return null;
+        var fit = Math.Min(1.0, 1600.0 / Math.Max(picture.Width, picture.Height));
+        using var shrunk = fit < 1 ? Shrunk(picture, fit) : null;
+        return Backdrop.Soften(shrunk ?? picture) is { } softened ? new BackdropWallpaper(Guid.NewGuid(), new PastedImage(softened)) : null;
+    }
+
+    private static SKImage Shrunk(SKImage image, double fit)
+    {
+        var info = new SKImageInfo(Math.Max(1, (int)(image.Width * fit)), Math.Max(1, (int)(image.Height * fit)));
+        using var surface = SKSurface.Create(info);
+        surface.Canvas.DrawImage(image, new SKRect(0, 0, info.Width, info.Height), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+        return surface.Snapshot();
     }
 
     // Text and codes

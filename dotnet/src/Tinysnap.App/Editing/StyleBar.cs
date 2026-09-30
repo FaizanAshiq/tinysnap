@@ -11,11 +11,50 @@ using Style = Tinysnap.Core.Style;
 
 namespace Tinysnap.App.Editing;
 
+/// <summary>What the style bar shows: the tool's style, the capture's backdrop, or its export size.</summary>
+internal enum StyleBarMode { Tool, Backdrop, Size }
+
 /// <summary>Floats over the canvas's top right corner and sets the style of the selection, or of
 /// the next shape when nothing is selected: colour, size, outline or fill, corners, and a pasted
-/// image's opacity and difference blend. Each chip changes only its own part.</summary>
-internal sealed class StyleBar : Border
+/// image's opacity and difference blend. Each chip changes only its own part. The Backdrop and
+/// Size panels show in its place until another tool or selection is picked.</summary>
+internal sealed partial class StyleBar : Border
 {
+    private StyleBarMode mode;
+    private (Tool Tool, Guid? Selection) panelOpenedOver;
+    private bool backdropShown;
+    private Backdrop? lastBackdrop;
+
+    /// <summary>The backdrop a capture starts with when one is turned on: the last one used.</summary>
+    public Func<Backdrop> Remembered { get; set; } = () => Backdrop.Defaults;
+
+    /// <summary>The desktop picture, softened, for the wallpaper fill; null when it cannot be read.</summary>
+    public Func<BackdropWallpaper?>? ReadWallpaper { get; set; }
+
+    /// <summary>Told each finished backdrop change, so the next capture starts from it.</summary>
+    public Action<Backdrop>? Remember { get; set; }
+
+    public IReadOnlyList<ToggleButton> BackdropFillChips { get; private set; } = [];
+    public IReadOnlyList<ToggleButton> PaddingChips { get; private set; } = [];
+    public IReadOnlyList<ToggleButton> BackdropCornerChips { get; private set; } = [];
+    public IReadOnlyList<ToggleButton> ShadowChips { get; private set; } = [];
+
+    /// <summary>Says the gradient stands in for a desktop picture that could not be read.</summary>
+    public TextBlock? WallpaperNote { get; private set; }
+
+    public StyleBarMode Mode
+    {
+        get => mode;
+        set
+        {
+            mode = value;
+            panelOpenedOver = (canvas.Session.Tool, canvas.Session.Selection);
+            shown = null;
+            backdropShown = false;
+            Refresh();
+        }
+    }
+
     private static readonly double[] Opacities = [0.25, 0.5, 0.75, 1];
 
     private static readonly string[] CornerNames =
@@ -76,6 +115,22 @@ internal sealed class StyleBar : Border
     public void Refresh()
     {
         var session = canvas.Session;
+        // A panel stays over the tool and selection it was opened on, and closes when either changes.
+        if (mode != StyleBarMode.Tool && panelOpenedOver != (session.Tool, session.Selection))
+        {
+            mode = StyleBarMode.Tool;
+            shown = null;
+        }
+        if (mode == StyleBarMode.Backdrop)
+        {
+            RefreshBackdrop();
+            return;
+        }
+        if (mode == StyleBarMode.Size)
+        {
+            RefreshSize();
+            return;
+        }
         var selected = session.SelectedAnnotation;
         var tool = selected?.Tool ?? session.Tool;
         var style = selected?.Style ?? session.StyleFor(tool);
@@ -103,7 +158,7 @@ internal sealed class StyleBar : Border
         }
     }
 
-    private void Rebuild(Tool tool, Style style, bool selected)
+    private void Clear()
     {
         row.Children.Clear();
         ColorButton = null;
@@ -113,6 +168,15 @@ internal sealed class StyleBar : Border
         DifferenceChip = null;
         DeleteChip = null;
         (AcrossChip, DownChip, LowerContrast, RaiseContrast, ContrastLabel, HelpChip) = (null, null, null, null, null, null);
+        (SizeChips, FillChips, CornerChips, OpacityChips) = ([], [], [], []);
+        (BackdropFillChips, PaddingChips, BackdropCornerChips, ShadowChips) = ([], [], [], []);
+        WallpaperNote = null;
+        ClearSize();
+    }
+
+    private void Rebuild(Tool tool, Style style, bool selected)
+    {
+        Clear();
         if (tool.HasColor()) row.Children.Add(ColorButton = MakeColorButton(style.ColorHex));
         SizeChips = tool.HasSize() ? Group(MakeSizeChips(tool, style)) : [];
         FillChips = tool.HasFill() ? Group(MakeFillChips(tool, style)) : [];
@@ -368,7 +432,7 @@ internal sealed class StyleBar : Border
         {
             if (syncing) return;
             var picked = $"#{e.NewColor.R:X2}{e.NewColor.G:X2}{e.NewColor.B:X2}";
-            canvas.Restyle(style => style with { ColorHex = picked }, merging: true);
+            ApplyColor(picked, merging: true);
         };
         var palette = new StackPanel { Spacing = 10, Margin = new Thickness(4), Children = { grid, field, CustomColor } };
 
@@ -387,6 +451,11 @@ internal sealed class StyleBar : Border
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             Flyout = new Flyout { Content = palette },
+        };
+        // A spectrum drag is remembered once, when the palette closes.
+        button.Flyout.Closed += (_, _) =>
+        {
+            if (mode == StyleBarMode.Backdrop && canvas.Session.Display.Backdrop is { } backdrop) Remember?.Invoke(backdrop);
         };
         ToolTip.SetTip(button, $"Colour {hex}");
         AutomationProperties.SetName(button, $"Colour {hex}");
@@ -413,7 +482,16 @@ internal sealed class StyleBar : Border
     private void ChooseColor(string hex)
     {
         ColorButton?.Flyout?.Hide();
-        canvas.Restyle(style => style with { ColorHex = hex });
+        ApplyColor(hex, merging: false);
+    }
+
+    /// <summary>The backdrop's colour while its panel is open, otherwise the tool's or selection's.</summary>
+    private void ApplyColor(string hex, bool merging)
+    {
+        if (mode == StyleBarMode.Backdrop)
+            ChangeBackdrop(backdrop => backdrop with { ColorHex = hex }, merging);
+        else
+            canvas.Restyle(style => style with { ColorHex = hex }, merging);
     }
 
     /// <summary>A custom colour typed as "#RRGGBB", with or without the #. False, and nothing
