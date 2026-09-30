@@ -31,3 +31,33 @@ jobs:
       # Core and the app, headless; the Windows tests need Windows.
       - run: dotnet test dotnet/tests/Tinysnap.Core.Tests --configuration Release
       - run: dotnet test dotnet/tests/Tinysnap.App.Tests --configuration Release
+
+  # The installer and the portable zip, built on every push and kept as artifacts. Nothing is
+  # released from here: publishing is a separate, deliberate step.
+  package:
+    needs: windows
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        runtime: [win-x64, win-arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish
+        run: dotnet publish dotnet/src/Tinysnap.Windows --configuration Release --runtime ${{ matrix.runtime }} --self-contained --output publish
+      - name: Pack
+        shell: pwsh
+        run: |
+          $version = dotnet msbuild dotnet/src/Tinysnap.Windows -getProperty:Version
+          dotnet tool install --global vpk --version 1.2.161
+          # Velopack installs per user, under Local AppData, so Setup.exe never asks for admin rights.
+          vpk pack --packId Tinysnap --packVersion $version --packDir publish --mainExe Tinysnap.exe `
+            --packTitle Tinysnap --packAuthors "Faizan Ashiq" --icon dotnet/src/Tinysnap.Windows/Tinysnap.ico `
+            --runtime ${{ matrix.runtime }} --channel ${{ matrix.runtime }} --outputDir releases
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tinysnap-${{ matrix.runtime }}
+          path: releases/*
+          retention-days: 14
