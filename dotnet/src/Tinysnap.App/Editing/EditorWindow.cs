@@ -82,6 +82,34 @@ internal sealed class EditorWindow : Window
     /// <summary>Opens the library window, at the end of the toolbar.</summary>
     internal Button LibraryButton { get; }
 
+    /// <summary>Copy Text, lit while it is on.</summary>
+    internal ToggleButton CopyTextButton { get; }
+
+    /// <summary>What Copy Text is waiting for, along the bottom of the canvas where the style bar
+    /// never is.</summary>
+    internal Border TextHint { get; } = new()
+    {
+        IsVisible = false,
+        IsHitTestVisible = false,
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Bottom,
+        Margin = new Thickness(16),
+        Padding = new Thickness(14, 8),
+        CornerRadius = new CornerRadius(10),
+        Child = new TextBlock
+        {
+            Text = "Drag over text to copy it, or click to copy all of it. Esc to stop.",
+            FontSize = 13,
+            FontWeight = FontWeight.Medium,
+        },
+        [!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumBrush"),
+    };
+
+    private Task reading = Task.CompletedTask;
+
+    /// <summary>The text or codes last asked for, read.</summary>
+    internal Task WhenRead() => reading;
+
     /// <param name="around">Where the capture was taken, in physical pixels, so the editor opens
     /// on that monitor.</param>
     public EditorWindow(EditorSession session, DateTimeOffset captured, EditorServices services, PixelRect? around = null,
@@ -119,7 +147,20 @@ internal sealed class EditorWindow : Window
         saveButton = OutputButton(ToolIcons.Save, "Save", "Save to the save folder (Ctrl+S); Ctrl+Shift+S asks where", SaveImage);
         var dragHandle = DragHandle();
         var pin = OutputButton(ToolIcons.Pin, "Pin and close", "Pin and close (Ctrl+P)", PinImage);
-        OutputButtons = [copyButton, saveButton, dragHandle, pin];
+        CopyTextButton = new ToggleButton
+        {
+            Content = Glyphs.Icon(ToolIcons.CopyText),
+            Width = 34,
+            Height = 30,
+            Padding = new Thickness(0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+        };
+        ToolTip.SetTip(CopyTextButton, "Copy the text in an area (Ctrl+Shift+C)");
+        AutomationProperties.SetName(CopyTextButton, "Copy Text");
+        CopyTextButton.Click += (_, _) => CopyText();
+        var scan = OutputButton(ToolIcons.ScanCode, "Scan QR Code", "Scan a QR code (Ctrl+Shift+R)", ScanCodes);
+        OutputButtons = [copyButton, saveButton, dragHandle, CopyTextButton, scan, pin];
         foreach (var control in OutputButtons) bar.Children.Add(control);
         bar.Children.Add(Divider());
         for (var group = 0; group < Groups.Length; group++)
@@ -174,7 +215,7 @@ internal sealed class EditorWindow : Window
         };
         DockPanel.SetDock(Toolbar, Dock.Top);
 
-        var page = new Grid { Children = { scroll, StyleBar } };
+        var page = new Grid { Children = { scroll, StyleBar, TextHint } };
         Content = new DockPanel { Children = { Toolbar, page } };
         PaintGround();
         ActualThemeVariantChanged += (_, _) => PaintGround();
@@ -187,6 +228,7 @@ internal sealed class EditorWindow : Window
         Canvas.CopyColorRequested += CopyColor;
         Canvas.ImagePickRequested += () => _ = PickImage();
         Canvas.StylesCommitted += RememberStyles;
+        Canvas.TextPickStopped += TextPickStopped;
         Opened += (_, _) =>
         {
             Toolbar.Measure(Avalonia.Size.Infinity);
@@ -316,6 +358,14 @@ internal sealed class EditorWindow : Window
             var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
             switch (e.Key)
             {
+                case Key.C when shift:
+                    CopyText();
+                    e.Handled = true;
+                    return;
+                case Key.R when shift:
+                    ScanCodes();
+                    e.Handled = true;
+                    return;
                 case Key.C when !shift:
                     CopyImage();
                     e.Handled = true;
@@ -553,6 +603,56 @@ internal sealed class EditorWindow : Window
         closingForGood = true;
         Close();
         return true;
+    }
+
+    // Text and codes
+
+    /// <summary>Copy Text stays on, as a tool does: each drag over text copies that text and each
+    /// click all of it, until Esc, another tool or Copy Text again. What is read is what an export
+    /// holds, so text under a blur or an erase never is.</summary>
+    private void CopyText()
+    {
+        if (Canvas.IsPickingText)
+        {
+            Canvas.StopPickingText();
+            return;
+        }
+        TextHint.IsVisible = true;
+        CopyTextButton.IsChecked = true;
+        Canvas.PickText(area => Read(area, codes: false));
+    }
+
+    private void TextPickStopped()
+    {
+        TextHint.IsVisible = false;
+        CopyTextButton.IsChecked = false;
+    }
+
+    /// <summary>Reads every QR code in the capture and copies what they hold.</summary>
+    private void ScanCodes()
+    {
+        Canvas.Session.FinishTyping();
+        Canvas.SessionChanged();
+        Read(null, codes: true);
+    }
+
+    private void Read(Tinysnap.Core.Rect? area, bool codes)
+    {
+        if (services.Read is not { } read || Exporter.ReadingImage(Canvas.Session.Display, area) is not { } image) return;
+        var center = new PixelPoint(Position.X + (int)(Bounds.Width * DesktopScaling / 2),
+                                    Position.Y + (int)(Bounds.Height * DesktopScaling / 2));
+        reading = ReadThenRelease();
+        async Task ReadThenRelease()
+        {
+            try
+            {
+                await read(image, codes, center);
+            }
+            finally
+            {
+                image.Dispose();
+            }
+        }
     }
 
     // Library

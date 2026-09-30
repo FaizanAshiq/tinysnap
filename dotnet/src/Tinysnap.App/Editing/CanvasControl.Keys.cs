@@ -29,6 +29,12 @@ internal sealed partial class CanvasControl
 
     private partial bool HandleKey(KeyEventArgs e)
     {
+        // While Copy Text is on, Esc ends it; a tool key picks its tool, which ends it too.
+        if (IsPickingText && e.Key == Key.Escape)
+        {
+            StopPickingText();
+            return true;
+        }
         // While text is typed the field has the keys, so a letter typed never picks a tool.
         if (Session.TypingId is not null)
         {
@@ -106,6 +112,7 @@ internal sealed partial class CanvasControl
     /// tool stays out whether one is chosen or not.</summary>
     public void Choose(Tool tool)
     {
+        StopPickingText();
         Session.Choose(tool);
         SessionChanged();
         if (tool == Tool.Image) ImagePickRequested?.Invoke();

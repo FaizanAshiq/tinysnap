@@ -120,6 +120,7 @@ internal sealed partial class CanvasControl : Control
         DrawBorders(context);
         DrawSelection(context);
         DrawLiveReading(context, bounds);
+        DrawTextPick(context, bounds);
     }
 
     /// <summary>The document rendered, again only when it, the text being typed or the framing
@@ -211,7 +212,7 @@ internal sealed partial class CanvasControl : Control
     /// <summary>What a click would keep. Nothing over an annotation, where a click picks it up.</summary>
     private IReadOnlyList<MeasureLine> LiveReading()
     {
-        if (Session.Tool != Tool.Measure || Session.Phase is not EditorPhase.IdlePhase || overPickUp
+        if (Session.Tool != Tool.Measure || IsPickingText || Session.Phase is not EditorPhase.IdlePhase || overPickUp
             || measurePointer is not { } at)
             return [];
         var capture = Session.Display.Capture;
@@ -305,6 +306,12 @@ internal sealed partial class CanvasControl : Control
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
         Focus();
         var point = PixelAt(e);
+        if (IsPickingText)
+        {
+            TextPickPressed(point);
+            e.Handled = true;
+            return;
+        }
         lastPoint = point;
         commandHeld = IsCommand(e.KeyModifiers);
         var reading = LiveReading();
@@ -321,6 +328,11 @@ internal sealed partial class CanvasControl : Control
     {
         base.OnPointerMoved(e);
         var point = PixelAt(e);
+        if (IsPickingText)
+        {
+            TextPickMoved(point);
+            return;
+        }
         commandHeld = IsCommand(e.KeyModifiers);
         if (Session.Phase is not EditorPhase.IdlePhase)
         {
@@ -340,6 +352,11 @@ internal sealed partial class CanvasControl : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        if (IsPickingText)
+        {
+            TextPickReleased();
+            return;
+        }
         lastPoint = null;
         Session.PointerUp();
         Hover(PixelAt(e));

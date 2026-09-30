@@ -37,6 +37,12 @@ internal static class ToolIcons
     /// <summary>A cross of two half point strokes with round ends, drawn for Tinysnap.</summary>
     public const string Close = "M4.15 4.15 A0.5 0.5 0 0 1 4.85 4.15 L10 9.29 L15.15 4.15 A0.5 0.5 0 0 1 15.85 4.85 L10.71 10 L15.85 15.15 A0.5 0.5 0 0 1 15.15 15.85 L10 10.71 L4.85 15.85 A0.5 0.5 0 0 1 4.15 15.15 L9.29 10 L4.15 4.85 A0.5 0.5 0 0 1 4.15 4.15 Z";
 
+    /// <summary>A viewfinder's four corners round three lines of text, drawn for Tinysnap.</summary>
+    public const string CopyText = "M3 3H7V4H4V7H3ZM13 3H17V7H16V4H13ZM3 13H4V16H7V17H3ZM16 13H17V17H13V16H16ZM7 7H13V8H7ZM7 9.5H13V10.5H7ZM7 12H11V13H7Z";
+
+    /// <summary>A viewfinder's four corners round a small QR code, drawn for Tinysnap.</summary>
+    public const string ScanCode = "M3 3H7V4H4V7H3ZM13 3H17V7H16V4H13ZM3 13H4V16H7V17H3ZM16 13H17V17H13V16H16ZM6.5 6.5H9V9H6.5ZM11 6.5H13.5V9H11ZM6.5 11H9V13.5H6.5ZM11 11H12V12H11ZM12.5 12.5H13.5V13.5H12.5Z";
+
     /// <summary>Two captures stacked, the back one showing past the front, drawn for Tinysnap.</summary>
     public const string Library = "F1 M5 6H12A2 2 0 0 1 14 8V15A2 2 0 0 1 12 17H5A2 2 0 0 1 3 15V8A2 2 0 0 1 5 6ZM5 7A1 1 0 0 0 4 8V15A1 1 0 0 0 5 16H12A1 1 0 0 0 13 15V8A1 1 0 0 0 12 7H5ZM7 3H15A2 2 0 0 1 17 5V13A2 2 0 0 1 15 15H14V14H15A1 1 0 0 0 16 13V5A1 1 0 0 0 15 4H7A1 1 0 0 0 6 5V6H5V5A2 2 0 0 1 7 3Z";
 

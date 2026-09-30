@@ -39,7 +39,7 @@ public sealed class CaptureController
         this.time = time;
         services = new EditorServices(platform.Clipboard, () => preferences.Current, dialogs ?? new AvaloniaDialogs(), Pin,
                                       preferences.RememberStyles, library, () => LibraryChanged?.Invoke(), time,
-                                      () => ShowLibrary());
+                                      () => ShowLibrary(), ReadAndCopy);
         Hotkeys = new HotkeyRegistrar(platform.Hotkeys);
         var applied = preferences.Current.HotKeys;
         Hotkeys.Apply(applied);
