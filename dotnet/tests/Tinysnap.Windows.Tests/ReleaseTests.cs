@@ -21,12 +21,44 @@ public class ReleaseTests
         try
         {
             startup.SetEnabled(true);
-            Program.Uninstalling(startup);
+            Program.Uninstalling(startup, new Win32FileTypes($"TinysnapTest{Guid.NewGuid():N}", ".tinysnaptest"));
             Assert.False(startup.IsEnabled);
         }
         finally
         {
             startup.SetEnabled(false);
         }
+    }
+
+    [Fact]
+    public void InstallingPutsTinysnapInOpenWithAndUninstallingTakesItOut()
+    {
+        var types = new Win32FileTypes($"TinysnapTest{Guid.NewGuid():N}", ".tinysnaptest");
+        try
+        {
+            Program.Installed(types);
+            Assert.True(types.IsRegisteredFor(".tinysnaptest"));
+            Program.Uninstalling(new Win32Startup($"TinysnapTest{Guid.NewGuid():N}"), types);
+            Assert.False(types.IsRegisteredFor(".tinysnaptest"));
+        }
+        finally
+        {
+            types.Unregister();
+        }
+    }
+
+    [Fact]
+    public async Task ASecondCopyHandsItsFilesToTheFirst()
+    {
+        var name = $"TinysnapTest{Guid.NewGuid():N}";
+        using var first = new SingleInstance(name);
+        var handed = new TaskCompletionSource<IReadOnlyList<string>>();
+        first.Reopened += files => handed.TrySetResult(files);
+        using var second = new SingleInstance(name);
+        Assert.True(first.IsFirst);
+        Assert.False(second.IsFirst);
+        second.AskFirstToReopen([@"C:\Pictures\Receipt.png"]);
+        var files = await handed.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        Assert.Equal([@"C:\Pictures\Receipt.png"], files);
     }
 }
