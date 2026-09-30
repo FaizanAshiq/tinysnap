@@ -1,3 +1,5 @@
+using Avalonia;
+using SkiaSharp;
 using Tinysnap.Core;
 using Tinysnap.Platform;
 
@@ -14,8 +16,12 @@ namespace Tinysnap.App.Editing;
 /// <param name="LibraryChanged">Told when an editor wrote a new image, so the library window
 /// shows it.</param>
 /// <param name="Time">Null for the system clock; tests fire the keep timer themselves.</param>
+/// <param name="Read">Reads an image for text, or for QR codes, copies what it finds and says so
+/// near the given point; the image stays the caller's.</param>
 internal sealed record EditorServices(IClipboard Clipboard, Func<Preferences> Preferences, IDialogs Dialogs,
                                       Action<ExportedImage, bool, LibraryEntry?>? Pin = null,
                                       Action<IReadOnlyDictionary<Tool, Style>, string>? RememberStyles = null,
                                       LibraryStore? Library = null, Action? LibraryChanged = null, TimeProvider? Time = null,
-                                      Action? OpenLibrary = null);
+                                      Action? OpenLibrary = null, Func<SKImage, bool, PixelPoint?, Task>? Read = null,
+                                      Action<MeasureSettings>? RememberMeasure = null, Action<Backdrop>? RememberBackdrop = null,
+                                      Func<BackdropWallpaper?>? ReadWallpaper = null);

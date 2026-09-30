@@ -39,7 +39,14 @@ public sealed class CaptureController
         this.time = time;
         services = new EditorServices(platform.Clipboard, () => preferences.Current, dialogs ?? new AvaloniaDialogs(), Pin,
                                       preferences.RememberStyles, library, () => LibraryChanged?.Invoke(), time,
-                                      () => ShowLibrary());
+                                      () => ShowLibrary(), ReadAndCopy,
+                                      measure => preferences.Update(p => p with { Measure = measure }),
+                                      backdrop => preferences.Update(p => p with { Backdrop = backdrop }), ReadWallpaper);
+        // A Measure setting changed in one editor reaches every other.
+        preferences.Changed += changed =>
+        {
+            foreach (var editor in editors) editor.Canvas.MeasureSettings = changed.Measure;
+        };
         Hotkeys = new HotkeyRegistrar(platform.Hotkeys);
         var applied = preferences.Current.HotKeys;
         Hotkeys.Apply(applied);
@@ -61,6 +68,8 @@ public sealed class CaptureController
         {
             case HotKeyAction.Area: CaptureArea(); break;
             case HotKeyAction.Fullscreen: CaptureFullscreen(); break;
+            case HotKeyAction.Text: OpenOverlay(Purpose.Text); break;
+            case HotKeyAction.Qr: OpenOverlay(Purpose.Codes); break;
             case HotKeyAction.RepeatArea: RepeatLastArea(); break;
             case HotKeyAction.Delayed: StartDelayedCapture(); break;
             case HotKeyAction.Library: ShowLibrary(); break;
@@ -169,8 +178,13 @@ public sealed class CaptureController
     /// <summary>The thumbnail showing now, if any, not one sliding away. One at a time.</summary>
     internal CaptureThumbnail? Thumbnail => thumbnail is { IsGone: false } ? thumbnail : null;
 
+    /// <summary>What a box drawn on the overlay is for.</summary>
+    private enum Purpose { Picture, Text, Codes }
+
     /// <summary>Freezes every monitor, then puts the area overlay over the frozen image.</summary>
-    public void CaptureArea()
+    public void CaptureArea() => OpenOverlay(Purpose.Picture);
+
+    private void OpenOverlay(Purpose purpose)
     {
         if (Overlay is not null) return;
         var desktop = platform.Screen.Freeze();
@@ -178,9 +192,25 @@ public sealed class CaptureController
         Overlay = new AreaOverlay(desktop, result =>
         {
             Overlay = null;
-            Finish(result, desktop);
+            Finish(result, desktop, purpose);
         }, platform.Screen.PointerPosition());
         Overlay.Show();
+    }
+
+    private Task reading = Task.CompletedTask;
+
+    /// <summary>The text or codes last asked for, landed and copied.</summary>
+    internal Task WhenRead() => reading;
+
+    /// <summary>A capture read for text or codes rather than opened, then let go.</summary>
+    private void Read(Capture capture, bool codes, Rect around)
+    {
+        reading = ReadThenRelease();
+        async Task ReadThenRelease()
+        {
+            await ReadAndCopy(capture.Image, codes, new PixelPoint((int)around.Center.X, (int)around.Center.Y));
+            capture.Image.Dispose();
+        }
     }
 
     /// <summary>The whole monitor under the pointer.</summary>
@@ -192,22 +222,27 @@ public sealed class CaptureController
         if (screen is not null) Open(new Capture(screen.Image, screen.Scale), screen.Bounds);
     }
 
-    private void Finish(AreaResult result, FrozenDesktop desktop)
+    private void Finish(AreaResult result, FrozenDesktop desktop, Purpose purpose)
     {
-        switch (result)
+        var (capture, around) = result switch
         {
-            case AreaResult.Area(var screen, var points):
-                if (Capture.Crop(screen.Image, points, screen.Scale) is { } capture)
-                {
-                    lastArea = (screen.Bounds, points);
-                    StateChanged?.Invoke();
-                    Open(capture, InPixels(screen, points));
-                }
-                break;
-            case AreaResult.PickedWindow(var picked):
-                if (CutWindow(picked, desktop) is { } window) Open(window, picked.Bounds);
-                break;
+            AreaResult.Area(var screen, var points) => (Capture.Crop(screen.Image, points, screen.Scale), InPixels(screen, points)),
+            AreaResult.PickedWindow(var picked) => (CutWindow(picked, desktop), picked.Bounds),
+            _ => (null, default),
+        };
+        if (capture is null) return;
+        if (purpose != Purpose.Picture)
+        {
+            Read(capture, purpose == Purpose.Codes, around);
+            return;
         }
+        // Repeat Last Area repeats pictures, not text grabs.
+        if (result is AreaResult.Area(var frozen, var box))
+        {
+            lastArea = (frozen.Bounds, box);
+            StateChanged?.Invoke();
+        }
+        Open(capture, around);
     }
 
     /// <summary>The window cut from the frozen monitor it most covers, its rounded corners left
@@ -288,6 +323,7 @@ public sealed class CaptureController
         var remembered = preferences.Current;
         var session = new EditorSession(document, styles: remembered.Styles, colorHex: remembered.ColorHex);
         var editor = new EditorWindow(session, captured, services, around, entry);
+        editor.Canvas.MeasureSettings = remembered.Measure;
         editors.Add(editor);
         editor.Closed += (_, _) =>
         {
@@ -331,6 +367,53 @@ public sealed class CaptureController
         pins.Add(pin);
         pin.Closed += (_, _) => pins.Remove(pin);
         pin.Show();
+    }
+
+    /// <summary>The desktop picture as a backdrop fill: read at no more than 1600 pixels across,
+    /// then softened. Null when there is none, and the gradient is drawn.</summary>
+    private BackdropWallpaper? ReadWallpaper()
+    {
+        using var picture = platform.Files.Wallpaper();
+        if (picture is null) return null;
+        var fit = Math.Min(1.0, 1600.0 / Math.Max(picture.Width, picture.Height));
+        using var shrunk = fit < 1 ? Shrunk(picture, fit) : null;
+        return Backdrop.Soften(shrunk ?? picture) is { } softened ? new BackdropWallpaper(Guid.NewGuid(), new PastedImage(softened)) : null;
+    }
+
+    private static SKImage Shrunk(SKImage image, double fit)
+    {
+        var info = new SKImageInfo(Math.Max(1, (int)(image.Width * fit)), Math.Max(1, (int)(image.Height * fit)));
+        using var surface = SKSurface.Create(info);
+        surface.Canvas.DrawImage(image, new SKRect(0, 0, info.Width, info.Height), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
+        return surface.Snapshot();
+    }
+
+    // Text and codes
+
+    /// <summary>The toast showing what was last copied, if it is still up.</summary>
+    internal TextToast? Toast { get; private set; }
+
+    /// <summary>Reads <paramref name="image"/> for text or, with <paramref name="codes"/>, for QR
+    /// codes on a worker thread, copies what it found, and says so in a toast at the top of the
+    /// monitor holding <paramref name="on"/>. The image stays the caller's.</summary>
+    internal async Task ReadAndCopy(SKImage image, bool codes, PixelPoint? on)
+    {
+        var reading = await Task.Run(() => platform.Text.Read(image, codes));
+        Toast?.Dismiss();
+        string title, shown = "";
+        if (reading is null)
+            title = codes ? "Could not scan for a QR code" : "Could not read text";
+        else if (reading.IsEmpty)
+            title = codes ? "No QR code found" : "No text found";
+        else if (!services.Clipboard.SetText(reading.Text))
+            title = "Tinysnap could not copy to the clipboard";
+        else
+        {
+            shown = string.Join("\n", reading.Text.Split('\n').Take(4));
+            title = !codes ? "Text copied" : reading.Codes.Length == 1 ? "QR code copied" : $"{reading.Codes.Length} QR codes copied";
+        }
+        Toast = new TextToast(title, shown, shown.Length > 0 ? reading : null, services.Clipboard, platform.Files, on, time);
+        Toast.Show();
     }
 
     // Library

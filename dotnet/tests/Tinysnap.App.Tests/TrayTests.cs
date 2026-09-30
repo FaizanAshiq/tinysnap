@@ -23,11 +23,13 @@ public class TrayTests
     {
         var setup = Launch();
         var menu = Tray.Menu(setup.Controller, () => { });
-        Assert.Equal(["Capture Area", "Capture Fullscreen", "Repeat Last Area", "Delayed Capture", "Open Library", "-", "Settings...", "Quit Tinysnap"],
+        Assert.Equal(["Capture Area", "Capture Fullscreen", "Capture Text", "Scan QR Code", "Repeat Last Area", "Delayed Capture",
+                      "Open Library", "-", "Settings...", "Quit Tinysnap"],
                      Headers(menu));
         Assert.Equal(new KeyGesture(Key.D2, KeyModifiers.Control | KeyModifiers.Shift), Item(menu, 0).Gesture);
+        Assert.Equal(new KeyGesture(Key.O, KeyModifiers.Control | KeyModifiers.Shift), Item(menu, 2).Gesture);
         // Nothing to repeat yet.
-        Assert.False(Item(menu, 2).IsEnabled);
+        Assert.False(Item(menu, 4).IsEnabled);
     }
 
     [AvaloniaFact]
@@ -52,7 +54,7 @@ public class TrayTests
         Assert.Null(setup.Controller.Overlay);
         Assert.Equal(2, setup.Controller.Editors.Count);
         Assert.All(setup.Controller.Editors, editor => Assert.Equal(new Size(100, 60), editor.Canvas.Session.Display.Capture.PixelSize));
-        Assert.True(Item(Tray.Menu(setup.Controller, () => { }), 2).IsEnabled);
+        Assert.True(Item(Tray.Menu(setup.Controller, () => { }), 4).IsEnabled);
     }
 
     [AvaloniaFact]
@@ -70,7 +72,7 @@ public class TrayTests
         setup.Controller.Perform(HotKeyAction.Delayed);
         Assert.Equal(2, setup.Controller.SecondsLeft);
         var menu = Tray.Menu(setup.Controller, () => { });
-        Assert.Equal("Capturing in 2", Item(menu, 3).Header);
+        Assert.Equal("Capturing in 2", Item(menu, 5).Header);
         Assert.False(Item(menu, 0).IsEnabled);
         setup.Time.Elapse();
         Assert.Equal(1, setup.Controller.SecondsLeft);

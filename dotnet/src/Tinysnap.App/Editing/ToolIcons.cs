@@ -37,6 +37,21 @@ internal static class ToolIcons
     /// <summary>A cross of two half point strokes with round ends, drawn for Tinysnap.</summary>
     public const string Close = "M4.15 4.15 A0.5 0.5 0 0 1 4.85 4.15 L10 9.29 L15.15 4.15 A0.5 0.5 0 0 1 15.85 4.85 L10.71 10 L15.85 15.15 A0.5 0.5 0 0 1 15.15 15.85 L10 10.71 L4.85 15.85 A0.5 0.5 0 0 1 4.15 15.15 L9.29 10 L4.15 4.85 A0.5 0.5 0 0 1 4.15 4.15 Z";
 
+    /// <summary>A viewfinder's four corners round three lines of text, drawn for Tinysnap.</summary>
+    public const string CopyText = "M3 3H7V4H4V7H3ZM13 3H17V7H16V4H13ZM3 13H4V16H7V17H3ZM16 13H17V17H13V16H16ZM7 7H13V8H7ZM7 9.5H13V10.5H7ZM7 12H11V13H7Z";
+
+    /// <summary>A viewfinder's four corners round a small QR code, drawn for Tinysnap.</summary>
+    public const string ScanCode = "M3 3H7V4H4V7H3ZM13 3H17V7H16V4H13ZM3 13H4V16H7V17H3ZM16 13H17V17H13V16H16ZM6.5 6.5H9V9H6.5ZM11 6.5H13.5V9H11ZM6.5 11H9V13.5H6.5ZM11 11H12V12H11ZM12.5 12.5H13.5V13.5H12.5Z";
+
+    /// <summary>A dashed frame, while there is no backdrop, drawn for Tinysnap.</summary>
+    public const string BackdropOff = "M3 4H6V5H3ZM8.5 4H11.5V5H8.5ZM14 4H17V5H14ZM3 15H6V16H3ZM8.5 15H11.5V16H8.5ZM14 15H17V16H14ZM3 7H4V9H3ZM3 11H4V13H3ZM16 7H17V9H16ZM16 11H17V13H16Z";
+
+    /// <summary>A frame round a filled middle, while a backdrop is on, drawn for Tinysnap.</summary>
+    public const string BackdropOn = "F1 M3 4H17V16H3ZM4 5V15H16V5ZM6 7H14V13H6Z";
+
+    /// <summary>Two corner arrows pointing out, for the export size, drawn for Tinysnap.</summary>
+    public const string ExportSize = "M3 3H9V4H4.7L9.4 8.7L8.7 9.4L4 4.7V9H3ZM17 17H11V16H15.3L10.6 11.3L11.3 10.6L16 15.3V11H17Z";
+
     /// <summary>Two captures stacked, the back one showing past the front, drawn for Tinysnap.</summary>
     public const string Library = "F1 M5 6H12A2 2 0 0 1 14 8V15A2 2 0 0 1 12 17H5A2 2 0 0 1 3 15V8A2 2 0 0 1 5 6ZM5 7A1 1 0 0 0 4 8V15A1 1 0 0 0 5 16H12A1 1 0 0 0 13 15V8A1 1 0 0 0 12 7H5ZM7 3H15A2 2 0 0 1 17 5V13A2 2 0 0 1 15 15H14V14H15A1 1 0 0 0 16 13V5A1 1 0 0 0 15 4H7A1 1 0 0 0 6 5V6H5V5A2 2 0 0 1 7 3Z";
 

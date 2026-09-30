@@ -62,6 +62,17 @@ public sealed class FakeFiles : IFileActions
     }
 
     public void Reveal(string path) => Revealed.Add(path);
+
+    public List<Uri> Opened { get; } = [];
+
+    public void Open(Uri link) => Opened.Add(link);
+
+    /// <summary>What the desktop picture reads as; none unless a test sets one.</summary>
+    public SkiaSharp.SKImage? WallpaperImage { get; set; }
+
+    /// <summary>A copy each time, as the caller owns and disposes what it is given.</summary>
+    public SkiaSharp.SKImage? Wallpaper() =>
+        WallpaperImage is { } picture ? SkiaSharp.SKImage.FromEncodedData(picture.Encode()) : null;
 }
 
 public sealed class FakeStartup : IStartup
@@ -97,6 +108,25 @@ public sealed class FakePlatform(IScreenCapture screen) : IPlatform
     public IFileActions Files { get; } = new FakeFiles();
 
     public IStartup Startup { get; } = new FakeStartup();
+
+    public ITextReader Text { get; } = new FakeTextReader();
+}
+
+/// <summary>Reads whatever a test says is there, and keeps what it was asked to read. With no
+/// recogniser on a Mac, the development build reads nothing.</summary>
+public sealed class FakeTextReader : ITextReader
+{
+    /// <summary>The next reading; null reads as could not read.</summary>
+    public TextReading? Reading { get; set; } = new([], []);
+
+    /// <summary>The size of each image asked about, not the image, which its owner may dispose.</summary>
+    public List<(int Width, int Height, bool Codes)> Asked { get; } = [];
+
+    public Task<TextReading?> Read(SkiaSharp.SKImage image, bool codes)
+    {
+        Asked.Add((image.Width, image.Height, codes));
+        return Task.FromResult(Reading);
+    }
 }
 
 /// <summary>Global hotkeys that go nowhere: what is registered is recorded, a binding in

@@ -12,6 +12,7 @@ internal sealed class WindowsPlatform(IScreenCapture screen, IHotkeys hotkeys, I
     public IClipboard Clipboard { get; } = clipboard;
     public IFileActions Files { get; } = new Win32Files();
     public IStartup Startup { get; } = new Win32Startup();
+    public ITextReader Text { get; } = new WinRtTextReader();
 
     public event Action? Reopened
     {

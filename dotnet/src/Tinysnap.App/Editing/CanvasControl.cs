@@ -120,6 +120,7 @@ internal sealed partial class CanvasControl : Control
         DrawBorders(context);
         DrawSelection(context);
         DrawLiveReading(context, bounds);
+        DrawTextPick(context, bounds);
     }
 
     /// <summary>The document rendered, again only when it, the text being typed or the framing
@@ -206,12 +207,58 @@ internal sealed partial class CanvasControl : Control
     private (Capture Capture, LuminanceBuffer Buffer)? luminance;
 
     /// <summary>The Measure tool's lines, edge contrast and guide, as the editor last set them.</summary>
-    public MeasureSettings MeasureSettings { get; set; } = MeasureSettings.Defaults;
+    public MeasureSettings MeasureSettings
+    {
+        get => measureSettings;
+        set
+        {
+            if (measureSettings == value) return;
+            measureSettings = value;
+            InvalidateVisual();
+            Changed?.Invoke();
+        }
+    }
+
+    private MeasureSettings measureSettings = MeasureSettings.Defaults;
+
+    /// <summary>A key or a chip changed the Measure settings here, for the app to remember and
+    /// pass on to every other editor.</summary>
+    public event Action<MeasureSettings>? MeasureChanged;
+
+    public void ChangeMeasure(Func<MeasureSettings, MeasureSettings> change)
+    {
+        MeasureSettings = change(MeasureSettings);
+        MeasureChanged?.Invoke(MeasureSettings);
+    }
+
+    /// <summary>With Measure in hand: X and Y toggle the lines, and the up and down arrows step the
+    /// edge contrast, 5% with Shift, while nothing is selected for them to nudge.</summary>
+    private bool MeasureKey(KeyEventArgs e)
+    {
+        if (Session.Tool != Tool.Measure || Session.Phase is not EditorPhase.IdlePhase) return false;
+        if (e.Key is Key.Up or Key.Down && Session.Selection is null && (e.KeyModifiers & ~KeyModifiers.Shift) == KeyModifiers.None)
+        {
+            ChangeMeasure(m => m.StepContrast(up: e.Key == Key.Up, coarse: e.KeyModifiers.HasFlag(KeyModifiers.Shift)));
+            return true;
+        }
+        if (e.KeyModifiers != KeyModifiers.None) return false;
+        switch (e.Key)
+        {
+            case Key.X:
+                ChangeMeasure(m => m with { Across = !m.Across });
+                return true;
+            case Key.Y:
+                ChangeMeasure(m => m with { Down = !m.Down });
+                return true;
+            default:
+                return false;
+        }
+    }
 
     /// <summary>What a click would keep. Nothing over an annotation, where a click picks it up.</summary>
     private IReadOnlyList<MeasureLine> LiveReading()
     {
-        if (Session.Tool != Tool.Measure || Session.Phase is not EditorPhase.IdlePhase || overPickUp
+        if (Session.Tool != Tool.Measure || IsPickingText || Session.Phase is not EditorPhase.IdlePhase || overPickUp
             || measurePointer is not { } at)
             return [];
         var capture = Session.Display.Capture;
@@ -305,6 +352,12 @@ internal sealed partial class CanvasControl : Control
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
         Focus();
         var point = PixelAt(e);
+        if (IsPickingText)
+        {
+            TextPickPressed(point);
+            e.Handled = true;
+            return;
+        }
         lastPoint = point;
         commandHeld = IsCommand(e.KeyModifiers);
         var reading = LiveReading();
@@ -321,6 +374,11 @@ internal sealed partial class CanvasControl : Control
     {
         base.OnPointerMoved(e);
         var point = PixelAt(e);
+        if (IsPickingText)
+        {
+            TextPickMoved(point);
+            return;
+        }
         commandHeld = IsCommand(e.KeyModifiers);
         if (Session.Phase is not EditorPhase.IdlePhase)
         {
@@ -340,6 +398,11 @@ internal sealed partial class CanvasControl : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        if (IsPickingText)
+        {
+            TextPickReleased();
+            return;
+        }
         lastPoint = null;
         Session.PointerUp();
         Hover(PixelAt(e));

@@ -29,6 +29,13 @@ internal sealed partial class CanvasControl
 
     private partial bool HandleKey(KeyEventArgs e)
     {
+        // While Copy Text is on, Esc ends it; a tool key picks its tool, which ends it too.
+        if (IsPickingText && e.Key == Key.Escape)
+        {
+            StopPickingText();
+            return true;
+        }
+        if (Session.TypingId is null && MeasureKey(e)) return true;
         // While text is typed the field has the keys, so a letter typed never picks a tool.
         if (Session.TypingId is not null)
         {
@@ -106,6 +113,7 @@ internal sealed partial class CanvasControl
     /// tool stays out whether one is chosen or not.</summary>
     public void Choose(Tool tool)
     {
+        StopPickingText();
         Session.Choose(tool);
         SessionChanged();
         if (tool == Tool.Image) ImagePickRequested?.Invoke();
@@ -120,6 +128,21 @@ internal sealed partial class CanvasControl
         SessionChanged();
         // A stream from the colour spectrum keeps its drag; a finished change hands the keys back.
         if (!merging) Focus();
+    }
+
+    /// <summary>For the Backdrop panel. <paramref name="merging"/> is for a stream of colours from
+    /// the spectrum, which undoes as one.</summary>
+    public void SetBackdrop(Backdrop? backdrop, bool merging = false)
+    {
+        Session.SetBackdrop(backdrop, merging);
+        SessionChanged();
+    }
+
+    /// <summary>For the Size panel; null follows the Export setting again.</summary>
+    public void SetResize(double? resize)
+    {
+        Session.SetResize(resize);
+        SessionChanged();
     }
 
     public void DeleteSelection()
