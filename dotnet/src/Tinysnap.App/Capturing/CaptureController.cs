@@ -39,7 +39,13 @@ public sealed class CaptureController
         this.time = time;
         services = new EditorServices(platform.Clipboard, () => preferences.Current, dialogs ?? new AvaloniaDialogs(), Pin,
                                       preferences.RememberStyles, library, () => LibraryChanged?.Invoke(), time,
-                                      () => ShowLibrary(), ReadAndCopy);
+                                      () => ShowLibrary(), ReadAndCopy,
+                                      measure => preferences.Update(p => p with { Measure = measure }));
+        // A Measure setting changed in one editor reaches every other.
+        preferences.Changed += changed =>
+        {
+            foreach (var editor in editors) editor.Canvas.MeasureSettings = changed.Measure;
+        };
         Hotkeys = new HotkeyRegistrar(platform.Hotkeys);
         var applied = preferences.Current.HotKeys;
         Hotkeys.Apply(applied);
@@ -316,6 +322,7 @@ public sealed class CaptureController
         var remembered = preferences.Current;
         var session = new EditorSession(document, styles: remembered.Styles, colorHex: remembered.ColorHex);
         var editor = new EditorWindow(session, captured, services, around, entry);
+        editor.Canvas.MeasureSettings = remembered.Measure;
         editors.Add(editor);
         editor.Closed += (_, _) =>
         {

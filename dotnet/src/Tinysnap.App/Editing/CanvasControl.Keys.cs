@@ -35,6 +35,7 @@ internal sealed partial class CanvasControl
             StopPickingText();
             return true;
         }
+        if (Session.TypingId is null && MeasureKey(e)) return true;
         // While text is typed the field has the keys, so a letter typed never picks a tool.
         if (Session.TypingId is not null)
         {

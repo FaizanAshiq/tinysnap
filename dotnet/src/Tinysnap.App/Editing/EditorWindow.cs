@@ -229,6 +229,7 @@ internal sealed class EditorWindow : Window
         Canvas.ImagePickRequested += () => _ = PickImage();
         Canvas.StylesCommitted += RememberStyles;
         Canvas.TextPickStopped += TextPickStopped;
+        Canvas.MeasureChanged += measure => services.RememberMeasure?.Invoke(measure);
         Opened += (_, _) =>
         {
             Toolbar.Measure(Avalonia.Size.Infinity);

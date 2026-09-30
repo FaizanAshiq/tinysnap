@@ -23,7 +23,8 @@ internal sealed class StyleBar : Border
 
     private readonly CanvasControl canvas;
     private readonly StackPanel row = new() { Orientation = Orientation.Horizontal, Spacing = 14 };
-    private (Tool Tool, Style Style, bool Selected)? shown;
+    private (Tool Tool, Style Style, bool Selected, MeasureSettings Measure)? shown;
+    private Flyout? guide;
 
     public Button? ColorButton { get; private set; }
     public IReadOnlyList<Button> Swatches { get; private set; } = [];
@@ -33,6 +34,17 @@ internal sealed class StyleBar : Border
     public IReadOnlyList<ToggleButton> OpacityChips { get; private set; } = [];
     public ToggleButton? DifferenceChip { get; private set; }
     public Button? DeleteChip { get; private set; }
+    public ToggleButton? AcrossChip { get; private set; }
+    public ToggleButton? DownChip { get; private set; }
+    public Button? LowerContrast { get; private set; }
+    public Button? RaiseContrast { get; private set; }
+    public TextBlock? ContrastLabel { get; private set; }
+    public Button? HelpChip { get; private set; }
+
+    /// <summary>The Measure guide's Got it, while the guide is open.</summary>
+    public Button? GuideDone { get; private set; }
+
+    public bool GuideOpen => guide?.IsOpen == true;
 
     /// <summary>The colour spectrum for anything the swatches do not have.</summary>
     public ColorView? CustomColor { get; private set; }
@@ -68,19 +80,27 @@ internal sealed class StyleBar : Border
         var tool = selected?.Tool ?? session.Tool;
         var style = selected?.Style ?? session.StyleFor(tool);
         IsVisible = Shows(tool);
-        var now = (tool, style, selected is not null);
+        var measure = canvas.MeasureSettings;
+        var now = (tool, style, selected is not null, measure);
         if (shown == now) return;
         // Only the colour changed: redrawn where it stands. Rebuilding replaced the button the
         // palette hangs from, which closed the palette in the middle of a drag on the spectrum.
-        if (shown is { } before && before.Tool == tool && before.Selected == now.Item3
+        if (shown is { } before && before.Tool == tool && before.Selected == now.Item3 && before.Measure == measure
             && before.Style with { ColorHex = style.ColorHex } == style)
         {
             shown = now;
             Recolor(style.ColorHex);
             return;
         }
+        var picked = shown?.Tool != Tool.Measure && session.Tool == Tool.Measure;
         shown = now;
         Rebuild(tool, style, selected is not null);
+        // The guide shows by itself the first time Measure is picked, once the ? it hangs from is in place.
+        if (picked && !measure.GuideSeen)
+        {
+            canvas.ChangeMeasure(m => m with { GuideSeen = true });
+            Avalonia.Threading.Dispatcher.UIThread.Post(ShowGuide);
+        }
     }
 
     private void Rebuild(Tool tool, Style style, bool selected)
@@ -92,6 +112,7 @@ internal sealed class StyleBar : Border
         colorSwatch = null;
         DifferenceChip = null;
         DeleteChip = null;
+        (AcrossChip, DownChip, LowerContrast, RaiseContrast, ContrastLabel, HelpChip) = (null, null, null, null, null, null);
         if (tool.HasColor()) row.Children.Add(ColorButton = MakeColorButton(style.ColorHex));
         SizeChips = tool.HasSize() ? Group(MakeSizeChips(tool, style)) : [];
         FillChips = tool.HasFill() ? Group(MakeFillChips(tool, style)) : [];
@@ -104,6 +125,7 @@ internal sealed class StyleBar : Border
             Group([difference]);
             DifferenceChip = difference;
         }
+        if (tool == Tool.Measure) AddMeasureChips();
         if (selected)
         {
             var delete = new Button
@@ -119,6 +141,156 @@ internal sealed class StyleBar : Border
             row.Children.Add(delete);
             DeleteChip = delete;
         }
+    }
+
+    // Measure
+
+    private const string AcrossGlyph = "M4 9.2H16V10.8H4ZM4 7H5.6V13H4ZM14.4 7H16V13H14.4Z";
+    private const string DownGlyph = "M9.2 4H10.8V16H9.2ZM7 4H13V5.6H7ZM7 14.4H13V16H7Z";
+    private const string MinusGlyph = "M5 9.2H15V10.8H5Z";
+    private const string PlusGlyph = "M5 9.2H15V10.8H5ZM9.2 5H10.8V15H9.2Z";
+
+    /// <summary>Across and Down, the same as X and Y; the edge contrast as minus, value, plus, the
+    /// same as the down and up arrows; and the ? that brings the guide back.</summary>
+    private void AddMeasureChips()
+    {
+        var measure = canvas.MeasureSettings;
+        AcrossChip = Chip(Glyphs.Icon(AcrossGlyph, 16), "Across, or X", measure.Across,
+                          () => canvas.ChangeMeasure(m => m with { Across = !m.Across }));
+        DownChip = Chip(Glyphs.Icon(DownGlyph, 16), "Down, or Y", measure.Down,
+                        () => canvas.ChangeMeasure(m => m with { Down = !m.Down }));
+        Group([AcrossChip, DownChip]);
+
+        LowerContrast = PlainChip(Glyphs.Icon(MinusGlyph, 14), "Lower edge contrast, finds fainter edges, or the down arrow",
+                                  () => canvas.ChangeMeasure(m => m.StepContrast(up: false, coarse: false)));
+        RaiseContrast = PlainChip(Glyphs.Icon(PlusGlyph, 14), "Higher edge contrast, finds fewer edges, or the up arrow",
+                                  () => canvas.ChangeMeasure(m => m.StepContrast(up: true, coarse: false)));
+        ContrastLabel = new TextBlock
+        {
+            Text = measure.ContrastLabel,
+            Width = 34,
+            FontSize = 12,
+            FontWeight = FontWeight.Medium,
+            TextAlignment = TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            FontFeatures = FontFeatureCollection.Parse("tnum"),
+            [!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SystemControlForegroundBaseMediumBrush"),
+        };
+        ToolTip.SetTip(ContrastLabel, "Edge contrast: how big a change in brightness counts as an edge");
+        AutomationProperties.SetName(ContrastLabel, $"Edge contrast {measure.ContrastLabel}");
+        row.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 2,
+            Children = { LowerContrast, ContrastLabel, RaiseContrast },
+        });
+
+        var mark = new Border
+        {
+            Width = 16,
+            Height = 16,
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(1.4),
+            [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseHighBrush"),
+            Child = new TextBlock
+            {
+                Text = "?",
+                FontSize = 11,
+                FontWeight = FontWeight.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+        };
+        HelpChip = PlainChip(mark, "Show the Measure guide", ShowGuide);
+        row.Children.Add(HelpChip);
+    }
+
+    private static Button PlainChip(Control glyph, string tip, Action pick)
+    {
+        var chip = new Button
+        {
+            Content = glyph,
+            Width = 30,
+            Height = 26,
+            Padding = new Thickness(0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        ToolTip.SetTip(chip, tip);
+        AutomationProperties.SetName(chip, tip);
+        chip.Click += (_, _) => pick();
+        return chip;
+    }
+
+    /// <summary>What the Measure tool does: every key beside the chip that does the same thing.
+    /// Clicks pass through it, so measuring can start while it is up.</summary>
+    private void ShowGuide()
+    {
+        if (HelpChip is not { } anchor || TopLevel.GetTopLevel(anchor) is null) return;
+        GuideDone = new Button { Content = "Got it", IsDefault = true, HorizontalAlignment = HorizontalAlignment.Right };
+        var keys = new Grid { ColumnDefinitions = new ColumnDefinitions("58,*"), RowSpacing = 10, ColumnSpacing = 12 };
+        (string Keys, string Note)[] rows =
+        [
+            ("X", "Across the space, or the Across chip"),
+            ("Y", "Down it, or the Down chip. Both at once show both"),
+            ("Click", "Keeps the reading on the capture"),
+            ("↑ ↓", "Finds more or fewer edges, when one is missed"),
+        ];
+        for (var index = 0; index < rows.Length; index++)
+        {
+            keys.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            var cap = new Border
+            {
+                Padding = new Thickness(6, 2),
+                CornerRadius = new CornerRadius(4),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock { Text = rows[index].Keys, FontSize = 12, FontWeight = FontWeight.Medium },
+                [!Border.BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundBaseLowBrush"),
+            };
+            var note = new TextBlock
+            {
+                Text = rows[index].Note,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center,
+                [!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SystemControlForegroundBaseMediumBrush"),
+            };
+            Grid.SetRow(cap, index);
+            Grid.SetRow(note, index);
+            Grid.SetColumn(note, 1);
+            keys.Children.Add(cap);
+            keys.Children.Add(note);
+        }
+        var footnote = new TextBlock
+        {
+            Text = "The ? brings this back",
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            [!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SystemControlForegroundBaseMediumBrush"),
+        };
+        guide = new Flyout
+        {
+            Placement = PlacementMode.BottomEdgeAlignedRight,
+            OverlayDismissEventPassThrough = true,
+            Content = new StackPanel
+            {
+                Width = 288,
+                Spacing = 14,
+                Children =
+                {
+                    new TextBlock { Text = "Measure the space under the pointer", FontSize = 13, FontWeight = FontWeight.SemiBold },
+                    keys,
+                    new DockPanel { Children = { GuideDone, footnote } },
+                },
+            },
+        };
+        DockPanel.SetDock(GuideDone, Dock.Right);
+        var shown = guide;
+        GuideDone.Click += (_, _) => shown.Hide();
+        guide.ShowAt(anchor);
     }
 
     private IReadOnlyList<ToggleButton> Group(IReadOnlyList<ToggleButton> chips)
