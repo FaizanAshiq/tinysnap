@@ -81,7 +81,7 @@ public static class DocumentArchive
                     item["file"] = name;
                     break;
             }
-            items.Add(item);
+            items.Add((JsonNode)item);
         }
 
         var root = new JsonObject
@@ -256,5 +256,5 @@ public static class DocumentArchive
         ["height"] = rect.Size.Height,
     };
 
-    private static JsonArray Pair(Point point) => [point.X, point.Y];
+    private static JsonArray Pair(Point point) => new(JsonValue.Create(point.X), JsonValue.Create(point.Y));
 }

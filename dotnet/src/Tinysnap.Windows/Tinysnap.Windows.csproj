@@ -10,6 +10,11 @@
     <AssemblyName>Tinysnap</AssemblyName>
     <Product>Tinysnap</Product>
     <Version>1.1.0</Version>
+    <!-- The shipped build leaves out the .NET code it never calls: about 22 MB to download instead
+         of 60. CI runs Tinysnap.exe with self-check on that build, as the tests run the full one. -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <!-- Warnings inside Windows' own API bridge, which the self-check's text reading covers. -->
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,5 +30,21 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Tinysnap.Windows.Tests" />
   </ItemGroup>
+
+  <!-- Kept whole when trimming: the colour picker's theme is compiled XAML found by name at
+       runtime, and trimmed it was gone, so the UI would not start. The self-check catches it. -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="Avalonia.Controls.ColorPicker" />
+  </ItemGroup>
+
+  <!-- Debug symbols stay out of what ships: the graphics libraries alone brought 100 MB of them.
+       So do the runtime's debugger and crash dump helpers, which only a debugger ever loads. -->
+  <Target Name="LeaveOutDebugging" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.pdb'" />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="$([System.String]::Copy('%(Filename)').StartsWith('mscordaccore')) Or '%(Filename)' == 'mscordbi' Or '%(Filename)' == 'createdump' Or $([System.String]::Copy('%(Filename)').StartsWith('Microsoft.DiaSymReader'))" />
+    </ItemGroup>
+  </Target>
 
 </Project>
