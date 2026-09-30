@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml.Styling;
+using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using Tinysnap.App.Capturing;
@@ -33,6 +34,13 @@ public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started
         Styles.Add(new Style(selector => selector.Is<Control>())
         {
             Setters = { new Setter(ToolTip.ShowDelayProperty, 300) },
+        });
+        // Every window, the editor and pins included, carries the app's own icon in the taskbar
+        // and the window switcher.
+        using var icon = AssetLoader.Open(new Uri("avares://Tinysnap.App/Assets/Tinysnap.png"));
+        Styles.Add(new Style(selector => selector.Is<Window>())
+        {
+            Setters = { new Setter(Window.IconProperty, new WindowIcon(icon)) },
         });
     }
 
