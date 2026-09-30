@@ -37,4 +37,23 @@ resizes on a real wheel and touchpad, the thumbnail's slide and swipe, the tray 
 login, the Recycle Bin, a second launch bringing the first forward, text read from real apps in
 the person's own languages, the desktop picture as a backdrop, and how it all feels.
 
+## Packaging and releasing
+
+Every push builds, for x64 and ARM64, a per-user `Setup.exe` (no admin prompt), a portable zip
+and the full package with Velopack, kept for two weeks as the `package` job's artifacts. Nothing
+is published from CI. The Windows app carries the Mac app's version, and both ship in the same
+GitHub release.
+
+1. Run the build on a real Windows machine first: install `Tinysnap-win-x64-Setup.exe` from the
+   artifacts and go through the checks above.
+2. Tag and release as the Mac app does, then attach the Windows files from the tag's run:
+   `gh release upload vX.Y.Z Tinysnap-win-x64-Setup.exe Tinysnap-win-x64.zip Tinysnap-win-arm64-Setup.exe Tinysnap-win-arm64.zip`.
+3. Copy `packaging/winget/FaizanAshiq.Tinysnap/<version>` for the new version, fill in each
+   installer's `InstallerSha256` (`Get-FileHash .\Tinysnap-win-x64-Setup.exe`), run
+   `winget validate` on the folder, and send it to `microsoft/winget-pkgs` with `wingetcreate submit`.
+4. Once winget has it, add the Windows install line (`winget install FaizanAshiq.Tinysnap`) to
+   the site's Tinysnap page, `config/tinysnap.ts` in the site repo, by PR.
+
+The app never checks for updates; winget brings new versions.
+
 Third-party notices are in `THIRD-PARTY-NOTICES.md`.
