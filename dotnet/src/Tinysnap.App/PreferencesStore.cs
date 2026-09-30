@@ -10,6 +10,9 @@ internal sealed class PreferencesStore(string path)
 {
     public Preferences Current { get; private set; } = Read(path, Preferences.Defaults);
 
+    /// <summary>The file the preferences live in.</summary>
+    public string Path => path;
+
     public event Action<Preferences>? Changed;
 
     public void Update(Func<Preferences, Preferences> change)

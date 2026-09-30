@@ -17,6 +17,10 @@ internal interface IDialogs
     /// <summary>Save, Discard or Cancel, for closing a capture whose edits would be lost.
     /// <paramref name="libraryFailed"/> says why for a capture the library could not keep.</summary>
     Task<CloseChoice> AskToSave(Window owner, bool libraryFailed = false);
+
+    /// <summary><paramref name="action"/> or Cancel, for something that cannot be undone. True
+    /// only for the action; Cancel is the default.</summary>
+    Task<bool> Confirm(Window owner, string message, string detail, string action);
 }
 
 internal sealed class AvaloniaDialogs : IDialogs
@@ -40,6 +44,12 @@ internal sealed class AvaloniaDialogs : IDialogs
         ]);
         // Closed without an answer is Cancel: nothing is lost.
         return await dialog.ShowDialog<int?>(owner) is { } choice ? (CloseChoice)choice : CloseChoice.Cancel;
+    }
+
+    public async Task<bool> Confirm(Window owner, string message, string detail, string action)
+    {
+        var dialog = Dialog(message, detail, [(action, 1, false, false), ("Cancel", 0, true, true)]);
+        return await dialog.ShowDialog<int?>(owner) == 1;
     }
 
     /// <summary>A small window with the message, an optional line under it, and buttons along the

@@ -58,8 +58,6 @@ public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started
     /// milestones land, so a key is never held for something that does nothing.</summary>
     private void ListenForHotkeys(HotKeys hotkeys)
     {
-        foreach (var action in new[] { HotKeyAction.Area, HotKeyAction.Fullscreen })
-            if (hotkeys[action] is { } binding) Platform.Hotkeys.Register(action, binding);
         Platform.Hotkeys.Pressed += action => Dispatcher.UIThread.Post(() =>
         {
             if (action == HotKeyAction.Area) Captures?.CaptureArea();

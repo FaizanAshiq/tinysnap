@@ -4,6 +4,7 @@ using SkiaSharp;
 using Tinysnap.App.Editing;
 using Tinysnap.App.Library;
 using Tinysnap.App.Pinning;
+using Tinysnap.App.Settings;
 using Tinysnap.Core;
 using Tinysnap.Platform;
 using Rect = Tinysnap.Core.Rect;
@@ -38,7 +39,23 @@ public sealed class CaptureController
         this.time = time;
         services = new EditorServices(platform.Clipboard, () => preferences.Current, dialogs ?? new AvaloniaDialogs(), Pin,
                                       preferences.RememberStyles, library, () => LibraryChanged?.Invoke(), time);
+        Hotkeys = new HotkeyRegistrar(platform.Hotkeys);
+        var applied = preferences.Current.HotKeys;
+        Hotkeys.Apply(applied);
+        // Only a change to the hotkeys lets them go and takes them again, not a remembered style.
+        preferences.Changed += changed =>
+        {
+            if (changed.HotKeys == applied) return;
+            applied = changed.HotKeys;
+            Hotkeys.Apply(applied);
+        };
     }
+
+    internal PreferencesStore Preferences => preferences;
+
+    internal HotkeyRegistrar Hotkeys { get; }
+
+    internal IStartup Startup => platform.Startup;
 
     internal LibraryStore Library => library;
 
@@ -241,6 +258,21 @@ public sealed class CaptureController
         }
         libraryWindow.ShowInFront();
         return libraryWindow;
+    }
+
+    private SettingsWindow? settingsWindow;
+
+    /// <summary>The one Settings window, made when first asked for, shown and brought forward.</summary>
+    internal SettingsWindow ShowSettings()
+    {
+        if (settingsWindow is null)
+        {
+            settingsWindow = new SettingsWindow(this);
+            settingsWindow.Closed += (_, _) => settingsWindow = null;
+        }
+        if (!settingsWindow.IsVisible) settingsWindow.Show();
+        settingsWindow.Activate();
+        return settingsWindow;
     }
 
     /// <summary>For the library window, after it moved an entry to the Recycle Bin.</summary>

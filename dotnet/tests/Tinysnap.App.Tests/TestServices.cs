@@ -23,6 +23,11 @@ internal sealed class FakeDialogs(CloseChoice answer = CloseChoice.Cancel) : IDi
         return Task.CompletedTask;
     }
 
+    /// <summary>What every confirmation is answered.</summary>
+    public bool Confirmation { get; set; }
+
+    public Task<bool> Confirm(Window owner, string message, string detail, string action) => Task.FromResult(Confirmation);
+
     public Task<CloseChoice> AskToSave(Window owner, bool libraryFailed = false)
     {
         Asked++;
@@ -33,7 +38,7 @@ internal sealed class FakeDialogs(CloseChoice answer = CloseChoice.Cancel) : IDi
 /// <summary>A controller on one Retina monitor 400 by 300 pixels, with a library, clipboard,
 /// dialogs, files and timers of its own for a test to look at.</summary>
 internal sealed record AppSetup(CaptureController Controller, LibraryStore Library, FakeClipboard Clipboard, FakeDialogs Dialogs,
-                                FakeTime Time, FakeFiles Files);
+                                FakeTime Time, FakeFiles Files, FakePlatform Platform);
 
 internal static class TestServices
 {
@@ -45,7 +50,7 @@ internal static class TestServices
         var dialogs = new FakeDialogs();
         var time = new FakeTime();
         var controller = new CaptureController(platform, Store(preferences), library, dialogs, time);
-        return new AppSetup(controller, library, (FakeClipboard)platform.Clipboard, dialogs, time, (FakeFiles)platform.Files);
+        return new AppSetup(controller, library, (FakeClipboard)platform.Clipboard, dialogs, time, (FakeFiles)platform.Files, platform);
     }
 
     public static string TemporaryFolder() => Path.Combine(Path.GetTempPath(), $"tinysnap-saves-{Guid.NewGuid()}");

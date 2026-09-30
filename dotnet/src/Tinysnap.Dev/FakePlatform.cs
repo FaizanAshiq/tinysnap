@@ -81,7 +81,7 @@ public sealed class FakePlatform(IScreenCapture screen) : IPlatform
 {
     public IScreenCapture Screen { get; } = screen;
 
-    public IHotkeys Hotkeys { get; } = new NoHotkeys();
+    public IHotkeys Hotkeys { get; } = new FakeHotkeys();
 
     // ponytail: the development build copies to this fake, not the Mac's own clipboard; an
     // Avalonia clipboard stand-in if copying on a Mac is ever wanted.
@@ -92,15 +92,29 @@ public sealed class FakePlatform(IScreenCapture screen) : IPlatform
     public IFileActions Files { get; } = new FakeFiles();
 
     public IStartup Startup { get; } = new FakeStartup();
+}
 
-    private sealed class NoHotkeys : IHotkeys
+/// <summary>Global hotkeys that go nowhere: what is registered is recorded, a binding in
+/// <see cref="HeldElsewhere"/> is refused as another app would refuse it, and
+/// <see cref="Press"/> stands in for the key.</summary>
+public sealed class FakeHotkeys : IHotkeys
+{
+    public Dictionary<HotKeyAction, HotKeyBinding> Registered { get; } = [];
+
+    public HashSet<HotKeyBinding> HeldElsewhere { get; } = [];
+
+    public event Action<HotKeyAction>? Pressed;
+
+    public bool Register(HotKeyAction action, HotKeyBinding binding)
     {
-        public event Action<HotKeyAction>? Pressed { add { } remove { } }
-
-        public bool Register(HotKeyAction action, HotKeyBinding binding) => true;
-
-        public void UnregisterAll() { }
-
-        public void Dispose() { }
+        if (HeldElsewhere.Contains(binding)) return false;
+        Registered[action] = binding;
+        return true;
     }
+
+    public void UnregisterAll() => Registered.Clear();
+
+    public void Press(HotKeyAction action) => Pressed?.Invoke(action);
+
+    public void Dispose() => UnregisterAll();
 }
