@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -216,10 +217,24 @@ internal sealed class EditorWindow : Window
                                      () => services.OpenLibrary?.Invoke());
         LibraryButton.VerticalAlignment = VerticalAlignment.Center;
         DockPanel.SetDock(LibraryButton, Dock.Right);
+        // On a screen narrower than the tools, as a small laptop at 125% is, they scroll sideways,
+        // and a mouse wheel turns sideways here, having nothing else to scroll.
+        var tools = new ScrollViewer
+        {
+            Content = bar,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
+        tools.AddHandler(PointerWheelChangedEvent, (_, e) =>
+        {
+            if (e.Delta.X != 0 || e.Delta.Y == 0) return;
+            tools.Offset = tools.Offset.WithX(tools.Offset.X - e.Delta.Y * 48);
+            e.Handled = true;
+        }, RoutingStrategies.Tunnel);
         Toolbar = new Border
         {
             // The library at the far end, as the Mac's toolbar has it, the tools filling the rest.
-            Child = new DockPanel { Children = { LibraryButton, bar } },
+            Child = new DockPanel { Children = { LibraryButton, tools } },
             Height = ToolbarHeight,
             Padding = new Thickness(8, 0),
             [!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"),
@@ -373,13 +388,19 @@ internal sealed class EditorWindow : Window
         var screen = (around is { } area ? Screens.ScreenFromPoint(area.Center) : null) ?? Screens.Primary;
         var scaling = screen?.Scaling ?? 1;
         var work = screen?.WorkingArea;
-        var workDips = work is { } w ? new CoreSize(w.Width / scaling, w.Height / scaling) : new CoreSize(1920, 1040);
+        // The title bar and borders need their room on the screen too.
+        var frame = FrameSize is { } outer ? new CoreSize(outer.Width - ClientSize.Width, outer.Height - ClientSize.Height) : new CoreSize(0, 0);
+        var workDips = work is { } w
+            ? new CoreSize(w.Width / scaling - frame.Width, w.Height / scaling - frame.Height)
+            : new CoreSize(1920, 1040);
+        // A screen narrower than the toolbar gets a window that fits it, and the toolbar scrolls.
+        MinWidth = Math.Min(MinWidth, workDips.Width);
         var (client, zoom) = EditorFit.Initial(CanvasAtFullSize, workDips, ToolbarHeight, new CoreSize(MinWidth, MinHeight));
         Canvas.Zoom = zoom;
         Width = client.Width;
         Height = client.Height;
         if (work is not { } workArea) return;
-        var size = new PixelSize((int)(client.Width * scaling), (int)(client.Height * scaling));
+        var size = new PixelSize((int)((client.Width + frame.Width) * scaling), (int)((client.Height + frame.Height) * scaling));
         var position = new PixelPoint(workArea.X + (workArea.Width - size.Width) / 2, workArea.Y + (workArea.Height - size.Height) / 2);
         if (Open.LastOrDefault(e => e != this && e.IsVisible && Screens.ScreenFromWindow(e) == screen) is { } previous)
         {

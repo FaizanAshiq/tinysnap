@@ -46,6 +46,15 @@ public class CanvasMappingTests
     }
 
     [Fact]
+    public void TheEditorNeverOutgrowsAScreenNarrowerThanItsToolbar()
+    {
+        // A 1024 by 768 screen at 100%, less its taskbar, and a toolbar that wants 1090.
+        var (client, zoom) = EditorFit.Initial(new Size(400, 150), new Size(1024, 720), toolbar: 40, minimum: new Size(1090, 280));
+        Assert.Equal(1, zoom);
+        Assert.Equal(new Size(1024, 280), client);
+    }
+
+    [Fact]
     public void FitIsTheLargestZoomThatShowsAllOfIt()
     {
         Assert.Equal(2, EditorFit.Fit(new Size(400, 300), new Size(848, 648)), 9);

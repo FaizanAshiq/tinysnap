@@ -21,7 +21,9 @@ internal sealed class SingleInstance : IDisposable
     public SingleInstance(string name = "Tinysnap")
     {
         this.name = $"{name}.{Environment.UserName}";
-        running = new Mutex(true, $@"Local\{this.name}.Running", out var createdNew);
+        // Never owned, only created: whoever creates it is first, and closing it frees the name
+        // from any thread, where releasing an owned one works only on the thread that took it.
+        running = new Mutex(false, $@"Local\{this.name}.Running", out var createdNew);
         IsFirst = createdNew;
         if (IsFirst) _ = Listen();
     }
@@ -74,7 +76,6 @@ internal sealed class SingleInstance : IDisposable
     public void Dispose()
     {
         stopping.Cancel();
-        if (IsFirst) running.ReleaseMutex();
         running.Dispose();
     }
 }

@@ -73,7 +73,9 @@ internal sealed class TextToast : Window
         Width = ToastWidth;
         SizeToContent = SizeToContent.Height;
         Background = Brushes.Transparent;
-        TransparencyLevelHint = [WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Transparent];
+        // See-through, never acrylic: acrylic fills the whole square window, and where blur is
+        // off it showed as black corners round the rounded card.
+        TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
         var card = new Border
         {
             CornerRadius = new CornerRadius(12),

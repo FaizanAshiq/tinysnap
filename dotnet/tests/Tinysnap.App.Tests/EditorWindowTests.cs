@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using Tinysnap.App.Editing;
 using Tinysnap.Core;
 using Point = Avalonia.Point;
@@ -91,6 +92,27 @@ public class EditorWindowTests
         var editor = Open();
         Assert.True(editor.MinWidth >= editor.Toolbar.DesiredSize.Width);
         Assert.True(editor.Toolbar.DesiredSize.Width > 17 * 28);
+    }
+
+    [AvaloniaFact]
+    public void OnAScreenNarrowerThanTheToolbarTheWheelScrollsItsToolsIntoView()
+    {
+        var editor = Open();
+        // As the window is on a screen narrower than its toolbar.
+        editor.MinWidth = 0;
+        editor.Width = 600;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        editor.UpdateLayout();
+        double Left(Control control) => control.TranslatePoint(default, editor)!.Value.X;
+        double Right(Control control) => Left(control) + control.Bounds.Width;
+        var last = editor.Toolbar.GetVisualDescendants().OfType<Button>()
+            .Where(button => button != editor.LibraryButton).MaxBy(Left)!;
+        Assert.True(Right(editor.LibraryButton) <= 600, $"library ends at {Right(editor.LibraryButton)}, window {editor.ClientSize.Width}");
+        Assert.True(Right(last) > Left(editor.LibraryButton));
+
+        for (var notch = 0; notch < 20; notch++) editor.MouseWheel(new Point(300, 20), new Avalonia.Vector(0, -1));
+        editor.UpdateLayout();
+        Assert.True(Right(last) <= Left(editor.LibraryButton));
     }
 
     [Fact]
