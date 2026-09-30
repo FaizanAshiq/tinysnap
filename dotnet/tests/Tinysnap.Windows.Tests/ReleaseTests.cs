@@ -48,6 +48,24 @@ public class ReleaseTests
     }
 
     [Fact]
+    public void TheFirstCopyClosesFromAnyThreadAndFreesItsPlace()
+    {
+        var name = $"TinysnapTest{Guid.NewGuid():N}";
+        var first = new SingleInstance(name);
+        Exception? failed = null;
+        var elsewhere = new Thread(() =>
+        {
+            try { first.Dispose(); }
+            catch (Exception error) { failed = error; }
+        });
+        elsewhere.Start();
+        elsewhere.Join();
+        Assert.Null(failed);
+        using var next = new SingleInstance(name);
+        Assert.True(next.IsFirst);
+    }
+
+    [Fact]
     public async Task ASecondCopyHandsItsFilesToTheFirst()
     {
         var name = $"TinysnapTest{Guid.NewGuid():N}";
