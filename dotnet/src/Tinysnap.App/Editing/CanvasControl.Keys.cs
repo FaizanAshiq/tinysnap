@@ -138,6 +138,13 @@ internal sealed partial class CanvasControl
         SessionChanged();
     }
 
+    /// <summary>For the Size panel; null follows the Export setting again.</summary>
+    public void SetResize(double? resize)
+    {
+        Session.SetResize(resize);
+        SessionChanged();
+    }
+
     public void DeleteSelection()
     {
         Session.DeleteSelection();

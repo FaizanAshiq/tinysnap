@@ -51,6 +51,7 @@ internal sealed partial class StyleBar : Border
             panelOpenedOver = (canvas.Session.Tool, canvas.Session.Selection);
             shown = null;
             backdropShown = false;
+            shownSize = null;
             Refresh();
         }
     }

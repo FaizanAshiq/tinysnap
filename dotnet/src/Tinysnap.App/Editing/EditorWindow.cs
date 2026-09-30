@@ -143,6 +143,7 @@ internal sealed class EditorWindow : Window
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(12),
             Remembered = () => services.Preferences().Backdrop,
+            ExportSetting = () => services.Preferences().ExportScale,
             ReadWallpaper = services.ReadWallpaper,
             Remember = services.RememberBackdrop,
         };
@@ -302,9 +303,27 @@ internal sealed class EditorWindow : Window
     {
         foreach (var (tool, button) in ToolButtons) button.IsChecked = tool == Canvas.Session.Tool;
         var framed = Canvas.Session.Display.Backdrop is not null;
+        // A backdrop turned on, off or padded differently changes what the canvas shows: refitted,
+        // so the whole framed capture stays in view.
+        var framing = (framed, Canvas.Session.Display.Backdrop?.Padding);
+        if (framing != lastFraming)
+        {
+            lastFraming = framing;
+            Refit();
+        }
         if (BackdropButton.Tag as bool? == framed) return;
         BackdropButton.Tag = framed;
         BackdropButton.Content = Glyphs.Icon(framed ? ToolIcons.BackdropOn : ToolIcons.BackdropOff);
+    }
+
+    private (bool Framed, BackdropPadding? Padding) lastFraming;
+
+    /// <summary>The whole canvas in view, never zoomed in past 100%.</summary>
+    private void Refit()
+    {
+        var view = scroll.Viewport;
+        if (view.Width <= 0 || view.Height <= 0) return;
+        ZoomTo(Math.Min(1, EditorFit.Fit(CanvasAtFullSize, new CoreSize(view.Width, view.Height))));
     }
 
     /// <summary>The Backdrop or Size panel in the style bar's place, or back to the tool's style

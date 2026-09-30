@@ -118,8 +118,8 @@ public class BackdropPanelTests
     public void TheAppReadsTheDesktopPictureAndRemembersTheBackdrop()
     {
         var setup = Launch();
-        using var desktop = SKImage.Create(new SKImageInfo(3200, 1800));
-        setup.Files.WallpaperImage = desktop;
+        // Not disposed: the platform stand-in outlives the test.
+        setup.Files.WallpaperImage = SKImage.Create(new SKImageInfo(3200, 1800));
         setup.Controller.CaptureFullscreen();
         var editor = Assert.Single(setup.Controller.Editors);
         Click(editor.BackdropButton);
