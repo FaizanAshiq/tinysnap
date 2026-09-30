@@ -32,8 +32,12 @@ public sealed class LibraryStore(string? root = null)
 
     public string Root { get; } = root ?? DefaultRoot;
 
+    /// <summary>Beside the preferences, in the app data folder. Never in the local one: on
+    /// Windows the app itself is installed there, and uninstalling deletes that whole folder.</summary>
+    // ponytail: roaming app data, which a roaming profile would carry between machines; a local
+    // folder outside the install if that ever matters.
     public static string DefaultRoot =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Tinysnap", "Library");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Tinysnap", "Library");
 
     // Writing
 
