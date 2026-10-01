@@ -94,9 +94,9 @@ public class PreferencesTests
     [Fact]
     public void FindsTheActionAlreadyUsingACombinationInAnyModifierOrder()
     {
-        var same = new HotKeyBinding(0x32, [ModifierKey.Shift, ModifierKey.Control]);
-        Assert.Equal(HotKeyAction.Area, HotKeys.Defaults.ActionUsing(same));
-        Assert.Null(HotKeys.Defaults.ActionUsing(new HotKeyBinding(0x32, [ModifierKey.Control])));
+        var same = new HotKeyBinding(0x31, [ModifierKey.Shift, ModifierKey.Control]);
+        Assert.Equal(HotKeyAction.Fullscreen, HotKeys.Defaults.ActionUsing(same));
+        Assert.Null(HotKeys.Defaults.ActionUsing(new HotKeyBinding(0x31, [ModifierKey.Control])));
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public class PreferencesTests
     {
         Assert.Equal(
         [
-            "Capture Area", "Capture Fullscreen", "Capture Text", "Scan QR Code", "Repeat Last Area", "Delayed Capture",
+            "Capture Area", "Capture Window", "Capture Fullscreen", "Capture Text", "Scan QR Code", "Repeat Last Area", "Delayed Capture",
             "Open Library",
         ], Enum.GetValues<HotKeyAction>().Select(action => action.Title()));
     }
@@ -233,6 +233,24 @@ public class PreferencesTests
     [Fact]
     public void PrintsHotkeysTheWayWindowsDoes()
     {
-        Assert.Equal("Ctrl+Shift+2", HotKeys.Defaults.Area?.DisplayString);
+        Assert.Equal("Ctrl+Shift+1", HotKeys.Defaults.Fullscreen?.DisplayString);
+        Assert.Equal("Print Screen", HotKeys.Defaults.Area?.DisplayString);
+    }
+
+    [Fact]
+    public void CaptureAreaIsPrintScreenAndCaptureWindowStartsUnset()
+    {
+        Assert.Equal(new HotKeyBinding(0x2C, []), HotKeys.Defaults.Area);
+        Assert.Null(HotKeys.Defaults.Window);
+        Assert.Equal("Capture Window", HotKeyAction.Window.Title());
+    }
+
+    [Fact]
+    public void CaptureWindowSurvivesSaving()
+    {
+        var window = new HotKeyBinding(0x57, [ModifierKey.Control, ModifierKey.Shift]);
+        var loaded = Reloaded(Preferences.Defaults with { HotKeys = HotKeys.Defaults with { Window = window } });
+        Assert.Equal(window, loaded.HotKeys.Window);
+        Assert.Equal(HotKeyAction.Window, loaded.HotKeys.ActionUsing(window));
     }
 }

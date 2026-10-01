@@ -71,10 +71,12 @@ internal static class Program
     internal static void Installed(Win32FileTypes types) => types.Register(Environment.ProcessPath!);
 
     /// <summary>Uninstalling leaves no start-at-login entry, and no "Open with" entry, pointing at a
-    /// removed exe.</summary>
-    internal static void Uninstalling(IStartup startup, Win32FileTypes types)
+    /// removed exe, and gives Print Screen back to the Snipping Tool if a copy killed while holding
+    /// it never did.</summary>
+    internal static void Uninstalling(IStartup startup, Win32FileTypes types, PrintScreenKey? printScreen = null)
     {
         startup.SetEnabled(false);
         types.Unregister();
+        (printScreen ?? new PrintScreenKey()).GiveBack();
     }
 }

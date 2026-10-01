@@ -31,6 +31,29 @@ public class ReleaseTests
     }
 
     [Fact]
+    public void UninstallGivesPrintScreenBackToTheSnippingTool()
+    {
+        var root = $@"Software\TinysnapTest{Guid.NewGuid():N}";
+        try
+        {
+            using (var keyboard = Microsoft.Win32.Registry.CurrentUser.CreateSubKey($@"{root}\Keyboard"))
+                keyboard.SetValue("PrintScreenKeyForSnippingEnabled", 1, Microsoft.Win32.RegistryValueKind.DWord);
+            var printScreen = new PrintScreenKey($@"{root}\Keyboard", $@"{root}\Tinysnap");
+            printScreen.Take();
+            // Killed while holding the key, then uninstalled.
+            Program.Uninstalling(new Win32Startup($"TinysnapTest{Guid.NewGuid():N}"),
+                                 new Win32FileTypes($"TinysnapTest{Guid.NewGuid():N}", ".tinysnaptest"),
+                                 new PrintScreenKey($@"{root}\Keyboard", $@"{root}\Tinysnap"));
+            using var after = Microsoft.Win32.Registry.CurrentUser.OpenSubKey($@"{root}\Keyboard");
+            Assert.Equal(1, after!.GetValue("PrintScreenKeyForSnippingEnabled"));
+        }
+        finally
+        {
+            Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(root, throwOnMissingSubKey: false);
+        }
+    }
+
+    [Fact]
     public void InstallingPutsTinysnapInOpenWithAndUninstallingTakesItOut()
     {
         var types = new Win32FileTypes($"TinysnapTest{Guid.NewGuid():N}", ".tinysnaptest");

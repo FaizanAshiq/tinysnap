@@ -19,6 +19,7 @@ internal sealed class Win32Hotkeys : IHotkeys
     private readonly nint window;
     private readonly Dictionary<int, HotKeyAction> actions = [];
     private bool isDisposed;
+    private readonly PrintScreenKey snippingTool = new();
 
     public event Action<HotKeyAction>? Pressed;
 
@@ -77,7 +78,14 @@ internal sealed class Win32Hotkeys : IHotkeys
                 _ => MOD_WIN,
             };
         }
-        if (!RegisterHotKey(window, id, modifiers, binding.KeyCode)) return false;
+        var printScreen = binding.KeyCode == 0x2C && binding.Modifiers.IsEmpty;
+        if (printScreen) snippingTool.Take();
+        if (!RegisterHotKey(window, id, modifiers, binding.KeyCode))
+        {
+            // Still held elsewhere: the Snipping Tool keeps the key rather than nobody having it.
+            if (printScreen) snippingTool.GiveBack();
+            return false;
+        }
         actions[id] = action;
         return true;
     }
@@ -86,6 +94,7 @@ internal sealed class Win32Hotkeys : IHotkeys
     {
         foreach (var id in actions.Keys) UnregisterHotKey(window, id);
         actions.Clear();
+        snippingTool.GiveBack();
     }
 
     public void Dispose()

@@ -110,9 +110,20 @@ struct PreferencesTests {
 
     @Test func theMenuListsCaptureTextThenScanQRCodeAndOpenLibraryLast() {
         #expect(HotKeyAction.allCases.map(\.title) == [
-            "Capture Area", "Capture Fullscreen", "Capture Text", "Scan QR Code", "Repeat Last Area", "Delayed Capture",
-            "Open Library",
+            "Capture Area", "Capture Window", "Capture Fullscreen", "Capture Text", "Scan QR Code", "Repeat Last Area",
+            "Delayed Capture", "Open Library",
         ])
+    }
+
+    @Test func captureWindowStartsUnsetAndItsKeySurvivesSaving() throws {
+        #expect(HotKeys.defaults.window == nil)
+        var saved = Preferences.defaults
+        saved.hotkeys.window = HotKeyBinding(keyCode: 13, modifiers: [.command, .shift])
+        let url = try temporaryFile()
+        try saved.save(to: url)
+        let loaded = try Preferences.load(from: url)
+        #expect(loaded.hotkeys.window == saved.hotkeys.window)
+        #expect(loaded.hotkeys.action(using: HotKeyBinding(keyCode: 13, modifiers: [.shift, .command])) == .window)
     }
 
     @Test func aFileFromBeforeTheNewHotkeysGetsTheirDefaults() throws {

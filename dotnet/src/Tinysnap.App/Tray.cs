@@ -75,13 +75,14 @@ internal static class Tray
         return item;
     }
 
-    /// <summary>The hotkey shown beside its item, for the letters and digits Avalonia can name.</summary>
+    /// <summary>The hotkey shown beside its item, for the letters, digits and Print Screen.</summary>
     private static KeyGesture? Gesture(HotKeyBinding binding)
     {
         Key? key = binding.KeyCode switch
         {
             >= 0x30 and <= 0x39 => Key.D0 + (int)(binding.KeyCode - 0x30),
             >= 0x41 and <= 0x5A => Key.A + (int)(binding.KeyCode - 0x41),
+            0x2C => Key.PrintScreen,
             _ => null,
         };
         if (key is not { } named) return null;

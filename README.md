@@ -30,7 +30,7 @@ why that matters. Tinysnap needs macOS 14 Sonoma or later.
 | `Command+Shift+2` | Capture an area, or press `Space` first and click a window |
 | `Command+Shift+1` | Capture the whole screen under the pointer |
 | `Command+Shift+O` | Capture an area and copy the text in it |
-| Unset | Scan a QR code in an area and copy what it holds, repeat the last area, capture after a delay (3 seconds unless you change it), open the library |
+| Unset | Capture a window by clicking it, scan a QR code in an area and copy what it holds, repeat the last area, capture after a delay (3 seconds unless you change it), open the library |
 
 Every hotkey can be changed or cleared in Settings, and every capture is also on the menu
 bar icon.

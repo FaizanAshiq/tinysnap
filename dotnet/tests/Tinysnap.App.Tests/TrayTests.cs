@@ -23,13 +23,14 @@ public class TrayTests
     {
         var setup = Launch();
         var menu = Tray.Menu(setup.Controller, () => { });
-        Assert.Equal(["Capture Area", "Capture Fullscreen", "Capture Text", "Scan QR Code", "Repeat Last Area", "Delayed Capture",
+        Assert.Equal(["Capture Area", "Capture Window", "Capture Fullscreen", "Capture Text", "Scan QR Code", "Repeat Last Area", "Delayed Capture",
                       "Open Library", "-", "Settings...", "Quit Tinysnap"],
                      Headers(menu));
-        Assert.Equal(new KeyGesture(Key.D2, KeyModifiers.Control | KeyModifiers.Shift), Item(menu, 0).Gesture);
-        Assert.Equal(new KeyGesture(Key.O, KeyModifiers.Control | KeyModifiers.Shift), Item(menu, 2).Gesture);
+        Assert.Equal(new KeyGesture(Key.PrintScreen), Item(menu, 0).Gesture);
+        Assert.Null(Item(menu, 1).Gesture);
+        Assert.Equal(new KeyGesture(Key.O, KeyModifiers.Control | KeyModifiers.Shift), Item(menu, 3).Gesture);
         // Nothing to repeat yet.
-        Assert.False(Item(menu, 4).IsEnabled);
+        Assert.False(Item(menu, 5).IsEnabled);
     }
 
     [Fact]
@@ -61,7 +62,7 @@ public class TrayTests
         var setup = Launch();
         ((FakeHotkeys)setup.Platform.Hotkeys).HeldElsewhere.Add(HotKeys.Defaults.Fullscreen!);
         setup.Controller.Hotkeys.Apply(setup.Controller.Preferences.Current.HotKeys);
-        Assert.Equal("Capture Fullscreen (taken)", Item(Tray.Menu(setup.Controller, () => { }), 1).Header);
+        Assert.Equal("Capture Fullscreen (taken)", Item(Tray.Menu(setup.Controller, () => { }), 2).Header);
     }
 
     [AvaloniaFact]
@@ -77,7 +78,18 @@ public class TrayTests
         Assert.Null(setup.Controller.Overlay);
         Assert.Equal(2, setup.Controller.Editors.Count);
         Assert.All(setup.Controller.Editors, editor => Assert.Equal(new Size(100, 60), editor.Canvas.Session.Display.Capture.PixelSize));
-        Assert.True(Item(Tray.Menu(setup.Controller, () => { }), 4).IsEnabled);
+        Assert.True(Item(Tray.Menu(setup.Controller, () => { }), 5).IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void CaptureWindowOpensTheOverlayReadyToPickAWindow()
+    {
+        var setup = Launch();
+        setup.Controller.Perform(HotKeyAction.Window);
+        Assert.True(setup.Controller.Overlay!.WindowMode);
+        setup.Controller.Overlay.Finish(new Capturing.AreaResult.Cancelled());
+        setup.Controller.Perform(HotKeyAction.Area);
+        Assert.False(setup.Controller.Overlay!.WindowMode);
     }
 
     [AvaloniaFact]
@@ -95,7 +107,7 @@ public class TrayTests
         setup.Controller.Perform(HotKeyAction.Delayed);
         Assert.Equal(2, setup.Controller.SecondsLeft);
         var menu = Tray.Menu(setup.Controller, () => { });
-        Assert.Equal("Capturing in 2", Item(menu, 5).Header);
+        Assert.Equal("Capturing in 2", Item(menu, 6).Header);
         Assert.False(Item(menu, 0).IsEnabled);
         setup.Time.Elapse();
         Assert.Equal(1, setup.Controller.SecondsLeft);

@@ -315,12 +315,16 @@ $form.Controls.Add($label)
 $page = Start-Process powershell -PassThru -ArgumentList '-NoProfile', '-EncodedCommand', ([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($target)))
 [void](Until { [Desk]::Windows($page.Id).Count } 20)
 
-# 3. Starting
+# 3. Starting, with a key for Capture Window, which has none until the person gives it one
 
+$preferences = Join-Path $env:APPDATA 'Tinysnap\preferences.json'
+New-Item -ItemType Directory -Force (Split-Path $preferences) | Out-Null
+'{"hotkeys": {"window": {"keyCode": 87, "modifiers": ["control", "shift"]}}}' | Set-Content $preferences -Encoding ASCII
 $script:app = Start-Process $exe -PassThru
 Check 'Tinysnap starts and holds its hotkeys' {
     if (-not (Until { [Desk]::HotkeyTaken($ModControl + $ModShift, 0x31) } 30)) { return 'Ctrl+Shift+1 is free' }
-    if (-not [Desk]::HotkeyTaken($ModControl + $ModShift, 0x32)) { return 'Ctrl+Shift+2 is free' }
+    if (-not [Desk]::HotkeyTaken(0, 0x2C)) { return 'Print Screen is free' }
+    if (-not [Desk]::HotkeyTaken($ModControl + $ModShift, 0x57)) { return 'Ctrl+Shift+W is free' }
     if (-not [Desk]::HotkeyTaken($ModControl + $ModShift, 0x4F)) { return 'Ctrl+Shift+O is free' }
 }
 Start-Sleep -Seconds 1
@@ -439,9 +443,13 @@ if ($editor)
 
 # 5. An area: the overlay, a drag, the editor, the saved size
 
-Press $Ctrl $Shift 0x32
+Check 'the Snipping Tool lets go of Print Screen while Tinysnap runs' {
+    $value = (Get-ItemProperty 'HKCU:\Control Panel\Keyboard' -ErrorAction SilentlyContinue).PrintScreenKeyForSnippingEnabled
+    if ($value -ne 0) { "the setting holds '$value'" }
+}
+Press 0x2C
 $overlay = Until { Overlay } 10
-Check 'Ctrl+Shift+2 covers the screen with the area overlay' { if (-not $overlay) { 'no overlay' } }
+Check 'Print Screen covers the screen with the area overlay' { if (-not $overlay) { 'no overlay' } }
 if ($overlay)
 {
     Start-Sleep -Milliseconds 500
@@ -466,6 +474,35 @@ if ($overlay)
             $size = PngSize $script:area
             if ($size -ne '400x150') { "saved $size" }
         }
+        [void](Until { (Editors).Count -eq 0 } 5)
+    }
+}
+
+# 5b. A window: Capture Window, a click on the window, just that window saved
+
+Press $Ctrl $Shift 0x57
+$overlay = Until { Overlay } 10
+Check 'Capture Window covers the screen ready to pick a window' { if (-not $overlay) { 'no overlay' } }
+if ($overlay)
+{
+    Start-Sleep -Milliseconds 500
+    [Desk]::MoveTo(510, 180)
+    Start-Sleep -Milliseconds 300
+    Shot 'window-pick'
+    [Desk]::Down(); [Desk]::Up()
+    $editor = Until { Editors | Select-Object -First 1 }
+    Check 'clicking a window opens just that window in an editor' { if (-not $editor) { 'no editor' } }
+    if ($editor)
+    {
+        Start-Sleep -Milliseconds 500
+        Front $editor
+        $picked = SaveFront
+        Check 'the saved window is the 860 by 200 pixels of the window clicked' {
+            if (-not $picked) { return "nothing new in $saves" }
+            $size = PngSize $picked
+            if ($size -ne '860x200') { "saved $size" }
+        }
+        if ((Editors).Count -gt 0) { Press $Ctrl 0x57 }
         [void](Until { (Editors).Count -eq 0 } 5)
     }
 }

@@ -49,11 +49,12 @@ public struct HotKeyBinding: Equatable, Sendable, Codable {
 
 /// In the order the menu bar menu and Settings list them.
 public enum HotKeyAction: String, CaseIterable, Sendable {
-    case area, fullscreen, text, qr, repeatArea, delayed, library
+    case area, window, fullscreen, text, qr, repeatArea, delayed, library
 
     public var title: String {
         switch self {
         case .area: "Capture Area"
+        case .window: "Capture Window"
         case .fullscreen: "Capture Fullscreen"
         case .text: "Capture Text"
         case .qr: "Scan QR Code"
@@ -66,6 +67,8 @@ public enum HotKeyAction: String, CaseIterable, Sendable {
 
 public struct HotKeys: Equatable, Sendable, Codable {
     public var area: HotKeyBinding?
+    /// Unset until the person gives it a key: Space in the area overlay picks a window too.
+    public var window: HotKeyBinding?
     public var fullscreen: HotKeyBinding?
     public var text: HotKeyBinding?
     public var qr: HotKeyBinding?
@@ -83,9 +86,10 @@ public struct HotKeys: Equatable, Sendable, Codable {
         library: nil
     )
 
-    public init(area: HotKeyBinding?, fullscreen: HotKeyBinding?, text: HotKeyBinding?, qr: HotKeyBinding? = nil,
-                repeatArea: HotKeyBinding?, delayed: HotKeyBinding?, library: HotKeyBinding?) {
+    public init(area: HotKeyBinding?, window: HotKeyBinding? = nil, fullscreen: HotKeyBinding?, text: HotKeyBinding?,
+                qr: HotKeyBinding? = nil, repeatArea: HotKeyBinding?, delayed: HotKeyBinding?, library: HotKeyBinding?) {
         self.area = area
+        self.window = window
         self.fullscreen = fullscreen
         self.text = text
         self.qr = qr
@@ -98,6 +102,7 @@ public struct HotKeys: Equatable, Sendable, Codable {
         get {
             switch action {
             case .area: area
+            case .window: window
             case .fullscreen: fullscreen
             case .text: text
             case .qr: qr
@@ -109,6 +114,7 @@ public struct HotKeys: Equatable, Sendable, Codable {
         set {
             switch action {
             case .area: area = newValue
+            case .window: window = newValue
             case .fullscreen: fullscreen = newValue
             case .text: text = newValue
             case .qr: qr = newValue
@@ -128,7 +134,7 @@ public struct HotKeys: Equatable, Sendable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case area, fullscreen, text, qr, repeatArea, delayed, library
+        case area, window, fullscreen, text, qr, repeatArea, delayed, library
     }
 
     /// A key that is there but null means no hotkey. A key that is missing, or holds
@@ -141,6 +147,7 @@ public struct HotKeys: Equatable, Sendable, Codable {
             return (try? container.decode(HotKeyBinding.self, forKey: key)) ?? fallback
         }
         area = binding(.area, Self.defaults.area)
+        window = binding(.window, Self.defaults.window)
         fullscreen = binding(.fullscreen, Self.defaults.fullscreen)
         text = binding(.text, Self.defaults.text)
         qr = binding(.qr, Self.defaults.qr)
@@ -153,7 +160,7 @@ public struct HotKeys: Equatable, Sendable, Codable {
     /// read back as the default on the next launch.
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        let pairs = [(CodingKeys.area, area), (.fullscreen, fullscreen), (.text, text), (.qr, qr), (.repeatArea, repeatArea),
+        let pairs = [(CodingKeys.area, area), (.window, window), (.fullscreen, fullscreen), (.text, text), (.qr, qr), (.repeatArea, repeatArea),
                      (.delayed, delayed), (.library, library)]
         for (key, value) in pairs {
             if let value { try container.encode(value, forKey: key) } else { try container.encodeNil(forKey: key) }
