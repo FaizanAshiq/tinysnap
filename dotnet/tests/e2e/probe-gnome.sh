@@ -11,6 +11,14 @@ gnome-shell --headless --wayland --virtual-monitor 1280x800 --unsafe-mode > prob
 for i in $(seq 1 60); do gdbus introspect --session --dest org.gnome.Shell --object-path /org/gnome/Shell >/dev/null 2>&1 && break; sleep 1; done
 gdbus introspect --session --dest org.gnome.Shell --object-path /org/gnome/Shell >/dev/null 2>&1 && say "shell: up after ${i}s" || say "shell: DOWN"
 say "show-screenshot-ui: $(gsettings get org.gnome.shell.keybindings show-screenshot-ui 2>&1)"
+# The portal picks its GNOME backend by desktop name, and the backend needs the Wayland display.
+export XDG_CURRENT_DESKTOP=GNOME WAYLAND_DISPLAY=wayland-0 GDK_BACKEND=wayland
+say "portals: $(ls /usr/share/xdg-desktop-portal/portals/ 2>&1 | tr '\n' ' ')"
+/usr/libexec/xdg-desktop-portal-gnome --verbose > probe/portal-gnome.log 2>&1 &
+sleep 2
+/usr/libexec/xdg-desktop-portal --verbose > probe/portal.log 2>&1 &
+for i in $(seq 1 20); do gdbus introspect --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop 2>/dev/null | grep -q portal.Screenshot && break; sleep 0.5; done
+say "screenshot interface: $(gdbus introspect --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop 2>&1 | grep -c 'interface org.freedesktop.portal.Screenshot')"
 # Allow screenshots for unsandboxed apps, as the person's Allow would.
 say "permission: $(gdbus call --session --dest org.freedesktop.impl.portal.PermissionStore --object-path /org/freedesktop/impl/portal/PermissionStore \
   --method org.freedesktop.impl.portal.PermissionStore.SetPermission screenshot true screenshot '' "['yes']" 2>&1)"
