@@ -7,17 +7,20 @@ report=probe/report.txt
 say() { echo "$*" | tee -a "$report"; }
 export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/runtime-$UID}; mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 say "gnome-shell $(gnome-shell --version 2>&1)"
+# A real GNOME session sets these before anything starts, and the portals D-Bus starts later
+# read them: the frontend picks GNOME's backend by desktop name, and the backend refuses to
+# start without a session type.
+export XDG_CURRENT_DESKTOP=GNOME XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY=wayland-0
+dbus-update-activation-environment XDG_CURRENT_DESKTOP XDG_SESSION_TYPE WAYLAND_DISPLAY
 gnome-shell --headless --wayland --virtual-monitor 1280x800 --unsafe-mode > probe/shell.log 2>&1 &
 for i in $(seq 1 60); do gdbus introspect --session --dest org.gnome.Shell --object-path /org/gnome/Shell >/dev/null 2>&1 && break; sleep 1; done
 gdbus introspect --session --dest org.gnome.Shell --object-path /org/gnome/Shell >/dev/null 2>&1 && say "shell: up after ${i}s" || say "shell: DOWN"
 say "show-screenshot-ui: $(gsettings get org.gnome.shell.keybindings show-screenshot-ui 2>&1)"
-# The portal picks its GNOME backend by desktop name, and the backend needs the Wayland display.
-export XDG_CURRENT_DESKTOP=GNOME WAYLAND_DISPLAY=wayland-0 GDK_BACKEND=wayland
 say "portals: $(ls /usr/share/xdg-desktop-portal/portals/ 2>&1 | tr '\n' ' ')"
 say "runtime dir: $(ls -a "$XDG_RUNTIME_DIR" | tr '\n' ' ')"
 G_MESSAGES_DEBUG=all /usr/libexec/xdg-desktop-portal-gnome --verbose > probe/portal-gnome.log 2>&1 &
 sleep 3
-/usr/libexec/xdg-desktop-portal --verbose > probe/portal.log 2>&1 &
+pgrep -f 'libexec/xdg-desktop-portal$' >/dev/null || /usr/libexec/xdg-desktop-portal --verbose > probe/portal.log 2>&1 &
 sleep 5
 say "portal owner pid: $(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.GetConnectionUnixProcessID org.freedesktop.portal.Desktop 2>&1) explicit: $(pgrep -f libexec/xdg-desktop-portal$ | tr '\n' ' ')"
 say "screenshot interface: $(gdbus introspect --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop 2>&1 | grep -c 'interface org.freedesktop.portal.Screenshot')"
