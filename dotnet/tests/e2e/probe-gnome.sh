@@ -14,10 +14,12 @@ say "show-screenshot-ui: $(gsettings get org.gnome.shell.keybindings show-screen
 # The portal picks its GNOME backend by desktop name, and the backend needs the Wayland display.
 export XDG_CURRENT_DESKTOP=GNOME WAYLAND_DISPLAY=wayland-0 GDK_BACKEND=wayland
 say "portals: $(ls /usr/share/xdg-desktop-portal/portals/ 2>&1 | tr '\n' ' ')"
-/usr/libexec/xdg-desktop-portal-gnome --verbose > probe/portal-gnome.log 2>&1 &
-sleep 2
+say "runtime dir: $(ls -a "$XDG_RUNTIME_DIR" | tr '\n' ' ')"
+G_MESSAGES_DEBUG=all /usr/libexec/xdg-desktop-portal-gnome --verbose > probe/portal-gnome.log 2>&1 &
+sleep 3
 /usr/libexec/xdg-desktop-portal --verbose > probe/portal.log 2>&1 &
-for i in $(seq 1 20); do gdbus introspect --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop 2>/dev/null | grep -q portal.Screenshot && break; sleep 0.5; done
+sleep 5
+say "portal owner pid: $(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.GetConnectionUnixProcessID org.freedesktop.portal.Desktop 2>&1) explicit: $(pgrep -f libexec/xdg-desktop-portal$ | tr '\n' ' ')"
 say "screenshot interface: $(gdbus introspect --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop 2>&1 | grep -c 'interface org.freedesktop.portal.Screenshot')"
 # Allow screenshots for unsandboxed apps, as the person's Allow would.
 say "permission: $(gdbus call --session --dest org.freedesktop.impl.portal.PermissionStore --object-path /org/freedesktop/impl/portal/PermissionStore \
@@ -32,7 +34,9 @@ say "portal answer after $(( ($(date +%s%N) - start) / 1000000 )) ms"
 grep -A4 "Response" probe/monitor.log >> "$report"
 uri=$(grep -o "file://[^'\"]*" probe/monitor.log | head -1)
 [ -n "$uri" ] && cp "${uri#file://}" probe/portal.png && say "screenshot: $(file -b probe/portal.png)"
-for d in :0 :1; do DISPLAY=$d timeout 10 xdpyinfo >/dev/null 2>&1 && say "xwayland: $d"; done
+auth=$(ls "$XDG_RUNTIME_DIR"/.mutter-Xwaylandauth.* 2>/dev/null | head -1)
+say "xwayland auth: ${auth:-none}"
+for d in :0 :1; do say "xwayland $d: $(DISPLAY=$d XAUTHORITY=$auth timeout 10 xdpyinfo 2>&1 | grep -E 'name of display|dimensions|unable' | tr '\n' ' ')"; done
 js='let b; try { b = global.stage.context.get_backend(); } catch (e) { b = imports.gi.Clutter.get_default_backend(); }
 const C = imports.gi.Clutter; const k = b.get_default_seat().create_virtual_device(C.InputDeviceType.KEYBOARD_DEVICE);
 k.notify_keyval(global.get_current_time() * 1000, C.KEY_Print, C.KeyState.PRESSED);
