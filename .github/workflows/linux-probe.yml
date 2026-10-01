@@ -1,0 +1,19 @@
+name: linux-probe
+on:
+  pull_request:
+    paths: ['.github/workflows/linux-probe.yml', 'dotnet/tests/e2e/probe-gnome.sh']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update && sudo apt-get install -y gnome-shell xwayland xdg-desktop-portal-gnome dbus-x11 x11-utils file
+      - run: dbus-run-session -- bash dotnet/tests/e2e/probe-gnome.sh
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: linux-probe
+          path: probe/*
