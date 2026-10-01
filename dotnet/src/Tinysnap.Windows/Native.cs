@@ -66,7 +66,6 @@ internal static class Native
     internal delegate nint WindowProc(nint window, uint message, nint wParam, nint lParam);
 
     internal const uint SRCCOPY = 0x00CC0020;
-    internal const uint CAPTUREBLT = 0x40000000;
     internal const int GWL_EXSTYLE = -20;
     internal const long WS_EX_TOOLWINDOW = 0x00000080;
     internal const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;

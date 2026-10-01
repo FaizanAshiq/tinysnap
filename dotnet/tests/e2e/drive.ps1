@@ -301,7 +301,7 @@ Write-Host "Screen $($screen.Width) by $($screen.Height)"
 $target = @'
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 $form = New-Object Windows.Forms.Form
-$form.FormBorderStyle = 'None'; $form.StartPosition = 'Manual'; $form.BackColor = 'White'
+$form.FormBorderStyle = 'None'; $form.StartPosition = 'Manual'; $form.BackColor = 'White'; $form.Opacity = 0.97
 $form.Location = New-Object Drawing.Point(80, 80); $form.Size = New-Object Drawing.Size(860, 200)
 $label = New-Object Windows.Forms.Label
 $label.Text = 'Tinysnap reads this line'; $label.Font = New-Object Drawing.Font('Segoe UI', 36)
