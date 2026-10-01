@@ -258,6 +258,7 @@ internal sealed class EditorWindow : Window
         Canvas.MeasureChanged += measure => services.RememberMeasure?.Invoke(measure);
         Opened += (_, _) =>
         {
+            Tinysnap.Platform.Timing.Mark("editor opened");
             Toolbar.Measure(Avalonia.Size.Infinity);
             MinWidth = Toolbar.DesiredSize.Width;
             Place();

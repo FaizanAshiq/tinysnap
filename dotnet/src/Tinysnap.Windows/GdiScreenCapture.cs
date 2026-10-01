@@ -17,7 +17,10 @@ internal sealed class GdiScreenCapture : IScreenCapture
         var screens = new List<FrozenScreen>();
         foreach (var (bounds, scale) in Monitors())
             if (Grab(bounds) is { } image) screens.Add(new FrozenScreen(ToRect(bounds), scale, image));
-        return new FrozenDesktop(screens, Win32Windows.List());
+        Tinysnap.Platform.Timing.Mark("monitors grabbed");
+        var windows = Win32Windows.List();
+        Tinysnap.Platform.Timing.Mark("windows listed");
+        return new FrozenDesktop(screens, windows);
     }
 
     public Point PointerPosition()
@@ -69,9 +72,11 @@ internal sealed class GdiScreenCapture : IScreenCapture
         {
             if (bitmap == 0 || !BitBlt(memory, 0, 0, width, height, screen, bounds.Left, bounds.Top, SRCCOPY | CAPTUREBLT))
                 return null;
+            Tinysnap.Platform.Timing.Mark($"bitblt {width}x{height}");
             var bytes = new byte[width * height * 4];
             Marshal.Copy(bits, bytes, 0, bytes.Length);
             for (var alpha = 3; alpha < bytes.Length; alpha += 4) bytes[alpha] = 255;
+            Tinysnap.Platform.Timing.Mark("alpha set");
             var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
             try
             {

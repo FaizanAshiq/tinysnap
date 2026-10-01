@@ -100,6 +100,7 @@ internal sealed class OverlayWindow : Window
     {
         base.OnPointerReleased(e);
         if (owner.WindowMode) return;
+        Timing.Mark("pointer released");
         if (selection.Up() is { } box) owner.Finish(new AreaResult.Area(Screen, box));
         else Redraw();
     }
@@ -163,7 +164,7 @@ internal sealed class OverlayWindow : Window
             var bounds = new Rect(Bounds.Size);
             var image = window.Screen.Image;
             var target = new SKRect(0, 0, (float)bounds.Width, (float)bounds.Height);
-            context.Custom(new SkiaDraw(bounds, canvas => canvas.DrawImage(image, target, Sampling)));
+            context.Custom(new SkiaDraw(bounds, canvas => { canvas.DrawImage(image, target, Sampling); Timing.Mark("overlay drawn"); }));
 
             var box = window.selection.Selection;
             Rect? lit = box is { } b ? new Rect(b.X, b.Y, b.Width, b.Height)

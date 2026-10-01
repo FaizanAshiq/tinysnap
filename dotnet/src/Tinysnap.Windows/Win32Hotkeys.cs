@@ -55,6 +55,7 @@ internal sealed class Win32Hotkeys : IHotkeys
     {
         if (message == WM_HOTKEY && actions.TryGetValue((int)wParam, out var action))
         {
+            Tinysnap.Platform.Timing.Mark("hotkey message");
             Pressed?.Invoke(action);
             return 0;
         }
