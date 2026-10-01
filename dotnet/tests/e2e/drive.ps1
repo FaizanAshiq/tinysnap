@@ -464,6 +464,22 @@ if ($script:area)
     }
 }
 
+# TEMPORARY: a cold start, its very first action an area capture.
+$withPinKept = $withPin
+Stop-Process -Id $script:app.Id -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
+$unpinnedEarly = Grab
+Add-Content $env:TINYSNAP_TRACE "script: cold start"
+$script:app = Start-Process $exe -PassThru
+[void](Until { [Desk]::HotkeyTaken($ModControl + $ModShift, 0x32) } 30)
+Start-Sleep -Seconds 2
+Add-Content $env:TINYSNAP_TRACE "script: cold area hotkey pressed"
+Press $Ctrl $Shift 0x32
+Add-Content $env:TINYSNAP_TRACE ("script: cold area overlay visible after {0} ms" -f (Fast { Overlay }))
+Start-Sleep -Seconds 1
+Press 0x1B
+Start-Sleep -Milliseconds 500
+
 # 8. Uninstalling: the app goes, the captures stay
 
 $kept = (LibraryEntries).Count
@@ -471,7 +487,7 @@ Stop-Process -Id $script:app.Id -Force -ErrorAction SilentlyContinue
 if ($pin)
 {
     Start-Sleep -Seconds 1
-    $unpinned = Grab
+    $unpinned = $unpinnedEarly
     Check 'the shadow round a pin is see-through' { Opaque $pin $withPin $unpinned }
 }
 Stop-Process -Id $page.Id -Force -ErrorAction SilentlyContinue
