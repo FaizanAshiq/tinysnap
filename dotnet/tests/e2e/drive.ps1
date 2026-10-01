@@ -325,7 +325,7 @@ Check 'Tinysnap starts and holds its hotkeys' {
 Start-Sleep -Seconds 1
 Shot 'started'
 
-# 4. Fullscreen: capture, save, copy, keep, close
+# 4. Fullscreen: capture, keep, copy and close; capture again, save and close
 
 Press $Ctrl $Shift 0x31
 $editor = Until { Editors | Select-Object -First 1 }
@@ -339,20 +339,6 @@ if ($editor)
     Start-Sleep -Seconds 1
     Shot 'fullscreen-editor'
     Check 'the editor for the whole screen fits on it' { OffScreen $editor }
-    Front $editor
-    $saved = SaveFront
-    Check 'Ctrl+S saves a PNG the size of the screen' {
-        if (-not $saved) { return "nothing new in $saves" }
-        $size = PngSize $saved
-        if ($size -ne ('{0}x{1}' -f $screen.Width, $screen.Height)) { "saved $size" }
-    }
-    [System.Windows.Forms.Clipboard]::Clear()
-    Press $Ctrl 0x43
-    Check 'Ctrl+C copies it as a PNG and as a bitmap' {
-        $formats = Until { $data = [System.Windows.Forms.Clipboard]::GetDataObject(); if ($data.GetFormats() -contains 'PNG') { $data.GetFormats() } } 5
-        if (-not $formats) { return 'no PNG on the clipboard' }
-        if (-not [System.Windows.Forms.Clipboard]::ContainsImage()) { "no bitmap among $($formats -join ', ')" }
-    }
     Check 'the capture is kept in the library' {
         $entry = LibraryEntries | Select-Object -First 1
         if (-not $entry) { return "nothing in $library" }
@@ -375,8 +361,29 @@ if ($editor)
         if (-not $tiles) { 'no capture among its list items' }
     }
     Front $editor
-    Press $Ctrl 0x57
-    Check 'Ctrl+W closes a saved editor without asking' { if (-not (Until { (Editors).Count -eq 0 } 5)) { 'still open' } }
+    [System.Windows.Forms.Clipboard]::Clear()
+    Press $Ctrl 0x43
+    Check 'Ctrl+C copies it as a PNG and as a bitmap' {
+        $formats = Until { $data = [System.Windows.Forms.Clipboard]::GetDataObject(); if ($data.GetFormats() -contains 'PNG') { $data.GetFormats() } } 5
+        if (-not $formats) { return 'no PNG on the clipboard' }
+        if (-not [System.Windows.Forms.Clipboard]::ContainsImage()) { "no bitmap among $($formats -join ', ')" }
+    }
+    Check 'Ctrl+C closes the editor without asking' { if (-not (Until { (Editors).Count -eq 0 } 5)) { 'still open' } }
+}
+
+Press $Ctrl $Shift 0x31
+$editor = Until { Editors | Select-Object -First 1 }
+if ($editor)
+{
+    Start-Sleep -Milliseconds 500
+    Front $editor
+    $saved = SaveFront
+    Check 'Ctrl+S saves a PNG the size of the screen' {
+        if (-not $saved) { return "nothing new in $saves" }
+        $size = PngSize $saved
+        if ($size -ne ('{0}x{1}' -f $screen.Width, $screen.Height)) { "saved $size" }
+    }
+    Check 'Ctrl+S closes the editor without asking' { if (-not (Until { (Editors).Count -eq 0 } 5)) { 'still open' } }
 }
 
 # 5. An area: the overlay, a drag, the editor, the saved size
@@ -411,7 +418,6 @@ if ($overlay)
             $size = PngSize $script:area
             if ($size -ne '400x150') { "saved $size" }
         }
-        Press $Ctrl 0x57
         [void](Until { (Editors).Count -eq 0 } 5)
     }
 }
