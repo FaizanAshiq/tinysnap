@@ -99,6 +99,9 @@ public static class Desk
 
     public static void Up() { mouse_event(LeftUp, 0, 0, 0, UIntPtr.Zero); }
 
+    /// <summary>A right click where the pointer is.</summary>
+    public static void RightClick() { mouse_event(0x8, 0, 0, 0, UIntPtr.Zero); mouse_event(0x10, 0, 0, 0, UIntPtr.Zero); }
+
     /// <summary>A left drag in small steps, as a hand would make it.</summary>
     public static void Drag(int fromX, int fromY, int toX, int toY)
     {
@@ -327,7 +330,57 @@ Check 'Tinysnap starts and holds its hotkeys' {
 Start-Sleep -Seconds 1
 Shot 'started'
 
-# 4. Fullscreen: capture, save, copy, keep, close
+# 3a. The tray icon: out in the taskbar, a left click for an area, a right click for the menu
+
+$Element = [System.Windows.Automation.AutomationElement]
+$Tree = [System.Windows.Automation.TreeScope]
+function Named($root, [string] $name)
+{
+    $root.FindFirst($Tree::Descendants, (New-Object System.Windows.Automation.PropertyCondition($Element::NameProperty, $name)))
+}
+$taskbar = $Element::RootElement.FindFirst($Tree::Children,
+    (New-Object System.Windows.Automation.PropertyCondition($Element::ClassNameProperty, 'Shell_TrayWnd')))
+$icon = Until { Named $taskbar 'Tinysnap' } 15
+Check 'the tray icon shows in the taskbar, not behind the arrow' { if (-not $icon) { 'not in the taskbar' } }
+if ($icon)
+{
+    $r = $icon.Current.BoundingRectangle
+    $x, $y = [int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)
+    Check 'the tray icon stands out from the taskbar' {
+        $bitmap = Grab
+        $lo, $hi = 255, 0
+        for ($px = [int]$r.X; $px -lt [int]($r.X + $r.Width); $px++)
+        {
+            for ($py = [int]$r.Y; $py -lt [int]($r.Y + $r.Height); $py++)
+            {
+                $p = $bitmap.GetPixel($px, $py)
+                $l = ($p.R * 299 + $p.G * 587 + $p.B * 114) / 1000
+                if ($l -lt $lo) { $lo = $l }
+                if ($l -gt $hi) { $hi = $l }
+            }
+        }
+        $bitmap.Dispose()
+        if ($hi - $lo -lt 100) { "its lightest and darkest pixels differ by only $([int]($hi - $lo))" }
+    }
+    [Desk]::MoveTo($x, $y); Start-Sleep -Milliseconds 200; [Desk]::Down(); [Desk]::Up()
+    $overlay = Until { Overlay } 10
+    Check 'a left click on the tray icon captures an area' { if (-not $overlay) { 'no overlay' } }
+    Shot 'tray-click'
+    Press 0x1B
+    [void](Until { -not (Overlay) } 5)
+    Start-Sleep -Milliseconds 500
+    [Desk]::MoveTo($x, $y); Start-Sleep -Milliseconds 200; [Desk]::RightClick()
+    $menu = Until { [Desk]::Windows($script:app.Id) | ForEach-Object { Named ($Element::FromHandle($_.Handle)) 'Capture Fullscreen' } | Select-Object -First 1 } 10
+    Shot 'tray-menu'
+    Check 'a right click on the tray icon opens the menu' { if (-not $menu) { 'no menu' } }
+    # Away from the menu, on the page window, as a person dismisses a menu.
+    [Desk]::MoveTo(500, 150); Start-Sleep -Milliseconds 200; [Desk]::Down(); [Desk]::Up()
+    $gone = Until { -not ([Desk]::Windows($script:app.Id) | ForEach-Object { Named ($Element::FromHandle($_.Handle)) 'Capture Fullscreen' } | Select-Object -First 1) } 5
+    Check 'a click elsewhere closes the tray menu' { if (-not $gone) { 'still open' } }
+    Start-Sleep -Milliseconds 500
+}
+
+# 4. Fullscreen: capture, keep, copy and close; capture again, save and close
 
 Press $Ctrl $Shift 0x31
 $editor = Until { Editors | Select-Object -First 1 }
@@ -341,20 +394,6 @@ if ($editor)
     Start-Sleep -Seconds 1
     Shot 'fullscreen-editor'
     Check 'the editor for the whole screen fits on it' { OffScreen $editor }
-    Front $editor
-    $saved = SaveFront
-    Check 'Ctrl+S saves a PNG the size of the screen' {
-        if (-not $saved) { return "nothing new in $saves" }
-        $size = PngSize $saved
-        if ($size -ne ('{0}x{1}' -f $screen.Width, $screen.Height)) { "saved $size" }
-    }
-    [System.Windows.Forms.Clipboard]::Clear()
-    Press $Ctrl 0x43
-    Check 'Ctrl+C copies it as a PNG and as a bitmap' {
-        $formats = Until { $data = [System.Windows.Forms.Clipboard]::GetDataObject(); if ($data.GetFormats() -contains 'PNG') { $data.GetFormats() } } 5
-        if (-not $formats) { return 'no PNG on the clipboard' }
-        if (-not [System.Windows.Forms.Clipboard]::ContainsImage()) { "no bitmap among $($formats -join ', ')" }
-    }
     Check 'the capture is kept in the library' {
         $entry = LibraryEntries | Select-Object -First 1
         if (-not $entry) { return "nothing in $library" }
@@ -377,8 +416,29 @@ if ($editor)
         if (-not $tiles) { 'no capture among its list items' }
     }
     Front $editor
-    Press $Ctrl 0x57
-    Check 'Ctrl+W closes a saved editor without asking' { if (-not (Until { (Editors).Count -eq 0 } 5)) { 'still open' } }
+    [System.Windows.Forms.Clipboard]::Clear()
+    Press $Ctrl 0x43
+    Check 'Ctrl+C copies it as a PNG and as a bitmap' {
+        $formats = Until { $data = [System.Windows.Forms.Clipboard]::GetDataObject(); if ($data.GetFormats() -contains 'PNG') { $data.GetFormats() } } 5
+        if (-not $formats) { return 'no PNG on the clipboard' }
+        if (-not [System.Windows.Forms.Clipboard]::ContainsImage()) { "no bitmap among $($formats -join ', ')" }
+    }
+    Check 'Ctrl+C closes the editor without asking' { if (-not (Until { (Editors).Count -eq 0 } 5)) { 'still open' } }
+}
+
+Press $Ctrl $Shift 0x31
+$editor = Until { Editors | Select-Object -First 1 }
+if ($editor)
+{
+    Start-Sleep -Milliseconds 500
+    Front $editor
+    $saved = SaveFront
+    Check 'Ctrl+S saves a PNG the size of the screen' {
+        if (-not $saved) { return "nothing new in $saves" }
+        $size = PngSize $saved
+        if ($size -ne ('{0}x{1}' -f $screen.Width, $screen.Height)) { "saved $size" }
+    }
+    Check 'Ctrl+S closes the editor without asking' { if (-not (Until { (Editors).Count -eq 0 } 5)) { 'still open' } }
 }
 
 # 5. An area: the overlay, a drag, the editor, the saved size
@@ -414,7 +474,6 @@ if ($overlay)
             $size = PngSize $script:area
             if ($size -ne '400x150') { "saved $size" }
         }
-        Press $Ctrl 0x57
         [void](Until { (Editors).Count -eq 0 } 5)
     }
 }

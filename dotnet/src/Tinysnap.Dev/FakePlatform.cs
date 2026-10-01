@@ -100,6 +100,8 @@ public sealed class FakePlatform(IScreenCapture screen) : IPlatform
 
     public bool ReduceMotion => false;
 
+    public bool LightTaskbar => false;
+
     public event Action<IReadOnlyList<string>>? Reopened;
 
     /// <summary>Stands in for opening Tinysnap a second time, with files or without.</summary>

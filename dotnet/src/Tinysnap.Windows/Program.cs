@@ -21,6 +21,12 @@ internal sealed class WindowsPlatform(IScreenCapture screen, IHotkeys hotkeys, I
         remove => instance.Reopened -= value;
     }
 
+    /// <summary>Settings, Personalisation, Colours: the mode for Windows, which the taskbar follows,
+    /// light on Windows 11 out of the box.</summary>
+    public bool LightTaskbar =>
+        Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                                          "SystemUsesLightTheme", 0) is 1;
+
     /// <summary>Settings, Accessibility, Visual effects, Animation effects off.</summary>
     public bool ReduceMotion =>
         Native.SystemParametersInfoW(Native.SPI_GETCLIENTAREAANIMATION, 0, out var animate, 0) && !animate;
@@ -54,6 +60,7 @@ internal static class Program
         using var hotkeys = new Win32Hotkeys();
         using var clipboard = new Win32Clipboard();
         var platform = new WindowsPlatform(new GdiScreenCapture(), hotkeys, clipboard, instance);
+        _ = TrayPromotion.PromoteSoon(Environment.ProcessPath!);
         AppBuilder.Configure(() => new TinysnapApp(platform, files: args))
             .UsePlatformDetect()
             .LogToTrace()
