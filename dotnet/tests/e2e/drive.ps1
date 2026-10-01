@@ -389,7 +389,7 @@ Check 'the Snipping Tool lets go of Print Screen while Tinysnap runs' {
 }
 Press 0x2C
 $overlay = Until { Overlay } 10
-Check 'Ctrl+Shift+2 covers the screen with the area overlay' { if (-not $overlay) { 'no overlay' } }
+Check 'Print Screen covers the screen with the area overlay' { if (-not $overlay) { 'no overlay' } }
 if ($overlay)
 {
     Start-Sleep -Milliseconds 500
