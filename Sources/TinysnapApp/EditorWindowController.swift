@@ -618,20 +618,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         return (exported, png)
     }
 
-    /// The image goes on the clipboard and the editor stays open, with a tick on the Copy
-    /// button to say it worked.
+    /// The image goes on the clipboard and the editor closes.
     @objc func copy(_ sender: Any?) {
         guard let (exported, png) = exportedPNG() else {
             showError("Tinysnap could not make an image from this capture.")
             return
         }
         Output.copy(exported, png: png)
-        canvas.session.markSaved()
-        Output.showDone(on: toolbarItem(Self.copyItem))
-    }
-
-    private func toolbarItem(_ identifier: NSToolbarItem.Identifier) -> NSToolbarItem? {
-        window?.toolbar?.items.first { $0.itemIdentifier == identifier }
+        closeDone()
     }
 
     /// Pins the result and closes, as Copy does: at full resolution, or at the size the
@@ -645,6 +639,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             return
         }
         onPin(exported.image, exported.dpi / 72, entry, document.resize != nil)
+        closeDone()
+    }
+
+    /// The capture went where it was sent, so the editor closes without asking; the library
+    /// still keeps its edits as the window closes.
+    private func closeDone() {
         canvas.session.markSaved()
         isClosingForGood = true
         window?.close()
@@ -728,7 +728,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     @objc func saveImage(_ sender: Any?) {
-        if saveToFolder() { Output.showDone(on: toolbarItem(Self.saveItem)) }
+        if saveToFolder() { closeDone() }
     }
 
     /// For quitting: ends any typing, then says whether there are edits to lose. An
@@ -782,8 +782,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         panel.nameFieldStringValue = FileNaming.fileName(for: Date()) { _ in false }
         panel.directoryURL = preferences().saveFolderURL
         panel.beginSheetModal(for: window) { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
-            self?.write(to: url)
+            guard response == .OK, let url = panel.url, let self, self.write(to: url) else { return }
+            self.closeDone()
         }
     }
 

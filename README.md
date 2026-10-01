@@ -64,8 +64,8 @@ pixels and is the only redaction to trust with a password or a card number.
 
 | Input | Effect |
 | --- | --- |
-| `Command+C` | Copy the image. A tick on the Copy button says it worked |
-| `Command+S` | Save to the save folder, with a tick on the Save button. `Command+Shift+S` asks where |
+| `Command+C` | Copy the image and close the editor |
+| `Command+S` | Save to the save folder and close the editor. `Command+Shift+S` asks where, then closes |
 | `Command+P` | Pin the image on top of every app and close the editor |
 | `Command+Shift+C` | Copy Text: each drag copies the text under it and a click copies all of it. It stays on until `Esc`, another tool or a second press |
 | `Command+Shift+R` | Copy what a QR code in the image holds, one per line when there are several |

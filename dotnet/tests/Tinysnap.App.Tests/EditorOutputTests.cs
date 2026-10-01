@@ -10,28 +10,61 @@ namespace Tinysnap.App.Tests;
 public class EditorOutputTests
 {
     [AvaloniaFact]
-    public void CtrlCCopiesAndTheEditorStays()
+    public void CtrlCCopiesAndClosesTheEditor()
     {
         var clipboard = new FakeClipboard();
-        var editor = Editor(Make(clipboard));
+        var dialogs = new FakeDialogs();
+        var editor = Editor(Make(clipboard, dialogs));
+        var closed = false;
+        editor.Closed += (_, _) => closed = true;
         Draw(editor);
-        Press(editor, Key.C, RawInputModifiers.Control, "c");
-        Assert.NotNull(clipboard.Png);
+        // Only the press: the window is gone before a release could reach it.
+        editor.KeyPress(Key.C, RawInputModifiers.Control, PhysicalKey.None, "c");
         Assert.Equal(400, clipboard.Image!.Width);
-        Assert.True(editor.IsVisible);
-        Assert.False(editor.Canvas.Session.IsUnsaved);
+        Assert.True(closed);
+        Assert.Equal(0, dialogs.Asked);
     }
 
     [AvaloniaFact]
-    public void CtrlSSavesIntoTheSaveFolder()
+    public void ACopyThatFailsKeepsTheEditor()
+    {
+        var editor = Editor(Make() with { Clipboard = new RefusingClipboard() });
+        var closed = false;
+        editor.Closed += (_, _) => closed = true;
+        Draw(editor);
+        editor.KeyPress(Key.C, RawInputModifiers.Control, PhysicalKey.None, "c");
+        Assert.False(closed);
+        Assert.True(editor.Canvas.Session.IsUnsaved);
+    }
+
+    [AvaloniaFact]
+    public void CtrlSSavesIntoTheSaveFolderAndClosesTheEditor()
     {
         var folder = TemporaryFolder();
         var editor = Editor(Make(saveFolder: folder));
+        var closed = false;
+        editor.Closed += (_, _) => closed = true;
         Draw(editor);
-        Press(editor, Key.S, RawInputModifiers.Control, "s");
+        editor.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.None, "s");
         var saved = Assert.Single(Directory.GetFiles(folder));
         Assert.Equal(400, Png.Decode(File.ReadAllBytes(saved))!.Value.Image.Width);
-        Assert.False(editor.Canvas.Session.IsUnsaved);
+        Assert.True(closed);
+    }
+
+    [AvaloniaFact]
+    public void ASaveThatFailsKeepsTheEditor()
+    {
+        // A file where the save folder should be, so the folder cannot be made.
+        var notAFolder = Path.Combine(TemporaryFolder(), "taken");
+        Directory.CreateDirectory(Path.GetDirectoryName(notAFolder)!);
+        File.WriteAllText(notAFolder, "");
+        var editor = Editor(Make(saveFolder: notAFolder));
+        var closed = false;
+        editor.Closed += (_, _) => closed = true;
+        Draw(editor);
+        editor.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.None, "s");
+        Assert.False(closed);
+        Assert.True(editor.Canvas.Session.IsUnsaved);
     }
 
     [AvaloniaFact]
@@ -65,16 +98,10 @@ public class EditorOutputTests
     }
 
     [AvaloniaFact]
-    public void ACopiedOrUntouchedCaptureClosesWithoutAsking()
+    public void AnUntouchedCaptureClosesWithoutAsking()
     {
         var dialogs = new FakeDialogs();
-        var untouched = Editor(Make(dialogs: dialogs));
-        untouched.Close();
-
-        var copied = Editor(Make(dialogs: dialogs));
-        Draw(copied);
-        Press(copied, Key.C, RawInputModifiers.Control, "c");
-        copied.Close();
+        Editor(Make(dialogs: dialogs)).Close();
         Assert.Equal(0, dialogs.Asked);
     }
 
@@ -107,5 +134,15 @@ public class EditorOutputTests
     {
         var editor = Editor(Make());
         Assert.Equal(["Copy", "Save", "Drag out", "Copy Text", "Scan QR Code", "Pin and close", "Backdrop", "Export size"], editor.OutputButtons.Select(b => Avalonia.Automation.AutomationProperties.GetName(b)));
+    }
+
+    /// <summary>A clipboard another app is holding: every set fails.</summary>
+    private sealed class RefusingClipboard : Tinysnap.Platform.IClipboard
+    {
+        public bool SetImage(SkiaSharp.SKImage image, byte[] png, double dpi) => false;
+
+        public bool SetText(string text) => false;
+
+        public uint ChangeCount => 0;
     }
 }
