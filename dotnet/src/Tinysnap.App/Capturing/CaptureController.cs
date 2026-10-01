@@ -64,7 +64,6 @@ public sealed class CaptureController
     /// <summary>A hotkey or a tray item.</summary>
     public void Perform(HotKeyAction action)
     {
-        Timing.Mark($"perform {action}");
         switch (action)
         {
             case HotKeyAction.Area: CaptureArea(); break;
@@ -220,18 +219,14 @@ public sealed class CaptureController
     private void OpenOverlay(Purpose purpose)
     {
         if (Overlay is not null) return;
-        Timing.Mark("freeze start");
         var desktop = platform.Screen.Freeze();
-        Timing.Mark("freeze done");
         if (desktop.Screens.Count == 0) return;
         Overlay = new AreaOverlay(desktop, result =>
         {
             Overlay = null;
             Finish(result, desktop, purpose);
         }, platform.Screen.PointerPosition());
-        Timing.Mark("overlay built");
         Overlay.Show();
-        Timing.Mark("overlay shown");
     }
 
     private Task reading = Task.CompletedTask;
@@ -315,9 +310,7 @@ public sealed class CaptureController
     private void Open(Capture capture, Rect around)
     {
         Thumbnail?.Dismiss(copying: true);
-        Timing.Mark("keep start");
         var entry = Keep(capture);
-        Timing.Mark("keep done");
         var at = new PixelRect((int)around.X, (int)around.Y, (int)around.Width, (int)around.Height);
         if (preferences.Current.AfterCapture == AfterCapture.Thumbnail)
             ShowThumbnail(new Document(capture), at, entry);
@@ -384,7 +377,6 @@ public sealed class CaptureController
 
     private void OpenEditor(Document document, PixelRect? around, LibraryEntry? entry, DateTimeOffset captured, string? title = null)
     {
-        Timing.Mark("open editor");
         var remembered = preferences.Current;
         var session = new EditorSession(document, styles: remembered.Styles, colorHex: remembered.ColorHex);
         var editor = new EditorWindow(session, captured, services, around, entry, title);

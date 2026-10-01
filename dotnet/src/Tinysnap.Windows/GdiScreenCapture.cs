@@ -18,10 +18,7 @@ internal sealed class GdiScreenCapture : IScreenCapture
         var screens = new List<FrozenScreen>();
         foreach (var (bounds, scale) in Monitors())
             if (Grab(bounds) is { } image) screens.Add(new FrozenScreen(ToRect(bounds), scale, image));
-        Tinysnap.Platform.Timing.Mark("monitors grabbed");
-        var windows = Win32Windows.List();
-        Tinysnap.Platform.Timing.Mark("windows listed");
-        return new FrozenDesktop(screens, windows);
+        return new FrozenDesktop(screens, Win32Windows.List());
     }
 
     public Point PointerPosition()
@@ -86,9 +83,7 @@ internal sealed class GdiScreenCapture : IScreenCapture
             // included, and the flag only made the copy slower and the pointer flicker.
             if (bitmap == 0 || !BitBlt(memory, 0, 0, width, height, screen, bounds.Left, bounds.Top, SRCCOPY))
                 return null;
-            Tinysnap.Platform.Timing.Mark($"bitblt {width}x{height}");
             Opaque(bits, width * height);
-            Tinysnap.Platform.Timing.Mark("alpha set");
             return SKImage.FromPixelCopy(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque), bits, width * 4);
         }
         finally

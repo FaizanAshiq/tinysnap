@@ -314,9 +314,7 @@ $page = Start-Process powershell -PassThru -ArgumentList '-NoProfile', '-Encoded
 
 # 3. Starting
 
-$env:TINYSNAP_TRACE = Join-Path (Resolve-Path $Shots) "trace.txt"
 $script:app = Start-Process $exe -PassThru
-function Fast([scriptblock] $condition) { $w = [Diagnostics.Stopwatch]::StartNew(); while ($w.ElapsedMilliseconds -lt 10000) { if (& $condition) { return $w.ElapsedMilliseconds }; Start-Sleep -Milliseconds 10 }; return -1 }
 Check 'Tinysnap starts and holds its hotkeys' {
     if (-not (Until { [Desk]::HotkeyTaken($ModControl + $ModShift, 0x31) } 30)) { return 'Ctrl+Shift+1 is free' }
     if (-not [Desk]::HotkeyTaken($ModControl + $ModShift, 0x32)) { return 'Ctrl+Shift+2 is free' }
@@ -388,9 +386,7 @@ if ($editor)
 
 # 5. An area: the overlay, a drag, the editor, the saved size
 
-Add-Content $env:TINYSNAP_TRACE "script: area hotkey pressed"
 Press $Ctrl $Shift 0x32
-Add-Content $env:TINYSNAP_TRACE ("script: area overlay visible after {0} ms" -f (Fast { Overlay }))
 $overlay = Until { Overlay } 10
 Check 'Ctrl+Shift+2 covers the screen with the area overlay' { if (-not $overlay) { 'no overlay' } }
 if ($overlay)
@@ -403,7 +399,6 @@ if ($overlay)
     Start-Sleep -Milliseconds 300
     Shot 'area-overlay'
     [Desk]::Up()
-    Add-Content $env:TINYSNAP_TRACE ("script: area editor visible after {0} ms" -f (Fast { Editors }))
     $editor = Until { Editors | Select-Object -First 1 }
     Check 'dragging out an area opens it in an editor' { if (-not $editor) { 'no editor' } }
     if ($editor)
@@ -470,22 +465,6 @@ if ($script:area)
     }
 }
 
-# TEMPORARY: a cold start, its very first action an area capture.
-$withPinKept = $withPin
-Stop-Process -Id $script:app.Id -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 1
-$unpinnedEarly = Grab
-Add-Content $env:TINYSNAP_TRACE "script: cold start"
-$script:app = Start-Process $exe -PassThru
-[void](Until { [Desk]::HotkeyTaken($ModControl + $ModShift, 0x32) } 30)
-Start-Sleep -Seconds 2
-Add-Content $env:TINYSNAP_TRACE "script: cold area hotkey pressed"
-Press $Ctrl $Shift 0x32
-Add-Content $env:TINYSNAP_TRACE ("script: cold area overlay visible after {0} ms" -f (Fast { Overlay }))
-Start-Sleep -Seconds 1
-Press 0x1B
-Start-Sleep -Milliseconds 500
-
 # 8. Uninstalling: the app goes, the captures stay
 
 $kept = (LibraryEntries).Count
@@ -493,7 +472,7 @@ Stop-Process -Id $script:app.Id -Force -ErrorAction SilentlyContinue
 if ($pin)
 {
     Start-Sleep -Seconds 1
-    $unpinned = $unpinnedEarly
+    $unpinned = Grab
     Check 'the shadow round a pin is see-through' { Opaque $pin $withPin $unpinned }
 }
 Stop-Process -Id $page.Id -Force -ErrorAction SilentlyContinue
