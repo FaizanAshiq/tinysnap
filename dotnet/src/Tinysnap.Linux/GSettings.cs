@@ -29,26 +29,27 @@ internal sealed class GSettings(Func<string, string[], (int Exit, string Output)
 
     public static string Quote(string value) => "'" + value.Replace("\\", "\\\\").Replace("'", "\\'") + "'";
 
-    /// <summary>The strings in a printed array; anything that is not a string array reads as none.</summary>
+    /// <summary>The strings in a printed array or a printed string; anything else reads as none.
+    /// A string holding an apostrophe is printed in double quotes.</summary>
     public static IReadOnlyList<string> ParseStrings(string text)
     {
         var strings = new List<string>();
         var current = new StringBuilder();
-        var inside = false;
+        char? quote = null;
         for (var i = 0; i < text.Length; i++)
         {
             var c = text[i];
-            if (!inside)
+            if (quote is null)
             {
-                if (c == '\'') inside = true;
+                if (c is '\'' or '"') quote = c;
                 continue;
             }
             if (c == '\\' && i + 1 < text.Length) current.Append(text[++i]);
-            else if (c == '\'')
+            else if (c == quote)
             {
                 strings.Add(current.ToString());
                 current.Clear();
-                inside = false;
+                quote = null;
             }
             else current.Append(c);
         }

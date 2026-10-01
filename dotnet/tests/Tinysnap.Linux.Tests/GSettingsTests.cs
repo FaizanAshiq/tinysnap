@@ -7,6 +7,8 @@ public class GSettingsTests
     [InlineData("['Print']", new[] { "Print" })]
     [InlineData("['<Shift><Control>2', '<Super>a']", new[] { "<Shift><Control>2", "<Super>a" })]
     [InlineData(@"['it\'s']", new[] { "it's" })]
+    [InlineData("\"file:///home/sam/Sam's.png\"", new[] { "file:///home/sam/Sam's.png" })]
+    [InlineData("['a', \"it's\", 'b']", new[] { "a", "it's", "b" })]
     public void ReadsStringArraysAsGsettingsPrintsThem(string text, string[] expected) =>
         Assert.Equal(expected, GSettings.ParseStrings(text));
 
