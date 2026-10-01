@@ -7,32 +7,38 @@ namespace Tinysnap.Windows;
 /// open screen capture" is on, or was never set, and then no app can register the key. While
 /// Tinysnap holds Print Screen the setting is off, and it goes back exactly as it was when
 /// Tinysnap lets the key go, so the Snipping Tool has it again whenever Tinysnap is not running.</summary>
-internal sealed class PrintScreenKey(string keyboard = @"Control Panel\Keyboard")
+internal sealed class PrintScreenKey(string keyboard = @"Control Panel\Keyboard", string own = @"Software\Tinysnap")
 {
     private const string Setting = "PrintScreenKeyForSnippingEnabled";
 
-    /// <summary>What the setting held before Tinysnap turned it off, null while Tinysnap has not.</summary>
-    private object? before;
-    private bool taken;
+    /// <summary>What the setting held before Tinysnap first turned it off, kept in Tinysnap's own
+    /// key until it goes back, so a copy killed while holding the key is put right by the next.</summary>
+    private const string Before = "PrintScreenKeyBefore";
+    private const string Unset = "unset";
 
     public void Take()
     {
-        if (taken) return;
         using var key = Registry.CurrentUser.CreateSubKey(keyboard);
+        using var mine = Registry.CurrentUser.CreateSubKey(own);
         var value = key.GetValue(Setting);
+        if (mine.GetValue(Before) is null)
+        {
+            if (value is 0) return;
+            mine.SetValue(Before, value ?? Unset);
+        }
         if (value is 0) return;
         key.SetValue(Setting, 0, RegistryValueKind.DWord);
-        (before, taken) = (value, true);
         Announce();
     }
 
     public void GiveBack()
     {
-        if (!taken) return;
+        using var mine = Registry.CurrentUser.OpenSubKey(own, writable: true);
+        if (mine?.GetValue(Before) is not { } before) return;
         using var key = Registry.CurrentUser.CreateSubKey(keyboard);
-        if (before is null) key.DeleteValue(Setting, throwOnMissingValue: false);
+        if (before is Unset) key.DeleteValue(Setting, throwOnMissingValue: false);
         else key.SetValue(Setting, before, RegistryValueKind.DWord);
-        (before, taken) = (null, false);
+        mine.DeleteValue(Before, throwOnMissingValue: false);
         Announce();
     }
 

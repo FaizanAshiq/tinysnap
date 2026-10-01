@@ -8,6 +8,7 @@ public class PrintScreenKeyTests : IDisposable
 {
     private const string Setting = "PrintScreenKeyForSnippingEnabled";
     private readonly string keyboard = $@"Software\TinysnapTest{Guid.NewGuid():N}\Keyboard";
+    private string Own => Path.Combine(Path.GetDirectoryName(keyboard)!, "Tinysnap");
 
     public void Dispose() => Registry.CurrentUser.DeleteSubKeyTree(Path.GetDirectoryName(keyboard)!, throwOnMissingSubKey: false);
 
@@ -27,7 +28,7 @@ public class PrintScreenKeyTests : IDisposable
     public void ASettingThatWasOnIsTurnedOffThenBackOn()
     {
         Set(1);
-        var printScreen = new PrintScreenKey(keyboard);
+        var printScreen = new PrintScreenKey(keyboard, Own);
         printScreen.Take();
         Assert.Equal(0, Value());
         printScreen.GiveBack();
@@ -38,7 +39,7 @@ public class PrintScreenKeyTests : IDisposable
     public void ASettingNeverSetIsTurnedOffThenLeftUnsetAgain()
     {
         Registry.CurrentUser.CreateSubKey(keyboard).Dispose();
-        var printScreen = new PrintScreenKey(keyboard);
+        var printScreen = new PrintScreenKey(keyboard, Own);
         printScreen.Take();
         Assert.Equal(0, Value());
         printScreen.GiveBack();
@@ -46,10 +47,23 @@ public class PrintScreenKeyTests : IDisposable
     }
 
     [Fact]
+    public void ASettingLeftOffByACopyThatWasKilledIsStillPutBack()
+    {
+        Set(1);
+        new PrintScreenKey(keyboard, Own).Take();
+        // Killed: never gave it back. The next copy finds it off, and knows it was on.
+        var next = new PrintScreenKey(keyboard, Own);
+        next.Take();
+        Assert.Equal(0, Value());
+        next.GiveBack();
+        Assert.Equal(1, Value());
+    }
+
+    [Fact]
     public void ASettingAlreadyOffIsLeftAlone()
     {
         Set(0);
-        var printScreen = new PrintScreenKey(keyboard);
+        var printScreen = new PrintScreenKey(keyboard, Own);
         printScreen.Take();
         printScreen.GiveBack();
         Assert.Equal(0, Value());
