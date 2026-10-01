@@ -504,7 +504,8 @@ internal sealed class EditorWindow : Window
         return null;
     }
 
-    /// <summary>Copies at the Export setting's scale; the editor stays, and a tick says it worked.</summary>
+    /// <summary>Copies at the Export setting's scale and closes the editor; a copy that failed
+    /// keeps it open.</summary>
     private void CopyImage()
     {
         if (Finished(services.Preferences().ExportScale) is not var (exported, png)) return;
@@ -514,8 +515,7 @@ internal sealed class EditorWindow : Window
             _ = services.Dialogs.Tell(this, "Tinysnap could not copy to the clipboard. Another app may be holding it; try again.");
             return;
         }
-        Canvas.Session.MarkSaved();
-        Tick(copyButton, ToolIcons.Copy);
+        CloseDone();
     }
 
     /// <summary>The PNG of the capture at its own size, the image drawn for it let go at once.</summary>
@@ -526,7 +526,10 @@ internal sealed class EditorWindow : Window
         return png;
     }
 
-    private void SaveImage() => SaveToFolder();
+    private void SaveImage()
+    {
+        if (SaveToFolder()) CloseDone();
+    }
 
     /// <summary>Saves into the save folder under a name for now. False, after telling the person,
     /// when that failed.</summary>
@@ -543,7 +546,6 @@ internal sealed class EditorWindow : Window
             return false;
         }
         Canvas.Session.MarkSaved();
-        Tick(saveButton, ToolIcons.Save);
         return true;
     }
 
@@ -573,8 +575,7 @@ internal sealed class EditorWindow : Window
             await services.Dialogs.Tell(this, $"Tinysnap could not save {file.Name}. {error.Message}");
             return;
         }
-        Canvas.Session.MarkSaved();
-        Tick(saveButton, ToolIcons.Save);
+        CloseDone();
     }
 
     /// <summary>Opens a pin of the capture and closes the editor. A pin keeps the capture's own
@@ -583,16 +584,16 @@ internal sealed class EditorWindow : Window
     {
         if (services.Pin is not { } pin || Finished(ExportScale.Native) is not var (exported, _)) return;
         pin(exported, Canvas.Session.Display.Resize is not null, Entry);
+        CloseDone();
+    }
+
+    /// <summary>The capture went where it was sent, so the editor closes without asking; the
+    /// library still keeps its edits as the window closes.</summary>
+    private void CloseDone()
+    {
         Canvas.Session.MarkSaved();
         closingForGood = true;
         Close();
-    }
-
-    /// <summary>A button shows a tick for a moment after it worked.</summary>
-    private static void Tick(Button button, string icon)
-    {
-        button.Content = Glyphs.Icon(ToolIcons.Done);
-        DispatcherTimer.RunOnce(() => button.Content = Glyphs.Icon(icon), TimeSpan.FromSeconds(1.2));
     }
 
     /// <summary>A handle to drag the capture into another app as a PNG file.</summary>
