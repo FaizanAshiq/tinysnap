@@ -26,11 +26,14 @@ internal static class Tray
         captures.StateChanged += Rebuild;
         captures.Hotkeys.Changed += Rebuild;
         captures.Preferences.Changed += _ => Rebuild();
-        // Windows opens the menu on a right click only; a left click opens the library.
-        tray.Clicked += (_, _) => captures.ShowLibrary();
+        // The menu opens on a right click; a left click captures an area, the thing done most.
+        tray.Clicked += (_, _) => Click(captures);
         TrayIcon.SetIcons(app, [tray]);
         return tray;
     }
+
+    /// <summary>What a left click on the icon does.</summary>
+    internal static void Click(CaptureController captures) => captures.Perform(HotKeyAction.Area);
 
     /// <summary>Every action this build has, with its hotkey and "(taken)" when another app holds
     /// it. Repeat Last Area waits for a first area, and while a delayed capture counts down its

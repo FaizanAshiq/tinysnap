@@ -54,6 +54,7 @@ internal static class Program
         using var hotkeys = new Win32Hotkeys();
         using var clipboard = new Win32Clipboard();
         var platform = new WindowsPlatform(new GdiScreenCapture(), hotkeys, clipboard, instance);
+        _ = TrayPromotion.PromoteSoon(Environment.ProcessPath!);
         AppBuilder.Configure(() => new TinysnapApp(platform, files: args))
             .UsePlatformDetect()
             .LogToTrace()

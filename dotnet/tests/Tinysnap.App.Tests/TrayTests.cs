@@ -33,6 +33,15 @@ public class TrayTests
     }
 
     [AvaloniaFact]
+    public void ALeftClickOnTheIconCapturesAnArea()
+    {
+        var setup = Launch();
+        Tray.Click(setup.Controller);
+        Assert.NotNull(setup.Controller.Overlay);
+        Assert.Null(setup.Controller.OpenLibraryWindow);
+    }
+
+    [AvaloniaFact]
     public void AHotkeyAnotherAppHoldsIsMarkedTakenInTheMenu()
     {
         var setup = Launch();
