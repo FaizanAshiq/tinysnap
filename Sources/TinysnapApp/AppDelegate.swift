@@ -143,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func perform(_ action: HotKeyAction) {
         switch action {
         case .area: captureArea(for: .image)
+        case .window: captureArea(for: .image, windowMode: true)
         case .fullscreen: captureFullscreen()
         case .repeatArea: repeatLastArea()
         case .delayed: startDelayedCapture()
@@ -212,8 +213,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case image, text, codes
     }
 
-    /// Freezes the screen, then puts the area overlay on the frozen image.
-    private func captureArea(for purpose: Purpose) {
+    /// Freezes the screen, then puts the area overlay on the frozen image, ready to pick a
+    /// window when `windowMode` is set, as Space would make it.
+    private func captureArea(for purpose: Purpose, windowMode: Bool = false) {
         guard overlay == nil, !isFreezing, ensureScreenAccess() else { return }
         isFreezing = true
         Task { [weak self] in
@@ -229,6 +231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             self.overlay = controller
             controller.show()
+            if windowMode { controller.startInWindowMode() }
         }
     }
 

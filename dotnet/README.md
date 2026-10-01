@@ -1,8 +1,8 @@
 # Tinysnap for Windows
 
 A port of Tinysnap to Windows, in progress, built on .NET, Avalonia and SkiaSharp. So far it
-captures an area, a window or the whole monitor under the pointer with Ctrl+Shift+2 and
-Ctrl+Shift+1 or from the tray, and opens it in an editor with every tool, undo, zoom and
+captures an area with Print Screen, a window, or the whole monitor under the pointer with
+Ctrl+Shift+1, or from the tray, and opens it in an editor with every tool, undo, zoom and
 the style bar, or as a thumbnail in the corner. From there a capture is copied, saved,
 dragged into another app or pinned above every window. Every capture is kept 30 days in a
 library window and reopens editable; Settings changes the hotkeys and the rest, and the tray

@@ -63,12 +63,23 @@ public class SettingsTests
     }
 
     [AvaloniaFact]
+    public void PrintScreenNeedsNoModifierAndIsTakenOnItsRelease()
+    {
+        var (setup, window) = Open(Preferences.Defaults with { HotKeys = HotKeys.Defaults with { Area = null } });
+        var recorder = window.Recorders[HotKeyAction.Fullscreen];
+        recorder.StartRecording();
+        recorder.Focus();
+        // Windows hands apps Print Screen on its release only.
+        window.KeyRelease(Key.PrintScreen, RawInputModifiers.None, PhysicalKey.PrintScreen, null);
+        Assert.Equal(Binding(0x2C), setup.Controller.Preferences.Current.HotKeys.Fullscreen);
+        Assert.Equal("Print Screen", recorder.Text);
+    }
+
+    [AvaloniaFact]
     public void ACombinationAnotherActionUsesIsRefused()
     {
         var (setup, window) = Open();
-        var area = HotKeys.Defaults.Area!;
-        Record(window, window.Recorders[HotKeyAction.Fullscreen], Key.D2, RawInputModifiers.Control | RawInputModifiers.Shift);
-        Assert.Equal(0x32u, area.KeyCode);
+        Record(window, window.Recorders[HotKeyAction.Fullscreen], Key.O, RawInputModifiers.Control | RawInputModifiers.Shift);
         Assert.Equal(HotKeys.Defaults.Fullscreen, setup.Controller.Preferences.Current.HotKeys.Fullscreen);
         Assert.False(window.Recorders[HotKeyAction.Fullscreen].IsRecording);
     }

@@ -99,9 +99,24 @@ internal sealed class HotKeyRecorder : Button
         }
         var modifiers = Modifiers(e.KeyModifiers);
         // A hotkey with no modifier is held system wide, so it would swallow that key in every
-        // other app as well. A modifier on its own waits for the key that goes with it.
-        if (modifiers.Count == 0 || VirtualKey(e.Key) is not { } code) return;
+        // other app as well; Print Screen alone is the exception, the screenshot key on Windows
+        // and Linux. A modifier on its own waits for the key that goes with it.
+        if (VirtualKey(e.Key) is not { } code || modifiers.Count == 0 && code != PrintScreen) return;
         Finish(new HotKeyBinding(code, [.. modifiers]));
+    }
+
+    private const uint PrintScreen = 0x2C;
+
+    /// <summary>Windows hands apps Print Screen on its release only, so it is taken there too.</summary>
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        if (!IsRecording || e.Key != Key.PrintScreen)
+        {
+            base.OnKeyUp(e);
+            return;
+        }
+        e.Handled = true;
+        Finish(new HotKeyBinding(PrintScreen, [.. Modifiers(e.KeyModifiers)]));
     }
 
     protected override void OnLostFocus(FocusChangedEventArgs e)

@@ -67,6 +67,7 @@ public sealed class CaptureController
         switch (action)
         {
             case HotKeyAction.Area: CaptureArea(); break;
+            case HotKeyAction.Window: OpenOverlay(Purpose.Picture, windowMode: true); break;
             case HotKeyAction.Fullscreen: CaptureFullscreen(); break;
             case HotKeyAction.Text: OpenOverlay(Purpose.Text); break;
             case HotKeyAction.Qr: OpenOverlay(Purpose.Codes); break;
@@ -189,7 +190,8 @@ public sealed class CaptureController
     /// <summary>Freezes every monitor, then puts the area overlay over the frozen image.</summary>
     public void CaptureArea() => OpenOverlay(Purpose.Picture);
 
-    private void OpenOverlay(Purpose purpose)
+    /// <param name="windowMode">Starts ready to pick a window, as Space would make it.</param>
+    private void OpenOverlay(Purpose purpose, bool windowMode = false)
     {
         if (Overlay is not null) return;
         var desktop = platform.Screen.Freeze();
@@ -200,6 +202,7 @@ public sealed class CaptureController
             Finish(result, desktop, purpose);
         }, platform.Screen.PointerPosition());
         Overlay.Show();
+        if (windowMode) Overlay.ToggleWindowMode();
     }
 
     private Task reading = Task.CompletedTask;

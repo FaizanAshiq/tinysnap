@@ -67,6 +67,11 @@ final class AreaOverlayController {
         windows.compactMap { $0.contentView?.subviews.first as? AreaSelectionView }
     }
 
+    /// For Capture Window: the overlay opens as if Space had been pressed.
+    func startInWindowMode() {
+        if selectionViews.first?.windowMode != true { toggleWindowMode() }
+    }
+
     private func toggleWindowMode() {
         let on = !(selectionViews.first?.windowMode ?? false)
         selectionViews.forEach { $0.windowMode = on }

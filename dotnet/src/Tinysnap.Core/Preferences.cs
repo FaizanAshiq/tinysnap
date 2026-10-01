@@ -80,13 +80,14 @@ public sealed record HotKeyBinding(uint KeyCode, ImmutableArray<ModifierKey> Mod
 }
 
 /// <summary>In the order the tray menu and Settings list them.</summary>
-public enum HotKeyAction { Area, Fullscreen, Text, Qr, RepeatArea, Delayed, Library }
+public enum HotKeyAction { Area, Window, Fullscreen, Text, Qr, RepeatArea, Delayed, Library }
 
 public static class HotKeyActions
 {
     public static string Title(this HotKeyAction action) => action switch
     {
         HotKeyAction.Area => "Capture Area",
+        HotKeyAction.Window => "Capture Window",
         HotKeyAction.Fullscreen => "Capture Fullscreen",
         HotKeyAction.Text => "Capture Text",
         HotKeyAction.Qr => "Scan QR Code",
@@ -96,12 +97,14 @@ public static class HotKeyActions
     };
 }
 
-public sealed record HotKeys(HotKeyBinding? Area, HotKeyBinding? Fullscreen, HotKeyBinding? Text, HotKeyBinding? Qr,
-                             HotKeyBinding? RepeatArea, HotKeyBinding? Delayed, HotKeyBinding? Library)
+public sealed record HotKeys(HotKeyBinding? Area, HotKeyBinding? Window, HotKeyBinding? Fullscreen, HotKeyBinding? Text,
+                             HotKeyBinding? Qr, HotKeyBinding? RepeatArea, HotKeyBinding? Delayed, HotKeyBinding? Library)
 {
-    /// <summary>Ctrl+Shift with 2, 1 and O, O for OCR.</summary>
+    /// <summary>Print Screen for an area, the key Windows and Linux keyboards have for it, and
+    /// Ctrl+Shift with 1 and O, O for OCR. Window capture is in the menu until given a key.</summary>
     public static readonly HotKeys Defaults = new(
-        new HotKeyBinding(0x32, [ModifierKey.Control, ModifierKey.Shift]),
+        new HotKeyBinding(0x2C, []),
+        null,
         new HotKeyBinding(0x31, [ModifierKey.Control, ModifierKey.Shift]),
         new HotKeyBinding(0x4F, [ModifierKey.Control, ModifierKey.Shift]),
         null, null, null, null);
@@ -109,6 +112,7 @@ public sealed record HotKeys(HotKeyBinding? Area, HotKeyBinding? Fullscreen, Hot
     public HotKeyBinding? this[HotKeyAction action] => action switch
     {
         HotKeyAction.Area => Area,
+        HotKeyAction.Window => Window,
         HotKeyAction.Fullscreen => Fullscreen,
         HotKeyAction.Text => Text,
         HotKeyAction.Qr => Qr,
@@ -120,6 +124,7 @@ public sealed record HotKeys(HotKeyBinding? Area, HotKeyBinding? Fullscreen, Hot
     public HotKeys With(HotKeyAction action, HotKeyBinding? binding) => action switch
     {
         HotKeyAction.Area => this with { Area = binding },
+        HotKeyAction.Window => this with { Window = binding },
         HotKeyAction.Fullscreen => this with { Fullscreen = binding },
         HotKeyAction.Text => this with { Text = binding },
         HotKeyAction.Qr => this with { Qr = binding },
