@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Threading;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml.Styling;
@@ -60,6 +61,8 @@ public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started
             if (files is { Count: > 0 }) Captures.OpenFiles(files);
             Tray.Install(this, Captures, desktop);
             desktop.ShutdownRequested += (_, _) => Platform.Hotkeys.Dispose();
+            // Once the app is idle: the first capture then opens as quickly as the rest.
+            Dispatcher.UIThread.Post(Captures.WarmUp, DispatcherPriority.Background);
             started?.Invoke(this);
         }
         base.OnFrameworkInitializationCompleted();
