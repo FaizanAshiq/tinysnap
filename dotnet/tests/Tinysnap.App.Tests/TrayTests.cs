@@ -32,6 +32,20 @@ public class TrayTests
         Assert.False(Item(menu, 4).IsEnabled);
     }
 
+    [Fact]
+    public void TheIconIsDarkOnALightTaskbarAndWhiteOnADarkOne()
+    {
+        // A point on the top left corner mark.
+        static SkiaSharp.SKColor Stroke(bool light)
+        {
+            using var image = Tray.Draw(light);
+            using var bitmap = SkiaSharp.SKBitmap.FromImage(image);
+            return bitmap.GetPixel(4, 8);
+        }
+        Assert.True(Stroke(light: true).Red < 80);
+        Assert.True(Stroke(light: false).Red > 200);
+    }
+
     [AvaloniaFact]
     public void ALeftClickOnTheIconCapturesAnArea()
     {

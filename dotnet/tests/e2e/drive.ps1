@@ -342,6 +342,22 @@ if ($icon)
 {
     $r = $icon.Current.BoundingRectangle
     $x, $y = [int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)
+    Check 'the tray icon stands out from the taskbar' {
+        $bitmap = Grab
+        $lo, $hi = 255, 0
+        for ($px = [int]$r.X; $px -lt [int]($r.X + $r.Width); $px++)
+        {
+            for ($py = [int]$r.Y; $py -lt [int]($r.Y + $r.Height); $py++)
+            {
+                $p = $bitmap.GetPixel($px, $py)
+                $l = ($p.R * 299 + $p.G * 587 + $p.B * 114) / 1000
+                if ($l -lt $lo) { $lo = $l }
+                if ($l -gt $hi) { $hi = $l }
+            }
+        }
+        $bitmap.Dispose()
+        if ($hi - $lo -lt 100) { "its lightest and darkest pixels differ by only $([int]($hi - $lo))" }
+    }
     [Desk]::MoveTo($x, $y); Start-Sleep -Milliseconds 200; [Desk]::Down(); [Desk]::Up()
     $overlay = Until { Overlay } 10
     Check 'a left click on the tray icon captures an area' { if (-not $overlay) { 'no overlay' } }
