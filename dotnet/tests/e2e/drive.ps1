@@ -369,7 +369,10 @@ if ($icon)
     $menu = Until { [Desk]::Windows($script:app.Id) | ForEach-Object { Named ($Element::FromHandle($_.Handle)) 'Capture Fullscreen' } | Select-Object -First 1 } 10
     Shot 'tray-menu'
     Check 'a right click on the tray icon opens the menu' { if (-not $menu) { 'no menu' } }
-    Press 0x1B
+    # Away from the menu, on the page window, as a person dismisses a menu.
+    [Desk]::MoveTo(500, 150); Start-Sleep -Milliseconds 200; [Desk]::Down(); [Desk]::Up()
+    $gone = Until { -not ([Desk]::Windows($script:app.Id) | ForEach-Object { Named ($Element::FromHandle($_.Handle)) 'Capture Fullscreen' } | Select-Object -First 1) } 5
+    Check 'a click elsewhere closes the tray menu' { if (-not $gone) { 'still open' } }
     Start-Sleep -Milliseconds 500
 }
 
