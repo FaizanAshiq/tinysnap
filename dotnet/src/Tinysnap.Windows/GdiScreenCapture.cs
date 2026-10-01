@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using SkiaSharp;
 using Tinysnap.Core;
@@ -46,6 +47,17 @@ internal sealed class GdiScreenCapture : IScreenCapture
         return monitors;
     }
 
+    /// <summary>Sets every pixel's alpha byte in place, a vector's worth of pixels at a time:
+    /// a 4K screen is eight million of them.</summary>
+    private static unsafe void Opaque(nint bits, int count)
+    {
+        var pixels = new Span<uint>((void*)bits, count);
+        var vectors = MemoryMarshal.Cast<uint, Vector<uint>>(pixels);
+        var alpha = new Vector<uint>(0xFF000000);
+        for (var i = 0; i < vectors.Length; i++) vectors[i] |= alpha;
+        for (var i = vectors.Length * Vector<uint>.Count; i < count; i++) pixels[i] |= 0xFF000000;
+    }
+
     /// <summary>One monitor's pixels. GDI leaves the alpha byte undefined, often zero, so it is set
     /// to opaque, or the capture would come out see-through.</summary>
     internal static SKImage? Grab(RECT bounds)
@@ -67,18 +79,12 @@ internal sealed class GdiScreenCapture : IScreenCapture
         var previous = SelectObject(memory, bitmap);
         try
         {
-            if (bitmap == 0 || !BitBlt(memory, 0, 0, width, height, screen, bounds.Left, bounds.Top, SRCCOPY | CAPTUREBLT))
+            // No CAPTUREBLT: the desktop is composed by the window manager, layered windows
+            // included, and the flag only made the copy slower and the pointer flicker.
+            if (bitmap == 0 || !BitBlt(memory, 0, 0, width, height, screen, bounds.Left, bounds.Top, SRCCOPY))
                 return null;
-            var bytes = new byte[width * height * 4];
-            Marshal.Copy(bits, bytes, 0, bytes.Length);
-            for (var alpha = 3; alpha < bytes.Length; alpha += 4) bytes[alpha] = 255;
-            var handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
-            try
-            {
-                return SKImage.FromPixelCopy(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque),
-                                             handle.AddrOfPinnedObject(), width * 4);
-            }
-            finally { handle.Free(); }
+            Opaque(bits, width * height);
+            return SKImage.FromPixelCopy(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque), bits, width * 4);
         }
         finally
         {
