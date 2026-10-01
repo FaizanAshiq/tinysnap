@@ -67,6 +67,7 @@ public sealed class CaptureController
         switch (action)
         {
             case HotKeyAction.Area: CaptureArea(); break;
+            case HotKeyAction.Window when platform.Screen.PickWindow is { } pick: PickWithSystem(pick); break;
             case HotKeyAction.Window: OpenOverlay(Purpose.Picture, windowMode: true); break;
             case HotKeyAction.Fullscreen: CaptureFullscreen(); break;
             case HotKeyAction.Text: OpenOverlay(Purpose.Text); break;
@@ -165,6 +166,9 @@ public sealed class CaptureController
 
     internal IStartup Startup => platform.Startup;
 
+    /// <summary>Null where the system uninstalls Tinysnap itself.</summary>
+    internal Action? RemoveFromComputer => platform.RemoveFromComputer;
+
     internal LibraryStore Library => library;
 
     /// <summary>Why the last capture was not kept, for Settings; null once one is.</summary>
@@ -223,13 +227,31 @@ public sealed class CaptureController
         if (Overlay is not null) return;
         var desktop = platform.Screen.Freeze();
         if (desktop.Screens.Count == 0) return;
+        // Text and codes are read from a box, so only a picture hands Space to the system's picker.
+        var systemPicker = purpose == Purpose.Picture && platform.Screen.PickWindow is { } pick ? () => PickWithSystem(pick) : (Action?)null;
         Overlay = new AreaOverlay(desktop, result =>
         {
             Overlay = null;
             Finish(result, desktop, purpose);
-        }, platform.Screen.PointerPosition());
+        }, platform.Screen.PointerPosition(), systemPicker);
         Overlay.Show();
         if (windowMode) Overlay.ToggleWindowMode();
+    }
+
+    private Task picking = Task.CompletedTask;
+
+    /// <summary>The system picker last opened, finished.</summary>
+    internal Task WhenPicked() => picking;
+
+    /// <summary>A window through the system's own picker, where the overlay cannot list them.</summary>
+    private void PickWithSystem(Func<Task<Capture?>> pick)
+    {
+        picking = Pick();
+        async Task Pick()
+        {
+            if (await pick() is not { } capture) return;
+            Dispatcher.UIThread.Post(() => Open(capture, new Rect(0, 0, capture.PixelSize.Width, capture.PixelSize.Height)));
+        }
     }
 
     private Task reading = Task.CompletedTask;

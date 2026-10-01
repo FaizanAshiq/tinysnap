@@ -42,10 +42,12 @@ internal sealed record AppSetup(CaptureController Controller, LibraryStore Libra
 
 internal static class TestServices
 {
-    public static AppSetup Launch(Preferences? preferences = null)
+    /// <param name="picker">The system's window picker, for a platform that cannot list windows.</param>
+    public static AppSetup Launch(Preferences? preferences = null, Func<Task<Capture?>>? picker = null)
     {
         var retina = Screens.Frozen(new Tinysnap.Core.Rect(0, 0, 400, 300), 2, SkiaSharp.SKColors.Blue);
-        var platform = new FakePlatform(new FakeScreenCapture(() => Screens.Desktop(retina), () => new Tinysnap.Core.Point(100, 100)));
+        var platform = new FakePlatform(new FakeScreenCapture(() => Screens.Desktop(retina), () => new Tinysnap.Core.Point(100, 100),
+                                                              pickWindow: picker));
         var library = new LibraryStore(TemporaryFolder());
         var dialogs = new FakeDialogs();
         var time = new FakeTime();

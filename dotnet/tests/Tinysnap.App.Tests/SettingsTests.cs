@@ -12,9 +12,10 @@ namespace Tinysnap.App.Tests;
 
 public class SettingsTests
 {
-    private static (AppSetup Setup, SettingsWindow Window) Open(Preferences? preferences = null)
+    private static (AppSetup Setup, SettingsWindow Window) Open(Preferences? preferences = null, Action? removeFromComputer = null)
     {
         var setup = Launch(preferences);
+        setup.Platform.RemoveFromComputer = removeFromComputer;
         var window = setup.Controller.ShowSettings();
         Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();
@@ -148,6 +149,42 @@ public class SettingsTests
         setup.Dialogs.Confirmation = true;
         await window.ClearLibrary();
         Assert.Equal([open], setup.Library.Entries());
+    }
+
+    [AvaloniaFact]
+    public async Task RemoveFromThisComputerAsksThenRemovesAndCloses()
+    {
+        var removed = 0;
+        var (setup, window) = Open(removeFromComputer: () => removed++);
+        Assert.True(window.RemoveFromComputer.IsVisible);
+        setup.Dialogs.Confirmation = false;
+        await window.RemoveFromThisComputer();
+        Assert.Equal(0, removed);
+        Assert.True(window.IsVisible);
+        setup.Dialogs.Confirmation = true;
+        await window.RemoveFromThisComputer();
+        Assert.Equal(1, removed);
+        Assert.False(window.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public async Task AnEditorKeptOpenStopsTheRemoval()
+    {
+        var removed = 0;
+        var (setup, window) = Open(Preferences.Defaults with { KeepLibrary = false }, () => removed++);
+        setup.Controller.CaptureFullscreen();
+        Draw(Assert.Single(setup.Controller.Editors));
+        setup.Dialogs.Confirmation = true;
+        setup.Dialogs.Answer = CloseChoice.Cancel;
+        await window.RemoveFromThisComputer();
+        Assert.Equal(0, removed);
+    }
+
+    [AvaloniaFact]
+    public void RemoveFromThisComputerIsOnlyWhereTheSystemDoesNotUninstall()
+    {
+        var (_, window) = Open();
+        Assert.False(window.RemoveFromComputer.IsVisible);
     }
 
     [AvaloniaFact]

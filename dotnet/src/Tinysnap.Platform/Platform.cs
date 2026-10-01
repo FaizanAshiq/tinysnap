@@ -25,6 +25,11 @@ public interface IScreenCapture
     /// <summary>How round a window's corners are, in points, so a window capture can leave them
     /// see-through as the window shows them: 8 on Windows 11, 0 before it.</summary>
     double WindowCornerRadius { get; }
+
+    /// <summary>Null where windows are listed with the frozen screen and picked on it. Otherwise
+    /// the system's own picker, for Capture Window and Space in the overlay: the capture picked,
+    /// or null when the person cancelled.</summary>
+    Func<Task<Capture?>>? PickWindow { get; }
 }
 
 public interface IHotkeys : IDisposable
@@ -105,4 +110,8 @@ public interface IPlatform
     /// <summary>True when the taskbar or bar the tray icon sits on is light, so the icon is drawn
     /// dark; read each time, since it can change while the app runs.</summary>
     bool LightTaskbar { get; }
+
+    /// <summary>Null where the system uninstalls apps. Otherwise what Settings' Remove from This
+    /// Computer does: takes away everything Tinysnap added to the desktop, before it quits.</summary>
+    Action? RemoveFromComputer { get; }
 }

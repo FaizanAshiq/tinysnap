@@ -24,17 +24,20 @@ internal sealed class AreaOverlay
     private readonly FrozenDesktop desktop;
     private readonly Action<AreaResult> onFinish;
     private readonly Point? pointer;
+    private readonly Action? systemPicker;
     private bool isFinished;
 
     public IReadOnlyList<OverlayWindow> Windows { get; }
     public bool WindowMode { get; private set; }
 
     /// <param name="pointer">Where the pointer is, in pixels, so the overlay under it takes the keys.</param>
-    public AreaOverlay(FrozenDesktop desktop, Action<AreaResult> onFinish, Point? pointer = null)
+    /// <param name="systemPicker">Where windows cannot be listed, what Space hands over to instead.</param>
+    public AreaOverlay(FrozenDesktop desktop, Action<AreaResult> onFinish, Point? pointer = null, Action? systemPicker = null)
     {
         this.desktop = desktop;
         this.onFinish = onFinish;
         this.pointer = pointer;
+        this.systemPicker = systemPicker;
         Windows = [.. desktop.Screens.Select(screen => new OverlayWindow(screen, this))];
     }
 
@@ -50,6 +53,12 @@ internal sealed class AreaOverlay
 
     internal void ToggleWindowMode()
     {
+        if (systemPicker is not null)
+        {
+            Finish(new AreaResult.Cancelled());
+            systemPicker();
+            return;
+        }
         WindowMode = !WindowMode;
         foreach (var window in Windows) window.WindowModeChanged();
     }

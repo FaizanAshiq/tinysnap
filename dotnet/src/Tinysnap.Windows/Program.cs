@@ -27,6 +27,9 @@ internal sealed class WindowsPlatform(IScreenCapture screen, IHotkeys hotkeys, I
         Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
                                           "SystemUsesLightTheme", 0) is 1;
 
+    /// <summary>None: Windows uninstalls Tinysnap from Settings, Apps.</summary>
+    public Action? RemoveFromComputer => null;
+
     /// <summary>Settings, Accessibility, Visual effects, Animation effects off.</summary>
     public bool ReduceMotion =>
         Native.SystemParametersInfoW(Native.SPI_GETCLIENTAREAANIMATION, 0, out var animate, 0) && !animate;

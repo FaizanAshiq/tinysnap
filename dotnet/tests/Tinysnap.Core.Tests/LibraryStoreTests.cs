@@ -7,6 +7,14 @@ public class LibraryStoreTests
     /// <summary>2026-09-25 02:42:10 UTC.</summary>
     private static readonly DateTimeOffset Captured = DateTimeOffset.FromUnixTimeSeconds(1_790_304_130);
 
+    [Fact]
+    public void TheLibraryLivesWithDataOnLinuxAndBesideThePreferencesElsewhere()
+    {
+        var expected = Environment.GetFolderPath(OperatingSystem.IsLinux() ? Environment.SpecialFolder.LocalApplicationData
+                                                                           : Environment.SpecialFolder.ApplicationData);
+        Assert.Equal(Path.Combine(expected, "Tinysnap", "Library"), LibraryStore.DefaultRoot);
+    }
+
     private static LibraryStore Store() => new(Path.Combine(Path.GetTempPath(), $"tinysnap-library-{Guid.NewGuid()}"));
 
     private static OpenedEntry Opened(LibraryStore library, LibraryEntry entry)
