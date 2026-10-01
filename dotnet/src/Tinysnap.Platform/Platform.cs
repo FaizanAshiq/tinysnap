@@ -101,4 +101,8 @@ public interface IPlatform
     /// <summary>True when the person turned animations off, so nothing slides; read each time,
     /// since it can change while the app runs.</summary>
     bool ReduceMotion { get; }
+
+    /// <summary>True when the taskbar or bar the tray icon sits on is light, so the icon is drawn
+    /// dark; read each time, since it can change while the app runs.</summary>
+    bool LightTaskbar { get; }
 }

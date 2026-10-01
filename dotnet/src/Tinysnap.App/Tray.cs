@@ -5,6 +5,7 @@ using Avalonia.Input;
 using SkiaSharp;
 using Tinysnap.App.Capturing;
 using Tinysnap.Core;
+using Tinysnap.Platform;
 
 namespace Tinysnap.App;
 
@@ -13,9 +14,12 @@ namespace Tinysnap.App;
 /// and what can be repeated are always current.</summary>
 internal static class Tray
 {
-    public static TrayIcon Install(Application app, CaptureController captures, IClassicDesktopStyleApplicationLifetime lifetime)
+    public static TrayIcon Install(Application app, IPlatform platform, CaptureController captures,
+                                   IClassicDesktopStyleApplicationLifetime lifetime)
     {
-        var tray = new TrayIcon { Icon = Icon() };
+        var tray = new TrayIcon { Icon = Icon(platform.LightTaskbar) };
+        // Switching Windows between light and dark changes the taskbar too, so the icon follows.
+        app.ActualThemeVariantChanged += (_, _) => tray.Icon = Icon(platform.LightTaskbar);
         void Rebuild()
         {
             tray.Menu = Menu(captures, () => _ = Quit(captures, lifetime));
@@ -26,11 +30,14 @@ internal static class Tray
         captures.StateChanged += Rebuild;
         captures.Hotkeys.Changed += Rebuild;
         captures.Preferences.Changed += _ => Rebuild();
-        // Windows opens the menu on a right click only; a left click opens the library.
-        tray.Clicked += (_, _) => captures.ShowLibrary();
+        // The menu opens on a right click; a left click captures an area, the thing done most.
+        tray.Clicked += (_, _) => Click(captures);
         TrayIcon.SetIcons(app, [tray]);
         return tray;
     }
+
+    /// <summary>What a left click on the icon does.</summary>
+    internal static void Click(CaptureController captures) => captures.Perform(HotKeyAction.Area);
 
     /// <summary>Every action this build has, with its hotkey and "(taken)" when another app holds
     /// it. Repeat Last Area waits for a first area, and while a delayed capture counts down its
@@ -92,15 +99,23 @@ internal static class Tray
         return new KeyGesture(named, modifiers);
     }
 
-    /// <summary>A viewfinder: four corner marks round a dot, drawn once at 32 pixels.</summary>
-    private static WindowIcon Icon()
+    private static WindowIcon Icon(bool lightTaskbar)
+    {
+        using var image = Draw(lightTaskbar);
+        using var png = image.Encode(SKEncodedImageFormat.Png, 100);
+        return new WindowIcon(new MemoryStream(png.ToArray()));
+    }
+
+    /// <summary>A viewfinder: four corner marks round a dot, at 32 pixels, near black on a light
+    /// taskbar and white on a dark one, as the system icons beside it are.</summary>
+    internal static SKImage Draw(bool lightTaskbar)
     {
         using var surface = SKSurface.Create(new SKImageInfo(32, 32));
         var canvas = surface.Canvas;
         canvas.Clear(SKColors.Transparent);
         using var ink = new SKPaint
         {
-            Color = SKColors.White,
+            Color = lightTaskbar ? new SKColor(0x1C, 0x1C, 0x1C) : SKColors.White,
             IsAntialias = true,
             Style = SKPaintStyle.Stroke,
             StrokeWidth = 3,
@@ -113,7 +128,6 @@ internal static class Tray
         }
         ink.Style = SKPaintStyle.Fill;
         canvas.DrawCircle(16, 16, 4, ink);
-        using var png = surface.Snapshot().Encode(SKEncodedImageFormat.Png, 100);
-        return new WindowIcon(new MemoryStream(png.ToArray()));
+        return surface.Snapshot();
     }
 }

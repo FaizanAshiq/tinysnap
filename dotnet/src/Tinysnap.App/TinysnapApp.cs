@@ -58,7 +58,7 @@ public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started
             Captures = new CaptureController(Platform, preferences, new LibraryStore());
             Captures.StartSweeping();
             if (files is { Count: > 0 }) Captures.OpenFiles(files);
-            Tray.Install(this, Captures, desktop);
+            Tray.Install(this, Platform, Captures, desktop);
             desktop.ShutdownRequested += (_, _) => Platform.Hotkeys.Dispose();
             started?.Invoke(this);
         }
