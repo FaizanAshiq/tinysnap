@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Tinysnap, carrying the Mac app's version, as the Windows build does. -->
+    <AssemblyName>Tinysnap</AssemblyName>
+    <RootNamespace>Tinysnap.Linux</RootNamespace>
+    <Product>Tinysnap</Product>
+    <Version>1.1.0</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
+    <!-- Avalonia ships it on Linux; referenced directly for the app's own D-Bus service and the portals. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tinysnap.App\Tinysnap.App.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tinysnap.Linux.Tests" />
+  </ItemGroup>
+
+</Project>
