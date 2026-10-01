@@ -175,6 +175,33 @@ public sealed class CaptureController
 
     internal AreaOverlay? Overlay { get; private set; }
 
+    /// <summary>The overlay <see cref="WarmUp"/> opened unseen, until it closes itself.</summary>
+    internal OverlayWindow? WarmingUp { get; private set; }
+
+    private ITimer? warmingUp;
+
+    /// <summary>Opens one overlay nobody sees, off every screen and never focused, and closes it a
+    /// second later, so the first real capture finds the windows and drawing it needs set up and
+    /// opens as fast as later ones: cold, the first overlay took 185 ms in CI, warm 56.</summary>
+    public void WarmUp()
+    {
+        if (WarmingUp is not null) return;
+        using var surface = SKSurface.Create(new SKImageInfo(16, 16));
+        surface.Canvas.Clear(SKColors.Black);
+        // Left to the collector rather than disposed: the window may still be drawing it.
+        var screen = new FrozenScreen(new Rect(-32000, -32000, 16, 16), 1, surface.Snapshot());
+        var window = new AreaOverlay(new FrozenDesktop([screen], []), _ => { }).Windows[0];
+        window.ShowActivated = false;
+        window.Show();
+        WarmingUp = window;
+        warmingUp = (time ?? TimeProvider.System).CreateTimer(_ => Dispatcher.UIThread.Post(() =>
+        {
+            window.Close();
+            warmingUp?.Dispose();
+            WarmingUp = null;
+        }), null, TimeSpan.FromSeconds(1), Timeout.InfiniteTimeSpan);
+    }
+
     internal IReadOnlyList<EditorWindow> Editors => editors;
 
     internal IReadOnlyList<PinWindow> Pins => pins;

@@ -13,6 +13,10 @@
     <!-- The shipped build leaves out the .NET code it never calls: about 22 MB to download instead
          of 60. CI runs Tinysnap.exe with self-check on that build, as the tests run the full one. -->
     <PublishTrimmed>true</PublishTrimmed>
+    <!-- Compiled ahead for the processor, so the first capture after starting does not wait while
+         the overlay and editor code compiles: a cold first area capture took 413 ms in CI. -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Warnings inside Windows' own API bridge, which the self-check's text reading covers. -->
     <NoWarn>$(NoWarn);IL2104</NoWarn>
   </PropertyGroup>
