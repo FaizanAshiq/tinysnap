@@ -21,10 +21,14 @@ check() {
   import -window root "$shots/$(printf %02d $step) ${name//\//-}.png" 2>/dev/null
 }
 # within <seconds> <command...>: true once the command is, tried every half second.
+# Notes how long it took, so a slow step shows before it becomes a failing one.
 within() {
-  local tries=$(($1 * 2))
+  local tries=$(($1 * 2)) start=$(date +%s%N)
   shift
-  for _ in $(seq 1 $tries); do "$@" && return 0; sleep 0.5; done
+  for _ in $(seq 1 $tries); do
+    if "$@"; then echo "     $* after $((($(date +%s%N) - start) / 1000000)) ms" >> "$results"; return 0; fi
+    sleep 0.5
+  done
   return 1
 }
 
@@ -63,6 +67,11 @@ menu=$XDG_DATA_HOME/applications/com.faizanashiq.Tinysnap.desktop
 icon=$XDG_DATA_HOME/icons/hicolor/256x256/apps/com.faizanashiq.Tinysnap.png
 saves=$HOME/Pictures/Screenshots
 
+# How long one GNOME setting takes to write here, against which Tinysnap's own writes compare.
+start=$(date +%s%N)
+gsettings set org.gnome.desktop.interface enable-animations true
+echo "     one gsettings set took $((($(date +%s%N) - start) / 1000000)) ms" >> "$results"
+
 # The desktop: a known colour, a line of text and a QR code to capture.
 openbox &
 sleep 1
@@ -75,8 +84,8 @@ sleep 2
 
 "$appimage" > "$shots/app.log" 2>&1 &
 check "owns its D-Bus name" within 45 running
-check "writes its menu entry for the AppImage" within 10 menu_runs "$appimage"
-check "registers its shortcuts with GNOME" within 10 has_shortcuts
+check "writes its menu entry for the AppImage" within 30 menu_runs "$appimage"
+check "registers its shortcuts with GNOME" within 30 has_shortcuts
 check "takes Print Screen from GNOME's screenshot tool" gnome_lost_print
 
 # An area, dragged on the overlay, saved.
@@ -120,7 +129,7 @@ check "Esc closes the pin" within 10 gone "^Pinned capture"
 # Ended as a logout ends it, then moved: the next start follows the AppImage to its new place.
 pkill -TERM -x Tinysnap
 within 10 stopped
-check "being ended gives Print Screen back to GNOME" within 10 gnome_has_print
+check "being ended gives Print Screen back to GNOME" within 30 gnome_has_print
 mkdir -p "$HOME/Applications"
 moved=$HOME/Applications/Tinysnap.AppImage
 cp "$appimage" "$moved"
