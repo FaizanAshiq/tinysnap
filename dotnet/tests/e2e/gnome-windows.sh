@@ -47,7 +47,11 @@ started() { for _ in $(seq 1 100); do gdbus introspect --session --dest com.faiz
 gnome-shell --headless --wayland --virtual-monitor 1280x800 --unsafe-mode > gnome/shell.log 2>&1 &
 # Up once it answers: its name is taken a moment before it can.
 for _ in $(seq 1 60); do eval_js 'Main.layoutManager !== undefined' | grep -q "'true'" && break; sleep 1; done
-note "top bar: $(eval_js 'Main.overview.hide(); Main.panel.height + " high"')"
+# GNOME opens its overview as its start ends, and no window takes the keyboard while it shows,
+# so it is closed only once the start is over.
+overview_closed() { eval_js 'Main.layoutManager._startingUp || Main.overview.visible ? (Main.overview.hide(), "open") : "closed"' | grep -q closed; }
+within 30 overview_closed || note "GNOME's overview stayed open"
+note "top bar: $(eval_js 'Main.panel.height + " high"')"
 auth=$(ls "$XDG_RUNTIME_DIR"/.mutter-Xwaylandauth.* 2>/dev/null | head -1)
 note "screen as XWayland reports it: $(DISPLAY=:0 XAUTHORITY=$auth xrandr --listmonitors 2>&1 | tail -n +2 | tr -s ' ')"
 
