@@ -35,6 +35,17 @@ public class OverlayTests
     }
 
     [AvaloniaFact]
+    public void AnOverlayGoesWhereTheSystemPlacesItsMonitor()
+    {
+        // GNOME's picture of a 2x monitor right of another, while XWayland lays them out at 1x.
+        var right = Screens.Frozen(new CoreRect(2000, 0, 2000, 1600), 2) with { Place = new CoreRect(1000, 0, 1000, 800) };
+        var (overlay, _) = Show(Screens.Desktop(right));
+        var window = overlay.Windows[0];
+        Assert.Equal(new PixelPoint(1000, 0), window.Position);
+        Assert.Equal((1000.0, 800.0), (window.Width, window.Height));
+    }
+
+    [AvaloniaFact]
     public void EscapeCancels()
     {
         var (overlay, results) = Show(Screens.Desktop(Retina));

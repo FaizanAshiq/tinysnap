@@ -7,8 +7,10 @@ namespace Tinysnap.Platform;
 // primary monitor's top left corner at (0, 0), so a monitor left of or above it sits at
 // negative coordinates. A point is a pixel divided by its monitor's scale.
 
-/// <summary>One monitor as it looked the moment a capture began.</summary>
-public sealed record FrozenScreen(Rect Bounds, double Scale, SKImage Image);
+/// <summary>One monitor as it looked the moment a capture began. <paramref name="Place"/> is
+/// where the system puts windows over it, when that is counted in other pixels than the image's,
+/// as XWayland counts them on a scaled GNOME desktop; otherwise it is <paramref name="Bounds"/>.</summary>
+public sealed record FrozenScreen(Rect Bounds, double Scale, SKImage Image, Rect? Place = null);
 
 /// <summary>A window that window mode can pick, its shadow left out of its bounds.</summary>
 public sealed record PickableWindow(Rect Bounds, string Title);

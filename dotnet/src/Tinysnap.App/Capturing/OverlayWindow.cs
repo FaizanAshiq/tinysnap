@@ -33,7 +33,8 @@ internal sealed class OverlayWindow : Window
         ShowInTaskbar = false;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.Manual;
-        Position = new PixelPoint((int)screen.Bounds.X, (int)screen.Bounds.Y);
+        var place = screen.Place ?? screen.Bounds;
+        Position = new PixelPoint((int)place.X, (int)place.Y);
         Width = screen.Bounds.Width / screen.Scale;
         Height = screen.Bounds.Height / screen.Scale;
         Background = Brushes.Black;
