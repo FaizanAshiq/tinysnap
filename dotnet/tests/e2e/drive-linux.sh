@@ -55,6 +55,14 @@ saved_and_closed() { ls "$saves"/*.png >/dev/null 2>&1 && gone "^Capture at"; }
 first_save_is() { size_is "$(ls "$saves"/*.png | head -1)" "$1"; }
 pinned_and_closed() { shown "^Pinned capture" && gone "Receipt.png"; }
 removed() { [ ! -f "$menu" ] && [ ! -f "$icon" ]; }
+# The area overlay: a Tinysnap window as large as the screen.
+overlay_up() {
+  local id
+  for id in $(xdotool search --onlyvisible --classname Tinysnap 2>/dev/null); do
+    xdotool getwindowgeometry "$id" 2>/dev/null | grep -q "Geometry: 1280x800" && return 0
+  done
+  return 1
+}
 
 export HOME=$PWD/e2e-home XDG_DATA_HOME=$PWD/e2e-home/.local/share XDG_CONFIG_HOME=$PWD/e2e-home/.config XDG_STATE_HOME=$PWD/e2e-home/.local/state
 export LANG=en_US.UTF-8
@@ -93,9 +101,10 @@ check "writes its menu entry for the AppImage" within 30 menu_runs "$appimage"
 check "registers its shortcuts with GNOME" within 30 has_shortcuts
 check "takes Print Screen from GNOME's screenshot tool" gnome_lost_print
 
-# An area, dragged on the overlay, saved.
+# An area, dragged on the overlay, saved. The first overlay of the session, timed.
 call area
-sleep 1.5
+check "the area hotkey covers the screen with the overlay" within 10 overlay_up
+sleep 0.5
 drag 100 300 400 450
 check "a dragged area opens an editor" within 15 shown "^Capture at"
 press "^Capture at" ctrl+s
