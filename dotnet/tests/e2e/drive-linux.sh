@@ -54,6 +54,9 @@ removed() { [ ! -f "$menu" ] && [ ! -f "$icon" ]; }
 
 export HOME=$PWD/e2e-home XDG_DATA_HOME=$PWD/e2e-home/.local/share XDG_CONFIG_HOME=$PWD/e2e-home/.config XDG_STATE_HOME=$PWD/e2e-home/.local/state
 export LANG=en_US.UTF-8
+# Services the bus starts later, dconf among them, write where readers look only if they are
+# told the test home too: dconf's writer otherwise saves to the runner's own ~/.config.
+dbus-update-activation-environment HOME XDG_DATA_HOME XDG_CONFIG_HOME XDG_STATE_HOME LANG
 mkdir -p "$HOME/Pictures"
 library=$XDG_DATA_HOME/Tinysnap/Library
 menu=$XDG_DATA_HOME/applications/com.faizanashiq.Tinysnap.desktop
