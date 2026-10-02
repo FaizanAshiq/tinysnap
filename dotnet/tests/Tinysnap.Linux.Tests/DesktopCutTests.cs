@@ -68,6 +68,15 @@ public class DesktopCutTests
     }
 
     [Fact]
+    public void AMonitorCoveringTheWholePictureIsGivenThePictureItself()
+    {
+        // So whoever cut it must not dispose the picture: the overlay would draw nothing.
+        using var desktop = Desktop(1280, 800, 640);
+        var screen = Assert.Single(DesktopCut.Cut(desktop, [(new Rect(0, 0, 1280, 800), true)], 1));
+        Assert.Same(desktop, screen.Image);
+    }
+
+    [Fact]
     public void WithNoMonitorsTheWholePictureIsOneScreen()
     {
         using var desktop = Desktop(800, 600, 400);

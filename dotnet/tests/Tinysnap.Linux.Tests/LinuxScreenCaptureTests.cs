@@ -17,6 +17,12 @@ public class LinuxScreenCaptureTests
         return path;
     }
 
+    private static SKColor Pixel(SKImage image)
+    {
+        using var bitmap = SKBitmap.FromImage(image);
+        return bitmap.GetPixel(10, 10);
+    }
+
     [Fact]
     public void OnX11EveryMonitorIsReadStraightFromX()
     {
@@ -44,6 +50,9 @@ public class LinuxScreenCaptureTests
         Assert.Equal(new Rect(0, 0, 2560, 1600), screen.Bounds);
         Assert.Equal(new Rect(0, 0, 1280, 800), screen.Place);
         Assert.Equal(2 * x11.Scale, screen.Scale);
+        // One monitor covering the whole picture is given the picture itself, which must outlive
+        // the freeze: disposed, the overlay drew it black on GNOME.
+        Assert.Equal(SKColors.Teal, Pixel(screen.Image));
         Assert.False(File.Exists(shot));
         // The pointer is unknown on Wayland, so a fullscreen capture takes the primary monitor.
         Assert.Equal(new Tinysnap.Core.Point(1280, 800), capture.PointerPosition());
@@ -71,6 +80,7 @@ public class LinuxScreenCaptureTests
         var capture = new LinuxScreenCapture(X11Screen.TryOpen, () => client, wayland: true, portal: name);
         var picked = await capture.PickWindow!.Invoke();
         Assert.Equal(600, picked!.Image.Width);
+        Assert.Equal(SKColors.Teal, Pixel(picked.Image));
         Assert.Equal([true], portal.Interactive);
         Assert.False(File.Exists(shot));
     }

@@ -7,7 +7,8 @@ namespace Tinysnap.Linux;
 /// <summary>GNOME's screenshot is one image of the whole desktop. It is cut into one frozen
 /// screen per monitor, at the monitors' places in X11's layout scaled to the image's own size,
 /// since the image can be larger than that layout on a scaled desktop. Each screen keeps its X11
-/// place, which is where XWayland puts the overlay's window.</summary>
+/// place, which is where XWayland puts the overlay's window. A monitor covering the whole picture
+/// is given the picture itself, so the caller keeps it alive.</summary>
 internal static class DesktopCut
 {
     public static IReadOnlyList<FrozenScreen> Cut(SKImage desktop, IReadOnlyList<(Rect Bounds, bool Primary)> monitors, double scale)

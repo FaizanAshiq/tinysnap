@@ -32,11 +32,11 @@ internal sealed class LinuxScreenCapture(Func<X11Screen?> screen, Func<DBusConne
         // an asynchronous Freeze across the platforms if that wait ever matters. Run on the pool,
         // so the portal's replies never wait for the blocked UI thread.
         var path = Task.Run(() => Portal.Screenshot(bus(), interactive: false, Wait, portal)).GetAwaiter().GetResult();
-        if (path is null) return new FrozenDesktop([], []);
-        using var desktop = SKImage.FromEncodedData(path);
-        TryDelete(path);
-        if (desktop is null) return new FrozenDesktop([], []);
+        if (path is null || Decode(path) is not { } desktop) return new FrozenDesktop([], []);
         var screens = DesktopCut.Cut(desktop, monitors, x11.Scale);
+        // A monitor covering the whole picture is given the picture itself, the very same object,
+        // which must outlive this: disposed, the overlay drew nothing.
+        if (!screens.Any(screen => ReferenceEquals(screen.Image, desktop))) desktop.Dispose();
         factor = screens[0].Scale / x11.Scale;
         var main = monitors.Select((m, i) => (m.Primary, i)).FirstOrDefault(m => m.Primary).i;
         primary = screens[Math.Min(main, screens.Count - 1)].Bounds;
@@ -67,9 +67,19 @@ internal sealed class LinuxScreenCapture(Func<X11Screen?> screen, Func<DBusConne
     private async Task<Capture?> PickWithGnome()
     {
         if (await Portal.Screenshot(bus(), interactive: true, TimeSpan.FromMinutes(5), portal) is not { } path) return null;
-        var image = SKImage.FromEncodedData(path);
-        TryDelete(path);
-        return image is null ? null : new Capture(image, (screen()?.Scale ?? 1) * factor);
+        return Decode(path) is { } image ? new Capture(image, (screen()?.Scale ?? 1) * factor) : null;
+    }
+
+    /// <summary>The portal's picture decoded now, as every capture is held in memory, and its file
+    /// removed, since it is Tinysnap's to clear up.</summary>
+    private static SKImage? Decode(string path)
+    {
+        try
+        {
+            using var encoded = SKImage.FromEncodedData(path);
+            return encoded?.ToRasterImage(ensurePixelData: true);
+        }
+        finally { TryDelete(path); }
     }
 
     private static void TryDelete(string path)
