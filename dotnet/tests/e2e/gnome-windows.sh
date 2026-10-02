@@ -39,6 +39,9 @@ auth=$(ls "$XDG_RUNTIME_DIR"/.mutter-Xwaylandauth.* 2>/dev/null | head -1)
 say "xrandr: $(DISPLAY=:0 XAUTHORITY=$auth xrandr --listmonitors 2>&1 | tr '\n' ' ')"
 say "xrdb: $(DISPLAY=:0 XAUTHORITY=$auth xrdb -query 2>&1 | tr '\n' ' ')"
 say "fonts: $(fc-list | wc -l), sans-serif is $(fc-match sans-serif 2>&1)"
+# The self-check, in this GNOME session, fonts included.
+DISPLAY=:0 XAUTHORITY=$auth timeout 120 "$app" --self-check "$PWD/gnome/self-check.txt" > gnome/self-check.log 2>&1
+say "self-check: $(tr '\n' ' ' < gnome/self-check.txt 2>/dev/null) $(tail -n 3 gnome/self-check.log | tr '\n' ' ')"
 DISPLAY=:0 XAUTHORITY=$auth "$app" > gnome/app.log 2>&1 &
 for i in $(seq 1 100); do gdbus introspect --session --dest com.faizanashiq.Tinysnap --object-path /com/faizanashiq/Tinysnap >/dev/null 2>&1 && break; sleep 0.2; done
 say "tinysnap up after $((i / 5))s"

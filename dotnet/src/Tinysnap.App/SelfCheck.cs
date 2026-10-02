@@ -86,6 +86,21 @@ public static class SelfCheck
             return drawn ? null : "colour picker has no template";
         });
 
+        // After the UI has started, which sets up Avalonia's fonts. The theme asks for Inter, which
+        // is not shipped, then the system's default font, in every weight the windows use.
+        Check("text draws in each weight the windows use", () =>
+        {
+            var family = new Avalonia.Media.FontFamily("fonts:Inter#Inter, $Default");
+            var system = Avalonia.Media.FontManager.Current.DefaultFontFamily.Name;
+            foreach (var weight in new[] { Avalonia.Media.FontWeight.Normal, Avalonia.Media.FontWeight.Medium,
+                                           Avalonia.Media.FontWeight.SemiBold, Avalonia.Media.FontWeight.Bold })
+            {
+                if (!Avalonia.Media.FontManager.Current.TryGetGlyphTypeface(new Avalonia.Media.Typeface(family, Avalonia.Media.FontStyle.Normal, weight), out _))
+                    return $"no {weight} typeface; the system's default font is '{system}'";
+            }
+            return null;
+        });
+
         File.WriteAllLines(report, lines);
         return failed ? 1 : 0;
     }
