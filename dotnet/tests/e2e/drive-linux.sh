@@ -20,14 +20,14 @@ check() {
   if "$@"; then echo "ok   $name" | tee -a "$results"; else echo "FAIL $name" | tee -a "$results"; failed=1; fi
   import -window root "$shots/$(printf %02d $step) ${name//\//-}.png" 2>/dev/null
 }
-# within <seconds> <command...>: true once the command is, tried every half second.
+# within <seconds> <command...>: true once the command is, tried every tenth of a second.
 # Notes how long it took, so a slow step shows before it becomes a failing one.
 within() {
-  local tries=$(($1 * 2)) start=$(date +%s%N)
+  local tries=$(($1 * 10)) start=$(date +%s%N)
   shift
   for _ in $(seq 1 $tries); do
     if "$@"; then echo "     $* after $((($(date +%s%N) - start) / 1000000)) ms" >> "$results"; return 0; fi
-    sleep 0.5
+    sleep 0.1
   done
   return 1
 }
