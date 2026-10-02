@@ -12,14 +12,53 @@ gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
 PICTURE = sys.argv[1]
-INTERFACE = Gio.DBusNodeInfo.new_for_xml("""
-<node><interface name="org.freedesktop.portal.Screenshot">
-  <method name="Screenshot">
-    <arg type="s" name="parent_window" direction="in"/>
-    <arg type="a{sv}" name="options" direction="in"/>
-    <arg type="o" name="handle" direction="out"/>
-  </method>
-</interface></node>""").interfaces[0]
+NODE = Gio.DBusNodeInfo.new_for_xml("""
+<node>
+  <interface name="org.freedesktop.portal.Screenshot">
+    <method name="Screenshot">
+      <arg type="s" name="parent_window" direction="in"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="o" name="handle" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.freedesktop.portal.Settings">
+    <method name="ReadAll">
+      <arg type="as" name="namespaces" direction="in"/>
+      <arg type="a{sa{sv}}" name="value" direction="out"/>
+    </method>
+    <method name="Read">
+      <arg type="s" name="namespace" direction="in"/>
+      <arg type="s" name="key" direction="in"/>
+      <arg type="v" name="value" direction="out"/>
+    </method>
+    <method name="ReadOne">
+      <arg type="s" name="namespace" direction="in"/>
+      <arg type="s" name="key" direction="in"/>
+      <arg type="v" name="value" direction="out"/>
+    </method>
+    <property name="version" type="u" access="read"/>
+  </interface>
+</node>""")
+# The desktop's settings as GNOME's portal gives them, light style.
+SETTINGS = {"org.freedesktop.appearance": {"color-scheme": GLib.Variant("u", 0)}}
+
+
+def settings(connection, sender, path, interface, method, parameters, invocation):
+    if method == "ReadAll":
+        (wanted,) = parameters.unpack()
+        found = {space: keys for space, keys in SETTINGS.items() if not wanted or space in wanted}
+        invocation.return_value(GLib.Variant("(a{sa{sv}})", (found,)))
+        return
+    space, key = parameters.unpack()
+    if key in SETTINGS.get(space, {}):
+        value = SETTINGS[space][key]
+        invocation.return_value(GLib.Variant("(v)", (GLib.Variant("v", value) if method == "Read" else value,)))
+    else:
+        invocation.return_dbus_error("org.freedesktop.portal.Error.NotFound", "Requested setting not found")
+
+
+def version(connection, sender, path, interface, name):
+    return GLib.Variant("u", 2)
 
 
 def called(connection, sender, path, interface, method, parameters, invocation):
@@ -35,7 +74,9 @@ def called(connection, sender, path, interface, method, parameters, invocation):
 
 
 def acquired(connection, name):
-    connection.register_object("/org/freedesktop/portal/desktop", INTERFACE, called, None, None)
+    screenshot, settings_interface = NODE.interfaces
+    connection.register_object("/org/freedesktop/portal/desktop", screenshot, called, None, None)
+    connection.register_object("/org/freedesktop/portal/desktop", settings_interface, settings, version, None)
 
 
 Gio.bus_own_name(Gio.BusType.SESSION, "org.freedesktop.portal.Desktop", Gio.BusNameOwnerFlags.NONE, acquired, None, None)

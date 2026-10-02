@@ -38,6 +38,7 @@ auth=$(ls "$XDG_RUNTIME_DIR"/.mutter-Xwaylandauth.* 2>/dev/null | head -1)
 # What XWayland tells an X11 app about the screen, which Tinysnap cuts the portal's picture by.
 say "xrandr: $(DISPLAY=:0 XAUTHORITY=$auth xrandr --listmonitors 2>&1 | tr '\n' ' ')"
 say "xrdb: $(DISPLAY=:0 XAUTHORITY=$auth xrdb -query 2>&1 | tr '\n' ' ')"
+say "fonts: $(fc-list | wc -l), sans-serif is $(fc-match sans-serif 2>&1)"
 DISPLAY=:0 XAUTHORITY=$auth "$app" > gnome/app.log 2>&1 &
 for i in $(seq 1 100); do gdbus introspect --session --dest com.faizanashiq.Tinysnap --object-path /com/faizanashiq/Tinysnap >/dev/null 2>&1 && break; sleep 0.2; done
 say "tinysnap up after $((i / 5))s"
@@ -48,7 +49,8 @@ call area
 sleep 1.5
 say "overlay: $(windows)"
 shot overlay
-say "overlay centre pixel: $(convert gnome/overlay.png -crop 1x1+640+600 +repage -format '%[hex:u.p{0,0}]' info: 2>&1)"
+# Off the crosshair: the picture's blue, dimmed, and its red band where the top bar is.
+say "overlay pixels: $(convert gnome/overlay.png -crop 1x1+300+600 +repage -format '%[hex:u.p{0,0}]' info: 2>&1) and $(convert gnome/overlay.png -crop 1x1+300+10 +repage -format '%[hex:u.p{0,0}]' info: 2>&1)"
 key Escape
 sleep 1
 say "after Esc: $(windows)"
