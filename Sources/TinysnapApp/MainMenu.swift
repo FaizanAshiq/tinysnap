@@ -42,6 +42,15 @@ enum MainMenu {
             item("Delete", "delete:", ""),
             item("Select All", "selectAll:", "a"),
             .separator(),
+            item("Duplicate", "duplicate:", "d"),
+            item("Lock", "toggleLock:", "l"),
+            submenu("Arrange", [
+                item("Bring to Front", "bringToFront:", "}"),
+                item("Bring Forward", "bringForward:", "]"),
+                item("Send Backward", "sendBackward:", "["),
+                item("Send to Back", "sendToBack:", "{"),
+            ]),
+            .separator(),
             item("Copy Text", "copyText:", "C"),
             item("Scan QR Code", "scanQRCode:", "R"),
             item("Pin", "pinImage:", "p"),
@@ -51,6 +60,8 @@ enum MainMenu {
             item("Zoom Out", "zoomOut:", "-"),
             item("Zoom to Fit", "zoomToFit:", "0"),
             item("Actual Size", "zoomToActualSize:", "1"),
+            .separator(),
+            item("Layers", "toggleLayers:", "L"),
         ]))
         menu.addItem(submenu("Window", [
             item("Minimize", "performMiniaturize:", "m"),

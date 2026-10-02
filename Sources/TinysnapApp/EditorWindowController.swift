@@ -31,7 +31,7 @@ final class ToolbarDivider: NSView {
 /// One window per capture: the canvas, one toolbar row in the title bar, and the
 /// copy, save and drag out actions.
 @MainActor
-final class EditorWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate {
+final class EditorWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSMenuItemValidation {
     private let canvas: CanvasView
     private let scrollView = NSScrollView()
     private let preferences: () -> Preferences
@@ -43,6 +43,19 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private let onBackdropChange: (Backdrop) -> Void
     /// The Measure tool's lines, edge contrast or guide changed, so they can be remembered.
     private let onMeasureChange: (MeasureSettings) -> Void
+    /// The layers panel was opened or closed, so the next editor opens the same way.
+    private let onShowsLayersChange: (Bool) -> Void
+    /// The strip down the right edge: the library, and the layers panel's switch.
+    private let rail = NSView()
+    private lazy var libraryButton = RailButton(symbol: "photo.stack", label: "Library, every capture from the last 30 days",
+                                                action: #selector(AppDelegate.openLibrary(_:)), target: nil)
+    private lazy var layersButton = RailButton(symbol: "square.3.layers.3d", label: "Layers (⇧⌘L)",
+                                               action: #selector(toggleLayers(_:)), target: self, isSwitch: true)
+    private let layers = LayersPanel()
+    private var showsLayers: Bool
+    private static let railWidth: CGFloat = 40
+    /// The style bar's height before it has first shown, for the panel's place under it.
+    private static let styleBarHeight: CGFloat = 46
     /// The Measure guide while it is open.
     private var measureGuide: NSPopover?
     /// The tool the toolbar last showed, so the guide opens as the Measure tool is picked.
@@ -87,7 +100,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private static let qrItem = NSToolbarItem.Identifier("qr")
     private static let backdropItemIdentifier = NSToolbarItem.Identifier("backdrop")
     private static let sizeItem = NSToolbarItem.Identifier("size")
-    private static let libraryItem = NSToolbarItem.Identifier("library")
     /// One toolbar item per tool, not one group of them: the toolbar draws hover and
     /// selection per item, so a group lit up as one block under the pointer.
     nonisolated private static func toolItem(_ tool: Tool) -> NSToolbarItem.Identifier {
@@ -100,13 +112,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     init(document: Document, entry: LibraryEntry?, library: LibraryStore, screen: NSScreen?, title: String,
          preferences: @escaping () -> Preferences, onStylesChange: @escaping ([Tool: Style], String) -> Void,
          onPin: @escaping (CGImage, CGFloat, LibraryEntry?, Bool) -> Void, onBackdropChange: @escaping (Backdrop) -> Void,
-         onMeasureChange: @escaping (MeasureSettings) -> Void, onClose: @escaping (EditorWindowController) -> Void) {
+         onMeasureChange: @escaping (MeasureSettings) -> Void, onShowsLayersChange: @escaping (Bool) -> Void,
+         onClose: @escaping (EditorWindowController) -> Void) {
         self.preferences = preferences
         self.onStylesChange = onStylesChange
         self.onPin = onPin
         self.onBackdropChange = onBackdropChange
         self.onMeasureChange = onMeasureChange
+        self.onShowsLayersChange = onShowsLayersChange
         self.onClose = onClose
+        showsLayers = preferences().showsLayers
         self.entry = entry
         self.library = library
         keptDocument = document
@@ -161,10 +176,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         styleBar.autoresizingMask = [.minXMargin, .minYMargin]
         styleBar.isHidden = true
         container.addSubview(styleBar)
+        layers.isHidden = true
+        container.addSubview(layers)
         textHint.isHidden = true
         container.addSubview(textHint)
+        buildRail()
+        container.addSubview(rail)
         window?.contentView = container
-        scrollView.frame = container.bounds
+        let bounds = container.bounds
+        scrollView.frame = NSRect(x: 0, y: 0, width: bounds.width - Self.railWidth, height: bounds.height)
+        rail.frame = NSRect(x: bounds.width - Self.railWidth, y: 0, width: Self.railWidth, height: bounds.height)
+        wireLayers()
         styleBar.onChange = { [weak self] merging, change in self?.canvas.session.restyle(merging: merging, change) }
         // One write, for whichever the panel was showing: every tool restyle used to
         // rewrite the remembered backdrop as well.
@@ -290,7 +312,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
                        Self.sizeItem]]
             + Tool.toolbarGroups.map { $0.map(Self.toolItem) }
         let divided = groups.enumerated().flatMap { index, group in index == 0 ? group : [Self.divider(index)] + group }
-        return divided + [.flexibleSpace, Self.colorItem, Self.libraryItem]
+        return divided + [.flexibleSpace, Self.colorItem]
     }
 
     /// One identifier each, so no two items in the toolbar share one.
@@ -350,13 +372,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             return button(identifier, symbol: "square.resize", tooltip: "Export size", action: #selector(showSizePanel(_:)))
         case Self.pinItem:
             return button(identifier, symbol: "pin", tooltip: "Pin on top of every app and close (⌘P)", action: #selector(pinImage(_:)))
-        case Self.libraryItem:
-            // Sent up the responder chain to the app, which owns the library window, the
-            // same way the Window menu and the Dock menu reach it.
-            let item = button(identifier, symbol: "photo.stack", tooltip: "Library, every capture from the last 30 days",
-                              action: #selector(AppDelegate.openLibrary(_:)))
-            item.target = nil
-            return item
         case Self.colorItem:
             colorWell.wantsLayer = true
             colorWell.layer?.cornerRadius = 6
@@ -420,6 +435,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     private func refreshToolbar() {
+        // Last, once the style bar is placed, since the panel sits under it.
+        defer { refreshLayers() }
         let session = canvas.session
         window?.toolbar?.selectedItemIdentifier = canvas.isPickingText ? Self.textItem : Self.toolItem(session.tool)
         // Filled while a backdrop is on, dashed while there is none.
@@ -444,7 +461,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         let deletable = session.selection != nil && session.typingID == nil
         styleBar.isHidden = !(StyleBar.shows(target.tool) || deletable) || session.phase != .idle && session.typingID == nil
         if !styleBar.isHidden {
-            styleBar.show(tool: target.tool, style: target.style, measure: canvas.measure, selected: deletable)
+            styleBar.show(tool: target.tool, style: target.style, measure: canvas.measure, selected: deletable,
+                          locked: session.selectedAnnotation?.isLocked == true)
             placeStyleBar()
         }
         // The first time the Measure tool is picked, its guide opens from its button.
@@ -488,10 +506,97 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         onMeasureChange(canvas.measure)
     }
 
-    /// 12 points in from the canvas's top right corner.
+    /// 12 points in from the canvas's top right corner, left of the rail.
     private func placeStyleBar() {
         guard let bounds = window?.contentView?.bounds else { return }
-        styleBar.setFrameOrigin(NSPoint(x: bounds.maxX - styleBar.frame.width - 12, y: bounds.maxY - styleBar.frame.height - 12))
+        styleBar.setFrameOrigin(NSPoint(x: bounds.maxX - Self.railWidth - styleBar.frame.width - 12,
+                                        y: bounds.maxY - styleBar.frame.height - 12))
+    }
+
+    // MARK: Layers
+
+    /// Library on top, Layers under it, below a divider down the rail's left edge.
+    private func buildRail() {
+        rail.autoresizingMask = [.minXMargin, .height]
+        let divider = NSBox()
+        divider.boxType = .separator
+        divider.frame = NSRect(x: 0, y: 0, width: 1, height: 10)
+        divider.autoresizingMask = [.height]
+        rail.addSubview(divider)
+        for button in [libraryButton, layersButton] {
+            button.autoresizingMask = [.minYMargin]
+            rail.addSubview(button)
+        }
+        rail.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: rail, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.placeRailButtons() }
+        }
+    }
+
+    private func placeRailButtons() {
+        let height = rail.bounds.height
+        rail.subviews.first?.frame = NSRect(x: 0, y: 0, width: 1, height: height)
+        libraryButton.frame = NSRect(x: 4, y: height - 12 - 32, width: 32, height: 32)
+        layersButton.frame = NSRect(x: 4, y: height - 12 - 32 - 8 - 32, width: 32, height: 32)
+    }
+
+    private func wireLayers() {
+        placeRailButtons()
+        layers.onSelect = { [weak self] id in self?.canvas.session.select(id) }
+        layers.onMove = { [weak self] id, index in self?.canvas.session.moveLayer(id, to: index) }
+        layers.onHide = { [weak self] id, hidden in
+            self?.canvas.session.setHidden(id, hidden)
+            self?.handKeysToCanvas()
+        }
+        layers.onLock = { [weak self] id, locked in
+            self?.canvas.session.setLocked(id, locked)
+            self?.handKeysToCanvas()
+        }
+        layers.onDuplicate = { [weak self] id in
+            self?.canvas.session.select(id)
+            self?.canvas.session.duplicateSelection()
+            self?.handKeysToCanvas()
+        }
+        layers.onHover = { [weak self] id in self?.canvas.highlight(id) }
+        layers.onClicked = { [weak self] in self?.handKeysToCanvas() }
+        layers.onClose = { [weak self] in self?.toggleLayers(nil) }
+    }
+
+    private func handKeysToCanvas() {
+        window?.makeFirstResponder(canvas)
+    }
+
+    private func refreshLayers() {
+        layersButton.isOn = showsLayers
+        layers.isHidden = !showsLayers
+        guard showsLayers, let bounds = window?.contentView?.bounds else { return }
+        layers.show(canvas.session.display, selection: canvas.session.selection)
+        // Always under the style bar's place, shown or not: following it made the panel jump
+        // down under the pointer whenever a click on a row brought the style bar up.
+        let top = bounds.maxY - 12 - max(styleBar.frame.height, Self.styleBarHeight) - 8
+        let height = max(min(layers.fittingHeight, top - 12), 80)
+        layers.frame = NSRect(x: bounds.maxX - Self.railWidth - 12 - LayersPanel.width, y: top - height,
+                              width: LayersPanel.width, height: height)
+    }
+
+    /// Opens or closes the layers panel, and remembers which for the next editor.
+    @objc func toggleLayers(_ sender: Any?) {
+        showsLayers.toggle()
+        onShowsLayersChange(showsLayers)
+        refreshLayers()
+        if !showsLayers { handKeysToCanvas() }
+    }
+
+    /// The Layers item is ticked while the panel shows.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleLayers(_:)) { menuItem.state = showsLayers ? .on : .off }
+        return true
+    }
+
+    /// While the layers list has the keys, the canvas still answers the editing items:
+    /// Delete, the arrange items, Lock and Duplicate.
+    override func supplementalTarget(forAction action: Selector, sender: Any?) -> Any? {
+        canvas.responds(to: action) ? canvas : super.supplementalTarget(forAction: action, sender: sender)
     }
 
     /// The panel shows the backdrop until another tool is picked or something selected.
