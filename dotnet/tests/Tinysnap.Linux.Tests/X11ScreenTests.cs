@@ -60,9 +60,17 @@ public class X11ScreenTests
         using var second = Process.Start("xmessage", ["-geometry", "+300+300", "-name", "second", "-title", "second", "second"])!;
         try
         {
-            string firstWindow = "";
-            for (var i = 0; i < 30 && (firstWindow.Length == 0 || Run("xdotool", "getactivewindow") == firstWindow); i++, Thread.Sleep(100))
-                firstWindow = Run("xdotool", "search", "--name", "^first$").Split('\n')[0];
+            string Found(string name)
+            {
+                var window = "";
+                for (var i = 0; i < 50 && window.Length == 0; i++, Thread.Sleep(100))
+                    window = Run("xdotool", "search", "--name", $"^{name}$").Split('\n')[0];
+                return window;
+            }
+            var firstWindow = Found("first");
+            // The second focused by xdotool first, rather than waiting on the window manager to
+            // focus a new window, which openbox did not always do in time.
+            Run("xdotool", "windowactivate", "--sync", Found("second"));
             Assert.NotEqual(firstWindow, Run("xdotool", "getactivewindow"));
             using var screen = X11Screen.TryOpen()!;
             screen.Activate(nuint.Parse(firstWindow));
