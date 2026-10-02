@@ -16,9 +16,10 @@ dbus-update-activation-environment XDG_CURRENT_DESKTOP XDG_SESSION_TYPE WAYLAND_
 convert -size 1280x800 xc:'#3366cc' -fill '#cc0000' -draw 'rectangle 0,0 1279,31' gnome/desktop.png
 python3 "$(dirname "$0")/fake-portal.py" gnome/desktop.png > gnome/portal.log 2>&1 &
 for i in $(seq 1 50); do gdbus introspect --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop >/dev/null 2>&1 && break; sleep 0.2; done
-gnome-shell --headless --wayland --virtual-monitor 1280x800 --unsafe-mode > gnome/shell.log 2>&1 &
-for i in $(seq 1 60); do gdbus introspect --session --dest org.gnome.Shell --object-path /org/gnome/Shell >/dev/null 2>&1 && break; sleep 1; done
 eval_js() { gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.gnome.Shell.Eval "$1" 2>&1; }
+gnome-shell --headless --wayland --virtual-monitor 1280x800 --unsafe-mode > gnome/shell.log 2>&1 &
+# Up once it answers: its name is taken a moment before it can.
+for i in $(seq 1 60); do eval_js 'Main.layoutManager !== undefined' | grep -q "'true'" && break; sleep 1; done
 shot() { gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot \
   --method org.gnome.Shell.Screenshot.Screenshot false false "$PWD/gnome/$1.png" >/dev/null 2>&1; }
 key() { eval_js "let b; try { b = global.stage.context.get_backend(); } catch (e) { b = imports.gi.Clutter.get_default_backend(); }

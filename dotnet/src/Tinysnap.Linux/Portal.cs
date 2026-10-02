@@ -11,6 +11,20 @@ internal static class Portal
     private const string Path = "/org/freedesktop/portal/desktop";
     private const string Request = "org.freedesktop.portal.Request";
 
+    /// <summary>A session bus connection of Tinysnap's own, opened on first use. Not .NET's shared
+    /// <see cref="DBusConnection.Session"/>, which connects itself and so cannot give its own name,
+    /// and the portal addresses its answer to that name.</summary>
+    public static Func<DBusConnection> Connection(string address)
+    {
+        var connection = new Lazy<DBusConnection>(() =>
+        {
+            var opened = new DBusConnection(address);
+            opened.ConnectAsync().AsTask().GetAwaiter().GetResult();
+            return opened;
+        });
+        return () => connection.Value;
+    }
+
     /// <summary>The screenshot's file, or null when refused, cancelled, not answered in time, or
     /// when there is no portal. Interactive opens GNOME's own screenshot tool, where the person
     /// picks a window or an area.</summary>

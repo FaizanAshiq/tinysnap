@@ -36,7 +36,7 @@ internal static class Program
             // A name of its own, so a running Tinysnap is neither reached nor in the way.
             using var checkBus = AppBus.TryOwn(address, $"com.faizanashiq.TinysnapSelfCheck{Guid.NewGuid():N}").GetAwaiter().GetResult()!;
             var gnome = new GSettings();
-            return SelfCheck.Run(report, () => new LinuxPlatform(new LinuxScreenCapture(() => null, () => DBusConnection.Session, wayland: false),
+            return SelfCheck.Run(report, () => new LinuxPlatform(new LinuxScreenCapture(() => null, Portal.Connection(address), wayland: false),
                                                                  new GnomeShortcuts(gnome), new LinuxClipboard(() => null), checkBus,
                                                                  DesktopEntries.ForThisUser(), new LinuxFiles(gnome)),
                                  X11, textRequired: true);
@@ -73,7 +73,7 @@ internal static class Program
         }
         // X11 needs a window to hold a copy; this one is never shown, so a copy works with none open.
         Window? holder = null;
-        var platform = new LinuxPlatform(new LinuxScreenCapture(Screen, () => DBusConnection.Session, wayland), hotkeys,
+        var platform = new LinuxPlatform(new LinuxScreenCapture(Screen, Portal.Connection(address), wayland), hotkeys,
             new LinuxClipboard(() => (holder ??= new Window()).Clipboard), bus, desktop, new LinuxFiles(settings));
         try
         {

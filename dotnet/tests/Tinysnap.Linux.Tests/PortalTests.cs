@@ -39,6 +39,19 @@ public class PortalTests
     }
 
     [Fact]
+    public async Task TheAppsOwnConnectionCanAskThePortal()
+    {
+        // .NET's shared session connection cannot name itself, which the answer is addressed by:
+        // asking through it crashed Tinysnap on its first Wayland capture.
+        Linux.Only();
+        var (_, name, owner) = await FakePortal.Start(0);
+        using var _ = owner;
+        var connection = Portal.Connection(Linux.SessionBus);
+        Assert.Equal("/tmp/shot.png", await Portal.Screenshot(connection(), interactive: false, TimeSpan.FromSeconds(10), name));
+        Assert.Same(connection(), connection());
+    }
+
+    [Fact]
     public async Task NoPortalAtAllReadsAsNothing()
     {
         Linux.Only();
