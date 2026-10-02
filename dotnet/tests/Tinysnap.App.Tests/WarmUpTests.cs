@@ -37,4 +37,16 @@ public class WarmUpTests
         setup.Controller.CaptureArea();
         Assert.NotNull(setup.Controller.Overlay);
     }
+
+    [AvaloniaFact]
+    public void TheEditorWarmsUpUnseenWithoutKeepingAnything()
+    {
+        // The first editor took twice as long as later ones while its code was compiled.
+        var setup = Launch();
+        setup.Controller.WarmUp();
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(setup.Controller.EditorIsWarm);
+        Assert.Empty(setup.Controller.Editors);
+        Assert.Empty(setup.Library.Entries());
+    }
 }

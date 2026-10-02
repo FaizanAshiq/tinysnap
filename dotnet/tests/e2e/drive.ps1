@@ -347,7 +347,9 @@ $page = Start-Process powershell -PassThru -ArgumentList '-NoProfile', '-Encoded
 $preferences = Join-Path $env:APPDATA 'Tinysnap\preferences.json'
 New-Item -ItemType Directory -Force (Split-Path $preferences) | Out-Null
 '{"hotkeys": {"window": {"keyCode": 87, "modifiers": ["control", "shift"]}}}' | Set-Content $preferences -Encoding ASCII
+$since = [System.Diagnostics.Stopwatch]::StartNew()
 $script:app = Start-Process $exe -PassThru
+[void](Timed 'starting to holding its hotkeys' { [Desk]::HotkeyTaken($ModControl + $ModShift, 0x31) } 30 $since)
 Check 'Tinysnap starts and holds its hotkeys' {
     if (-not (Until { [Desk]::HotkeyTaken($ModControl + $ModShift, 0x31) } 30)) { return 'Ctrl+Shift+1 is free' }
     if (-not [Desk]::HotkeyTaken(0, 0x2C)) { return 'Print Screen is free' }

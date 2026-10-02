@@ -194,6 +194,8 @@ public sealed class CaptureController
     /// opens as fast as later ones: cold, the first overlay took 185 ms in CI, warm 56.</summary>
     public void WarmUp()
     {
+        // The editor once the overlay is done, still while nothing else is happening.
+        if (!EditorIsWarm) Dispatcher.UIThread.Post(WarmEditor, DispatcherPriority.Background);
         if (WarmingUp is not null || IsWarm) return;
         using var surface = SKSurface.Create(new SKImageInfo(16, 16));
         surface.Canvas.Clear(SKColors.Black);
@@ -220,6 +222,25 @@ public sealed class CaptureController
             warmingUp?.Dispose();
             WarmingUp = null;
         }), null, TimeSpan.FromSeconds(1), Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>The editor warmed up, by <see cref="WarmEditor"/>.</summary>
+    internal bool EditorIsWarm { get; private set; }
+
+    /// <summary>Builds one editor nobody sees, laid out and drawn into a bitmap and then let go,
+    /// so the first capture's editor opens as fast as later ones: its toolbar, style bar and
+    /// canvas code is ready, without shipping it compiled ahead.</summary>
+    private void WarmEditor()
+    {
+        if (EditorIsWarm) return;
+        EditorIsWarm = true;
+        using var surface = SKSurface.Create(new SKImageInfo(64, 48));
+        surface.Canvas.Clear(SKColors.White);
+        var editor = new EditorWindow(new EditorSession(new Document(new Capture(surface.Snapshot(), 1))), DateTimeOffset.Now, services);
+        editor.Measure(new Avalonia.Size(1200, 800));
+        editor.Arrange(new Avalonia.Rect(0, 0, 1200, 800));
+        using (var bitmap = new RenderTargetBitmap(new PixelSize(1200, 800))) bitmap.Render(editor);
+        editor.Close();
     }
 
     internal IReadOnlyList<EditorWindow> Editors => editors;
