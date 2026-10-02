@@ -49,7 +49,10 @@ internal static class Program
             .Run();
         if (args is ["--self-check", var report])
         {
-            Environment.ExitCode = SelfCheck.Run(report);
+            // No recogniser on a machine without a language pack, so text is checked where there is one.
+            Environment.ExitCode = SelfCheck.Run(report, () => new WindowsPlatform(new GdiScreenCapture(), new Win32Hotkeys(), new Win32Clipboard(),
+                                                                                  new SingleInstance($"TinysnapSelfCheck{Guid.NewGuid():N}")),
+                                                 builder => builder.UsePlatformDetect(), textRequired: false);
             return;
         }
         using var instance = new SingleInstance();

@@ -3,21 +3,25 @@ using Avalonia.Controls;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.VisualTree;
 using SkiaSharp;
-using Tinysnap.App;
 using Tinysnap.Core;
-using Windows.Media.Ocr;
+using Tinysnap.Platform;
 using ZXing;
 using ZXing.Common;
 using Point = Tinysnap.Core.Point;
 
-namespace Tinysnap.Windows;
+namespace Tinysnap.App;
 
-/// <summary><c>Tinysnap.exe --self-check report.txt</c>: runs, once, each path that trimming unused
-/// code out of the shipped build could break, writes what passed to the report, and exits 1 if
-/// anything failed. CI runs it on the published build, since the tests run the untrimmed one.</summary>
-internal static class SelfCheck
+/// <summary><c>Tinysnap --self-check report.txt</c>: runs, once, each path that trimming unused
+/// code out of the shipped build, or a library missing from it, could break, writes what passed
+/// to the report, and exits 1 if anything failed. CI runs it on the published build, since the
+/// tests run the untrimmed one.</summary>
+public static class SelfCheck
 {
-    public static int Run(string report)
+    /// <param name="platform">The build's own platform layer, made once for every check.</param>
+    /// <param name="backend">The build's Avalonia backend.</param>
+    /// <param name="textRequired">Whether reading text must work: always on Linux, which bundles
+    /// its recogniser; only where a language is set up on Windows.</param>
+    public static int Run(string report, Func<IPlatform> platform, Func<AppBuilder, AppBuilder> backend, bool textRequired)
     {
         var lines = new List<string>();
         var failed = false;
@@ -37,6 +41,7 @@ internal static class SelfCheck
         }
 
         var capture = Page("Tinysnap self check");
+        var layer = platform();
         var document = new Document(capture, annotations:
         [
             Annotation.New(new AnnotationKind.Arrow(new Point(20, 20), new Point(200, 80)), Tool.Arrow.DefaultStyle()),
@@ -59,22 +64,18 @@ internal static class SelfCheck
             Exporter.Export(document, ExportScale.Native) is { } exported && Exporter.PngData(exported) is { Length: > 0 } ? null : "no PNG");
         Check("QR codes are read", () =>
         {
-            var reading = new WinRtTextReader().Read(QrCode("tinysnap self check"), codes: true).GetAwaiter().GetResult();
+            var reading = layer.Text.Read(QrCode("tinysnap self check"), codes: true).GetAwaiter().GetResult();
             return reading?.Codes.SequenceEqual(["tinysnap self check"]) == true ? null : $"read {reading?.Text ?? "nothing"}";
         });
         Check("text is read", () =>
         {
-            if (OcrEngine.TryCreateFromUserProfileLanguages() is null) return null;
-            var reading = new WinRtTextReader().Read(capture.Image, codes: false).GetAwaiter().GetResult();
+            var reading = layer.Text.Read(capture.Image, codes: false).GetAwaiter().GetResult();
+            if (reading is null && !textRequired) return null;
             return reading?.Text.Contains("Tinysnap self check") == true ? null : $"read {reading?.Text ?? "nothing"}";
         });
         Check("the UI starts, its colour picker included", () =>
         {
-            using var hotkeys = new Win32Hotkeys();
-            using var clipboard = new Win32Clipboard();
-            using var instance = new SingleInstance($"TinysnapSelfCheck{Guid.NewGuid():N}");
-            var platform = new WindowsPlatform(new GdiScreenCapture(), hotkeys, clipboard, instance);
-            AppBuilder.Configure(() => new TinysnapApp(platform)).UsePlatformDetect().SetupWithoutStarting();
+            backend(AppBuilder.Configure(() => new TinysnapApp(layer))).SetupWithoutStarting();
             if (Application.Current!.Styles.OfType<StyleInclude>().Single().Loaded is null) return "colour picker styles missing";
             var picker = new ColorView();
             var window = new Window { Content = picker, Width = 300, Height = 400 };

@@ -9,12 +9,26 @@ namespace Tinysnap.Linux;
 
 internal static class Program
 {
+    /// <summary>Avalonia on X11, which XWayland gives Wayland sessions too.</summary>
+    private static AppBuilder X11(AppBuilder builder) =>
+        builder.UseX11().With(new X11PlatformOptions { WmClass = "Tinysnap" }).UseSkia().UseHarfBuzz();
+
     public static int Main(string[] args)
     {
         if (DBusAddress.Session is not { } address)
         {
             Console.Error.WriteLine("Tinysnap needs a desktop session: no session bus was found.");
             return 1;
+        }
+        if (args is ["--self-check", var report])
+        {
+            // A name of its own, so a running Tinysnap is neither reached nor in the way.
+            using var checkBus = AppBus.TryOwn(address, $"com.faizanashiq.TinysnapSelfCheck{Guid.NewGuid():N}").GetAwaiter().GetResult()!;
+            var gnome = new GSettings();
+            return SelfCheck.Run(report, () => new LinuxPlatform(new LinuxScreenCapture(() => null, () => DBusConnection.Session, wayland: false),
+                                                                 new GnomeShortcuts(gnome), new LinuxClipboard(() => null), checkBus,
+                                                                 DesktopEntries.ForThisUser(), new LinuxFiles(gnome)),
+                                 X11, textRequired: true);
         }
         using var bus = AppBus.TryOwn(address).GetAwaiter().GetResult();
         if (bus is null)
@@ -42,11 +56,7 @@ internal static class Program
             new LinuxClipboard(() => (holder ??= new Window()).Clipboard), bus, desktop, new LinuxFiles(settings));
         try
         {
-            AppBuilder.Configure(() => new TinysnapApp(platform, Started, args))
-                .UseX11()
-                .With(new X11PlatformOptions { WmClass = "Tinysnap" })
-                .UseSkia()
-                .UseHarfBuzz()
+            X11(AppBuilder.Configure(() => new TinysnapApp(platform, Started, args)))
                 .LogToTrace()
                 .StartWithClassicDesktopLifetime(args);
         }

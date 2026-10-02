@@ -47,6 +47,7 @@ jobs:
       # The real program, published as it ships, driven over D-Bus as GNOME's shortcuts drive it.
       - run: sudo apt-get install -y xdotool xclip imagemagick
       - run: dotnet publish dotnet/src/Tinysnap.Linux --configuration Release --runtime linux-x64 --self-contained --output linux-app
+      - run: dbus-run-session -- xvfb-run -a sh -c 'linux-app/Tinysnap --self-check "$PWD/self-check.txt"; code=$?; cat self-check.txt; exit $code'
       - run: dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' bash dotnet/tests/e2e/smoke-linux.sh "$PWD/linux-app/Tinysnap"
       - uses: actions/upload-artifact@v7
         if: always()
