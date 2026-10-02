@@ -60,7 +60,7 @@ internal sealed class CaptureThumbnail : Window
         this.animate = animate;
         clipboardCount = services.Clipboard.ChangeCount;
         size = ThumbnailGeometry.Fit(document.Capture.PointSize);
-        timer = (time ?? TimeProvider.System).CreateTimer(_ => Dispatcher.UIThread.Post(() => Dismiss(copying: true)),
+        timer = (time ?? TimeProvider.System).CreateTimer(_ => Dispatcher.Post(() => Dismiss(copying: true)),
                                                           null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
         Title = "Capture thumbnail";

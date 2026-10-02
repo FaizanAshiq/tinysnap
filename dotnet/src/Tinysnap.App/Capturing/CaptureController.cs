@@ -28,6 +28,9 @@ public sealed class CaptureController
     private readonly List<PinWindow> pins = [];
     /// <summary>Entries whose image is being drawn after their editor closed, and the work.</summary>
     private readonly Dictionary<string, Task> rendering = [];
+    /// <summary>The UI thread, as the app was made on it. Workers, timers and other threads post here
+    /// rather than ask for it, since asking from another thread can make that thread the UI one.</summary>
+    private readonly Dispatcher ui = Dispatcher.UIThread;
     private ITimer? sweeper;
 
     /// <param name="dialogs">Null for the app's own; tests answer them.</param>
@@ -59,8 +62,8 @@ public sealed class CaptureController
             applied = changed.HotKeys;
             Hotkeys.Apply(applied);
         };
-        platform.Hotkeys.Pressed += action => Dispatcher.UIThread.Post(() => Perform(action));
-        platform.Reopened += files => Dispatcher.UIThread.Post(() => Reopen(files));
+        platform.Hotkeys.Pressed += action => ui.Post(() => Perform(action));
+        platform.Reopened += files => ui.Post(() => Reopen(files));
     }
 
     /// <summary>A hotkey or a tray item.</summary>
@@ -137,7 +140,7 @@ public sealed class CaptureController
         if (SecondsLeft is not null) return;
         SecondsLeft = Math.Clamp(preferences.Current.DelaySeconds, Tinysnap.Core.Preferences.DelayMin, Tinysnap.Core.Preferences.DelayMax);
         StateChanged?.Invoke();
-        countdown = (time ?? TimeProvider.System).CreateTimer(_ => Dispatcher.UIThread.Post(Tick), null, TimeSpan.FromSeconds(1),
+        countdown = (time ?? TimeProvider.System).CreateTimer(_ => ui.Post(Tick), null, TimeSpan.FromSeconds(1),
                                                               Timeout.InfiniteTimeSpan);
     }
 
@@ -195,7 +198,7 @@ public sealed class CaptureController
     public void WarmUp()
     {
         // The editor once the overlay is done, still while nothing else is happening.
-        if (!EditorIsWarm) Dispatcher.UIThread.Post(WarmEditor, DispatcherPriority.Background);
+        if (!EditorIsWarm) ui.Post(WarmEditor, DispatcherPriority.Background);
         if (WarmingUp is not null || IsWarm) return;
         using var surface = SKSurface.Create(new SKImageInfo(16, 16));
         surface.Canvas.Clear(SKColors.Black);
@@ -216,7 +219,7 @@ public sealed class CaptureController
         window.ShowActivated = false;
         window.Show();
         WarmingUp = window;
-        warmingUp = (time ?? TimeProvider.System).CreateTimer(_ => Dispatcher.UIThread.Post(() =>
+        warmingUp = (time ?? TimeProvider.System).CreateTimer(_ => ui.Post(() =>
         {
             window.Close();
             warmingUp?.Dispose();
@@ -295,7 +298,7 @@ public sealed class CaptureController
         async Task Pick()
         {
             if (await pick() is not { } capture) return;
-            Dispatcher.UIThread.Post(() => Open(capture, new Rect(0, 0, capture.PixelSize.Width, capture.PixelSize.Height)));
+            ui.Post(() => Open(capture, new Rect(0, 0, capture.PixelSize.Width, capture.PixelSize.Height)));
         }
     }
 
@@ -624,7 +627,7 @@ public sealed class CaptureController
             {
                 // Drawn again the next time the library finds it stale.
             }
-        }).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
+        }).ContinueWith(_ => ui.Post(() =>
         {
             rendering.Remove(entry.Name);
             LibraryChanged?.Invoke();
@@ -645,7 +648,7 @@ public sealed class CaptureController
     {
         Sweep();
         var day = TimeSpan.FromDays(1);
-        sweeper = (time ?? TimeProvider.System).CreateTimer(_ => Dispatcher.UIThread.Post(() => Sweep()), null, day, day);
+        sweeper = (time ?? TimeProvider.System).CreateTimer(_ => ui.Post(() => Sweep()), null, day, day);
     }
 
     /// <summary>Everything closed for Quit. Each editor with edits asks first, and Cancel on any

@@ -105,7 +105,7 @@ internal sealed class TextToast : Window
         };
         Content = card;
 
-        timer = (time ?? TimeProvider.System).CreateTimer(_ => Dispatcher.UIThread.Post(Dismiss), null, Wait, Timeout.InfiniteTimeSpan);
+        timer = (time ?? TimeProvider.System).CreateTimer(_ => Dispatcher.Post(Dismiss), null, Wait, Timeout.InfiniteTimeSpan);
         Opened += (_, _) => Place();
     }
 
