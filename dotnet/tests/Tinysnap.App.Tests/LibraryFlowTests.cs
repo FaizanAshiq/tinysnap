@@ -1,3 +1,4 @@
+using System.Reflection;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -88,6 +89,32 @@ public class LibraryFlowTests
         Dispatcher.UIThread.RunJobs();
         Assert.False(setup.Library.ImageIsStale(entry));
         Assert.NotEqual(File.ReadAllBytes(entry.OriginalPath), File.ReadAllBytes(entry.ImagePath));
+    }
+
+    [AvaloniaFact]
+    public void AnImageLandingLateLeavesTheUIThreadToTheApp()
+    {
+        // Avalonia forgets its UI thread between tests, and the first thread to ask for it then
+        // becomes it: a worker finishing an image after its test made the next test fail to start.
+        var forgotten = typeof(Dispatcher).GetField("s_uiThread", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var setup = Launch();
+        setup.Controller.CaptureFullscreen();
+        var editor = Assert.Single(setup.Controller.Editors);
+        Draw(editor);
+        var ui = forgotten.GetValue(null);
+        object? claimed;
+        forgotten.SetValue(null, null);
+        try
+        {
+            setup.Controller.Render(editor.Entry!, editor.Canvas.Session.History.Document);
+            setup.Controller.WhenRendered().Wait();
+            claimed = forgotten.GetValue(null);
+        }
+        finally
+        {
+            forgotten.SetValue(null, ui);
+        }
+        Assert.Null(claimed);
     }
 
     [AvaloniaFact]

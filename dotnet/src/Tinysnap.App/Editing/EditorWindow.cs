@@ -727,7 +727,7 @@ internal sealed class EditorWindow : Window
     {
         if (Entry is null || Canvas.Session.History.Document == keptDocument) return;
         pendingKeep ??= (services.Time ?? TimeProvider.System).CreateTimer(
-            _ => Dispatcher.UIThread.Post(() => Keep(renderingImage: false)), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            _ => Dispatcher.Post(() => Keep(renderingImage: false)), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         pendingKeep.Change(TimeSpan.FromSeconds(1), Timeout.InfiniteTimeSpan);
     }
 
