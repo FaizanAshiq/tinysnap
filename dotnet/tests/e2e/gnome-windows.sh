@@ -50,7 +50,6 @@ for _ in $(seq 1 60); do eval_js 'Main.layoutManager !== undefined' | grep -q "'
 # GNOME opens its overview as its start ends, and no window takes the keyboard while it shows,
 # so it is closed only once the start is over.
 overview_closed() { eval_js 'Main.layoutManager._startingUp || Main.overview.visible ? (Main.overview.hide(), "open") : "closed"' | grep -q closed; }
-eval_js "Main.overview.show()" > /dev/null # probe: open it on purpose
 within 30 overview_closed || note "GNOME's overview stayed open"
 note "top bar: $(eval_js 'Main.panel.height + " high"')"
 auth=$(ls "$XDG_RUNTIME_DIR"/.mutter-Xwaylandauth.* 2>/dev/null | head -1)
