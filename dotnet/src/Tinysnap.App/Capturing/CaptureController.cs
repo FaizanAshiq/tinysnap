@@ -228,8 +228,8 @@ public sealed class CaptureController
     internal bool EditorIsWarm { get; private set; }
 
     /// <summary>Builds one editor nobody sees, laid out and drawn into a bitmap and then let go,
-    /// so the first capture's editor opens as fast as later ones: its toolbar, style bar and
-    /// canvas code is ready, without shipping it compiled ahead.</summary>
+    /// so the first capture's editor opens as fast as later ones, its toolbar, style bar and
+    /// canvas already set up once.</summary>
     private void WarmEditor()
     {
         if (EditorIsWarm) return;

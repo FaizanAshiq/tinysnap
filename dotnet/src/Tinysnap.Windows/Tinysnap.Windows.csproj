@@ -10,11 +10,12 @@
     <AssemblyName>Tinysnap</AssemblyName>
     <Product>Tinysnap</Product>
     <Version>1.1.0</Version>
-    <!-- The shipped build leaves out the .NET code it never calls: about 22 MB to download instead
-         of 60. CI runs Tinysnap.exe with self-check on that build, as the tests run the full one. -->
+    <!-- The shipped build leaves out the .NET code it never calls. CI runs Tinysnap.exe with
+         self-check on that build, as the tests run the full one. -->
     <PublishTrimmed>true</PublishTrimmed>
-    <!-- Compiled ahead for the processor, so the first capture after starting does not wait while
-         the overlay and editor code compiles: a cold first area capture took 413 ms in CI. -->
+    <!-- Compiled ahead for the processor, so nothing waits while its code compiles. Without it the
+         installer was 10 MB smaller, but in CI the Library first opened in 528 ms instead of 131,
+         and starting took twice as long. -->
     <PublishReadyToRun>true</PublishReadyToRun>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Warnings inside Windows' own API bridge, which the self-check's text reading covers. -->
