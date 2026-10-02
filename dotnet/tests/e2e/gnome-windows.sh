@@ -62,6 +62,19 @@ start_clear=true
 for _ in $(seq 1 30); do none_shown || start_clear=false; sleep 0.1; done
 check "nothing shows while the overlay warms up" $start_clear
 
+call fullscreen
+check "a fullscreen capture opens an editor" within 10 shown "^Capture at"
+check "the editor has the keyboard" within 5 shown "^Capture at.*focused"
+note "windows: $(windows | tr '\n' ';')"
+shot editor
+
+call window
+check "Capture Window opens GNOME's own picker" within 10 portal_asked True
+note "windows: $(windows | tr '\n' ';')"
+shot window
+
+# The area overlay last: no key or drag reaches it here to close it, and a stopped copy cannot
+# simply be restarted, since XWayland drops the next one's connection.
 call area
 check "the overlay covers the whole screen, full screen" within 10 shown "at 0,0 1280x800 fullscreen"
 check "the overlay has the keyboard" within 5 shown "fullscreen.*focused"
@@ -75,23 +88,6 @@ leads() { local hex=$(pixel overlay "$1" "$2"); local r=$((16#${hex:0:2})) g=$((
 check "the overlay shows the frozen screen" leads 300 600 blue
 check "the overlay covers GNOME's top bar" leads 300 10 red
 note "windows: $(windows | tr '\n' ';')"
-# Closed from outside, since no key reaches it here; the next copy starts once this one has let
-# go of its name, or it would hand over to it and quit.
-pkill -x Tinysnap
-for _ in $(seq 1 50); do gdbus introspect --session --dest com.faizanashiq.Tinysnap --object-path /com/faizanashiq/Tinysnap >/dev/null 2>&1 || break; sleep 0.2; done
-DISPLAY=:0 XAUTHORITY=$auth "$app" >> gnome/app.log 2>&1 &
-started
-
-call fullscreen
-check "a fullscreen capture opens an editor" within 10 shown "^Capture at"
-check "the editor has the keyboard" within 5 shown "^Capture at.*focused"
-note "windows: $(windows | tr '\n' ';')"
-shot editor
-
-call window
-check "Capture Window opens GNOME's own picker" within 10 portal_asked True
-note "windows: $(windows | tr '\n' ';')"
-shot window
 
 grep -v "No such schema" gnome/app.log | sed 's/^/     /' >> "$results"
 echo "$(grep -c '^ok' "$results") checks passed"
