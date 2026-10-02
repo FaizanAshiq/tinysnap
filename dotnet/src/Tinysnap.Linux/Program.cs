@@ -22,11 +22,9 @@ internal static class Program
         if (!Directory.Exists("/dev/dri") || !Directory.EnumerateFileSystemEntries("/dev/dri", "renderD*").Any())
             options.RenderingMode = [X11RenderingMode.Software];
         builder = builder.UseX11().With(options).UseSkia().UseHarfBuzz();
-        // Avalonia's default font is Skia's, whichever font fontconfig ranks first: with
-        // Ghostscript's fonts installed that was C059, a serif face with no Medium, and the first
-        // editor crashed. The desktop's own sans-serif is what other apps show.
-        using var sans = SKFontManager.Default.MatchFamily("sans-serif");
-        return sans?.FamilyName is { Length: > 0 } family ? builder.With(new FontManagerOptions { DefaultFamilyName = family }) : builder;
+        // Avalonia's own default is fontconfig's first ranked font, which can be a serif face
+        // missing the weights the windows use: chosen by name instead, as LinuxFonts explains.
+        return LinuxFonts.ForThisDesktop(new GSettings()) is { } family ? builder.With(new FontManagerOptions { DefaultFamilyName = family }) : builder;
     }
 
     public static int Main(string[] args)
