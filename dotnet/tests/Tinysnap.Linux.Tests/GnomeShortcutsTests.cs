@@ -32,6 +32,29 @@ public class GnomeShortcutsTests
     }
 
     [Fact]
+    public void ARoundOfRegistrationsReadsGnomesShortcutsOnce()
+    {
+        using var shortcuts = Shortcuts();
+        shortcuts.UnregisterAll();
+        Assert.True(shortcuts.Register(HotKeyAction.Fullscreen, new HotKeyBinding(0x31, [ModifierKey.Control, ModifierKey.Shift])));
+        Assert.True(shortcuts.Register(HotKeyAction.Text, new HotKeyBinding(0x4F, [ModifierKey.Control, ModifierKey.Shift])));
+        Assert.True(shortcuts.Register(HotKeyAction.Library, new HotKeyBinding(0x4C, [ModifierKey.Control, ModifierKey.Shift])));
+        Assert.Equal(1, fake.Calls.Count(call => call == "list-recursively org.gnome.desktop.wm.keybindings"));
+    }
+
+    [Fact]
+    public void ACombinationGnomeTakesBetweenRoundsIsSeenInTheNext()
+    {
+        using var shortcuts = Shortcuts();
+        var binding = new HotKeyBinding(0x31, [ModifierKey.Control, ModifierKey.Shift]);
+        shortcuts.UnregisterAll();
+        Assert.True(shortcuts.Register(HotKeyAction.Fullscreen, binding));
+        fake.Values["org.gnome.desktop.wm.keybindings|switch-to-workspace-1"] = "['<Primary><Shift>1']";
+        shortcuts.UnregisterAll();
+        Assert.False(shortcuts.Register(HotKeyAction.Fullscreen, binding));
+    }
+
+    [Fact]
     public void ACombinationGnomeOrThePersonUsesIsTaken()
     {
         fake.Values["org.gnome.desktop.wm.keybindings|switch-to-workspace-1"] = "['<Super>Home', '<Primary><Shift>1']";

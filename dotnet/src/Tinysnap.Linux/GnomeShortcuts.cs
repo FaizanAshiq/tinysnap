@@ -31,6 +31,10 @@ internal sealed class GnomeShortcuts : IHotkeys
     /// they go back, so a copy killed while holding the key is put right by the next.</summary>
     private readonly string screenshotUiBefore;
 
+    /// <summary>The combinations GNOME and the person use, read once per round of registering:
+    /// each read runs gsettings over six schemas, and Settings registers every hotkey at once.</summary>
+    private HashSet<string>? usedElsewhere;
+
     public GnomeShortcuts(GSettings settings, string busName = AppBus.Name, string? stateFolder = null)
     {
         this.settings = settings;
@@ -64,6 +68,8 @@ internal sealed class GnomeShortcuts : IHotkeys
     /// Screen back; the person's own shortcuts stay as they were.</summary>
     public void UnregisterAll()
     {
+        // A new round follows, which reads GNOME's shortcuts afresh.
+        usedElsewhere = null;
         var list = settings.GetStrings(MediaKeys, CustomList);
         var ours = list.Where(path => path.StartsWith(Ours)).ToList();
         foreach (var path in ours) settings.ResetAll($"{Custom}:{path}");
@@ -95,12 +101,14 @@ internal sealed class GnomeShortcuts : IHotkeys
     /// <summary>Whether GNOME, or one of the person's own shortcuts, already answers <paramref name="accelerator"/>.</summary>
     private bool UsedElsewhere(string accelerator)
     {
-        var wanted = Normalized(accelerator);
-        var theirs = settings.GetStrings(MediaKeys, CustomList).Where(path => !path.StartsWith(Ours))
-            .Select(path => settings.Get($"{Custom}:{path}", "binding")).OfType<string>();
-        return GnomeSchemas.SelectMany(settings.ListValues).Concat(theirs)
-            .SelectMany(GSettings.ParseStrings)
-            .Any(existing => Normalized(existing) == wanted);
+        if (usedElsewhere is null)
+        {
+            var theirs = settings.GetStrings(MediaKeys, CustomList).Where(path => !path.StartsWith(Ours))
+                .Select(path => settings.Get($"{Custom}:{path}", "binding")).OfType<string>();
+            usedElsewhere = GnomeSchemas.SelectMany(settings.ListValues).Concat(theirs)
+                .SelectMany(GSettings.ParseStrings).Select(Normalized).ToHashSet();
+        }
+        return usedElsewhere.Contains(Normalized(accelerator));
     }
 
     /// <summary>An accelerator with its modifiers in one order and their aliases folded, so

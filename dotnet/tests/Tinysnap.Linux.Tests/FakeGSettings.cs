@@ -5,8 +5,12 @@ internal sealed class FakeGSettings
 {
     public Dictionary<string, string> Values { get; } = [];
 
+    /// <summary>Every call, as its arguments joined by spaces.</summary>
+    public List<string> Calls { get; } = [];
+
     public (int Exit, string Output) Run(string program, string[] args)
     {
+        Calls.Add(string.Join(' ', args));
         switch (args)
         {
             case ["get", var schema, var key]:
