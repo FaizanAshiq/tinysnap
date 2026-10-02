@@ -76,6 +76,11 @@ internal static class Program
         // still opens from the menu.
         void Started(TinysnapApp app)
         {
+            // One line in the session log, for when a start feels slow.
+            var (runs, time) = Commands.Spent;
+            var ready = DateTime.Now - System.Diagnostics.Process.GetCurrentProcess().StartTime;
+            Console.Error.WriteLine($"tinysnap: ready {ready.TotalMilliseconds:0} ms after starting, "
+                                    + $"{time.TotalMilliseconds:0} ms of it in {runs} runs of GNOME's tools");
             using var icon = AssetLoader.Open(new Uri("avares://Tinysnap.App/Assets/Tinysnap.png"));
             using var bytes = new MemoryStream();
             icon.CopyTo(bytes);
