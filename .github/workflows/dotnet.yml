@@ -114,7 +114,9 @@ jobs:
           path: shots/*
           retention-days: 14
 
-  # For now: where a headless GNOME Shell puts Tinysnap's windows through XWayland.
+  # The x64 AppImage on Wayland in a headless GNOME Shell, with a stand-in for the screenshot
+  # portal: the overlay, editors and Capture Window as GNOME places them. Typing and dragging
+  # stay a check on a real desktop: GNOME's virtual input does not reach XWayland windows here.
   gnome-windows:
     needs: linux-package
     runs-on: ubuntu-24.04
@@ -131,6 +133,7 @@ jobs:
         with:
           name: gnome-windows
           path: gnome/*
+          retention-days: 14
 
   # The installer and the portable zip, built on every push and kept as artifacts. Nothing is
   # released from here: publishing is a separate, deliberate step.

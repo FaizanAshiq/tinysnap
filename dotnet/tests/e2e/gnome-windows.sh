@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
 # gnome-windows.sh <AppImage>: runs Tinysnap on Wayland in a headless GNOME Shell, through
-# XWayland, and asks GNOME where each of its windows lands: at start, with the area overlay up,
-# and with an editor open. A stand-in answers the screenshot portal, which GNOME cannot run here.
-# Run under dbus-run-session. Writes gnome/report.txt and screenshots beside it.
+# XWayland, and checks what GNOME makes of its windows: nothing showing at start, the area
+# overlay full screen over the top bar showing the frozen screen, an editor for a fullscreen
+# capture, and Capture Window through GNOME's own picker. A stand-in answers the screenshot
+# portal, which GNOME's backend cannot run here. GNOME's virtual keyboard and pointer do not reach
+# XWayland windows, so typing and dragging stay a check on a real desktop. Run under
+# dbus-run-session. Writes gnome/results.txt and screenshots beside it.
 set -u
 app=$(readlink -f "$1")
 mkdir -p gnome
-report=$PWD/gnome/report.txt
-say() { echo "$*" | tee -a "$report"; }
+results=$PWD/gnome/results.txt
+failed=0
+note() { echo "     $*" | tee -a "$results"; }
+check() {
+  local name=$1
+  shift
+  if "$@"; then echo "ok   $name" | tee -a "$results"; else echo "FAIL $name" | tee -a "$results"; failed=1; fi
+}
 export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/runtime-$UID}; mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 export XDG_CURRENT_DESKTOP=GNOME XDG_SESSION_TYPE=wayland WAYLAND_DISPLAY=wayland-0
 dbus-update-activation-environment XDG_CURRENT_DESKTOP XDG_SESSION_TYPE WAYLAND_DISPLAY
@@ -15,75 +24,68 @@ dbus-update-activation-environment XDG_CURRENT_DESKTOP XDG_SESSION_TYPE WAYLAND_
 # overlay covers it. The stand-in owns the portal's name before anything could start the real one.
 convert -size 1280x800 xc:'#3366cc' -fill '#cc0000' -draw 'rectangle 0,0 1279,31' gnome/desktop.png
 python3 "$(dirname "$0")/fake-portal.py" gnome/desktop.png > gnome/portal.log 2>&1 &
-for i in $(seq 1 50); do gdbus introspect --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop >/dev/null 2>&1 && break; sleep 0.2; done
+for _ in $(seq 1 50); do gdbus introspect --session --dest org.freedesktop.portal.Desktop --object-path /org/freedesktop/portal/desktop >/dev/null 2>&1 && break; sleep 0.2; done
+
 eval_js() { gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.gnome.Shell.Eval "$1" 2>&1; }
-gnome-shell --headless --wayland --virtual-monitor 1280x800 --unsafe-mode > gnome/shell.log 2>&1 &
-# Up once it answers: its name is taken a moment before it can.
-for i in $(seq 1 60); do eval_js 'Main.layoutManager !== undefined' | grep -q "'true'" && break; sleep 1; done
 shot() { gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot \
   --method org.gnome.Shell.Screenshot.Screenshot false false "$PWD/gnome/$1.png" >/dev/null 2>&1; }
-key() { eval_js "let b; try { b = global.stage.context.get_backend(); } catch (e) { b = imports.gi.Clutter.get_default_backend(); }
-const C = imports.gi.Clutter; const k = b.get_default_seat().create_virtual_device(C.InputDeviceType.KEYBOARD_DEVICE);
-k.notify_keyval(global.get_current_time() * 1000, C.KEY_$1, C.KeyState.PRESSED);
-k.notify_keyval(global.get_current_time() * 1000, C.KEY_$1, C.KeyState.RELEASED); 'sent'" >/dev/null; }
-# A drag through GNOME Shell's own virtual pointer, from one point to another, in screen pixels.
-drag() { eval_js "let b; try { b = global.stage.context.get_backend(); } catch (e) { b = imports.gi.Clutter.get_default_backend(); }
-const C = imports.gi.Clutter; const p = b.get_default_seat().create_virtual_device(C.InputDeviceType.POINTER_DEVICE);
-const t = () => global.get_current_time() * 1000;
-p.notify_absolute_motion(t(), $1, $2);
-p.notify_button(t(), C.BUTTON_PRIMARY, C.ButtonState.PRESSED);
-for (let i = 1; i <= 10; i++) p.notify_absolute_motion(t(), $1 + ($3 - $1) * i / 10, $2 + ($4 - $2) * i / 10);
-p.notify_button(t(), C.BUTTON_PRIMARY, C.ButtonState.RELEASED); 'dragged'" >/dev/null; }
+pixel() { convert "gnome/$1.png" -crop "1x1+$2+$3" +repage -format '%[hex:u.p{0,0}]' info: 2>/dev/null; }
+# Tinysnap's windows as GNOME sees them: title, place, size and state, one per line.
 windows() {
-  eval_js 'global.get_window_actors().map(a => { const w = a.meta_window; const r = w.get_frame_rect();
-    return `${w.get_title()} [${w.get_wm_class()}] at ${r.x},${r.y} ${r.width}x${r.height}${w.is_above() ? " above" : ""}${w.is_fullscreen() ? " fullscreen" : ""}${a.visible ? "" : " hidden"}${global.display.focus_window === w ? " focused" : ""}`; }).join(" | ")'
+  eval_js 'global.get_window_actors().map(a => a.meta_window).filter(w => w.get_wm_class() === "Tinysnap").map(w => { const r = w.get_frame_rect();
+    return `${w.get_title()} at ${r.x},${r.y} ${r.width}x${r.height}${w.is_fullscreen() ? " fullscreen" : ""}${w.is_above() ? " above" : ""}`; }).join("\n")' |
+    sed -e "s/^(true, '\"//" -e "s/\"')$//" -e 's/\\n/\n/g'
 }
 call() { gdbus call --session --dest com.faizanashiq.Tinysnap --object-path /com/faizanashiq/Tinysnap --method com.faizanashiq.Tinysnap.Perform "$1" >/dev/null 2>&1; }
+within() { local tries=$(($1 * 10)); shift; for _ in $(seq 1 $tries); do "$@" && return 0; sleep 0.1; done; return 1; }
+shown() { windows | grep -q "$1"; }
+none_shown() { [ -z "$(windows)" ]; }
+self_check_passes() { ! grep -q FAILED gnome/self-check.txt && grep -q "^ok" gnome/self-check.txt; }
+portal_asked() { grep -q "interactive $1" gnome/portal.log; }
+started() { for _ in $(seq 1 100); do gdbus introspect --session --dest com.faizanashiq.Tinysnap --object-path /com/faizanashiq/Tinysnap >/dev/null 2>&1 && return 0; sleep 0.2; done; return 1; }
 
-say "shell up after ${i}s: $(eval_js 'Main.overview.hide(); "top bar " + Main.panel.height + " high"')"
-sleep 1
+gnome-shell --headless --wayland --virtual-monitor 1280x800 --unsafe-mode > gnome/shell.log 2>&1 &
+# Up once it answers: its name is taken a moment before it can.
+for _ in $(seq 1 60); do eval_js 'Main.layoutManager !== undefined' | grep -q "'true'" && break; sleep 1; done
+note "top bar: $(eval_js 'Main.overview.hide(); Main.panel.height + " high"')"
 auth=$(ls "$XDG_RUNTIME_DIR"/.mutter-Xwaylandauth.* 2>/dev/null | head -1)
-# What XWayland tells an X11 app about the screen, which Tinysnap cuts the portal's picture by.
-say "xrandr: $(DISPLAY=:0 XAUTHORITY=$auth xrandr --listmonitors 2>&1 | tr '\n' ' ')"
-say "xrdb: $(DISPLAY=:0 XAUTHORITY=$auth xrdb -query 2>&1 | tr '\n' ' ')"
-say "fonts: $(fc-list | wc -l), sans-serif is $(fc-match sans-serif 2>&1)"
-# The self-check, in this GNOME session, fonts included.
+note "screen as XWayland reports it: $(DISPLAY=:0 XAUTHORITY=$auth xrandr --listmonitors 2>&1 | tail -n +2 | tr -s ' ')"
+
 DISPLAY=:0 XAUTHORITY=$auth timeout 120 "$app" --self-check "$PWD/gnome/self-check.txt" > gnome/self-check.log 2>&1
-say "self-check: $(tr '\n' ' ' < gnome/self-check.txt 2>/dev/null) $(tail -n 3 gnome/self-check.log | tr '\n' ' ')"
+check "the self-check passes in a GNOME session, fonts included" self_check_passes
+sed 's/^/     /' gnome/self-check.txt >> "$results"
+
 DISPLAY=:0 XAUTHORITY=$auth "$app" > gnome/app.log 2>&1 &
-for i in $(seq 1 100); do gdbus introspect --session --dest com.faizanashiq.Tinysnap --object-path /com/faizanashiq/Tinysnap >/dev/null 2>&1 && break; sleep 0.2; done
-say "tinysnap up after $((i / 5))s"
-# The first seconds, when the overlay warms up out of sight.
-for i in $(seq 1 15); do say "start +$((i * 200)) ms: $(windows)"; [ $i = 3 ] && shot start; sleep 0.2; done
-
-# A drag first: if pointer input reaches the overlay, an editor of that area opens.
-call area
-sleep 1.5
-drag 100 300 400 450
-sleep 1.5
-say "after a drag: $(windows)"
-shot dragged
+started
+# The overlay warms up in the first seconds; GNOME would pull a window placed off screen into view.
+start_clear=true
+for _ in $(seq 1 30); do none_shown || start_clear=false; sleep 0.1; done
+check "nothing shows while the overlay warms up" $start_clear
 
 call area
-sleep 1.5
-say "overlay: $(windows)"
-shot overlay
-# Off the crosshair: the picture's blue, dimmed, and its red band where the top bar is.
-say "overlay pixels: $(convert gnome/overlay.png -crop 1x1+300+600 +repage -format '%[hex:u.p{0,0}]' info: 2>&1) and $(convert gnome/overlay.png -crop 1x1+300+10 +repage -format '%[hex:u.p{0,0}]' info: 2>&1)"
-key Escape
+check "the overlay covers the whole screen, full screen" within 10 shown "at 0,0 1280x800 fullscreen"
 sleep 1
-say "after Esc: $(windows)"
+shot overlay
+note "overlay pixels: middle $(pixel overlay 300 600), top $(pixel overlay 300 10)"
+# The frozen blue, dimmed: the picture is drawn, not left black.
+check "the overlay shows the frozen screen" [ "$(pixel overlay 300 600 | cut -c1-6)" = 023C88 ]
+note "windows: $(windows | tr '\n' ';')"
+# Closed from outside, since no key reaches it here.
+pkill -x Tinysnap
+sleep 1
+DISPLAY=:0 XAUTHORITY=$auth "$app" >> gnome/app.log 2>&1 &
+started
 
 call fullscreen
-sleep 2
-say "editor: $(windows)"
+check "a fullscreen capture opens an editor" within 10 shown "^Capture at"
+note "windows: $(windows | tr '\n' ';')"
 shot editor
-key Escape
-key Escape
 
 call window
-sleep 2
-say "capture window: $(windows)"
+check "Capture Window opens GNOME's own picker" within 10 portal_asked True
+note "windows: $(windows | tr '\n' ';')"
 shot window
-say "portal: $(tr '\n' ' ' < gnome/portal.log)"
-say "done"
+
+grep -v "No such schema" gnome/app.log | sed 's/^/     /' >> "$results"
+echo "$(grep -c '^ok' "$results") checks passed"
+exit $failed
