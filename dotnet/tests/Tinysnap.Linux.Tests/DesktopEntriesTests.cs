@@ -19,6 +19,7 @@ public class DesktopEntriesTests
         Assert.Contains("Exec=\"/home/sam/Applications/Tinysnap.AppImage\" %F", text);
         Assert.Contains("MimeType=image/png;image/jpeg;", text);
         Assert.Contains("StartupWMClass=Tinysnap", text);
+        Assert.DoesNotContain("\r", text);
         Assert.Equal([1, 2, 3], File.ReadAllBytes(Icon));
 
         entries.Write("/home/sam/Tinysnap.AppImage", [1, 2, 3]);

@@ -24,6 +24,7 @@ public class LinuxFilesTests
     [Fact]
     public void RevealAsksTheFileManagerToSelectTheItem()
     {
+        Linux.Only();
         new LinuxFiles(new GSettings(new FakeGSettings().Run), Record).Reveal("/home/sam/Sam's shots/a b.png");
         var call = Assert.Single(calls);
         Assert.Contains("org.freedesktop.FileManager1.ShowItems ['file:///home/sam/Sam\\'s%20shots/a%20b.png'] ''", call);
@@ -32,6 +33,7 @@ public class LinuxFilesTests
     [Fact]
     public void WithoutAFileManagerServiceRevealOpensTheFolder()
     {
+        Linux.Only();
         fileManagerExit = 1;
         new LinuxFiles(new GSettings(new FakeGSettings().Run), Record).Reveal("/home/sam/shots/a.png");
         Assert.Equal("gio open /home/sam/shots", calls[^1]);

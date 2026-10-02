@@ -69,6 +69,7 @@ internal sealed partial class DesktopEntries(string dataHome, string configHome,
         if (Directory.Exists(Path.GetDirectoryName(Menu))) run("update-desktop-database", [Path.GetDirectoryName(Menu)!]);
     }
 
+    /// <summary>A desktop entry, in LF lines whatever the source file was checked out with.</summary>
     private static string Entry(string exe, string? files) => $"""
         [Desktop Entry]
         Type=Application
@@ -82,7 +83,7 @@ internal sealed partial class DesktopEntries(string dataHome, string configHome,
         Categories=Graphics;Utility;
         StartupWMClass=Tinysnap
 
-        """;
+        """.ReplaceLineEndings("\n");
 
     /// <summary>A path inside the Exec key's quotes, as the desktop entry spec has it: <c>"</c>,
     /// <c>`</c>, <c>$</c> and <c>\</c> escaped, every backslash doubled again because the key is a
