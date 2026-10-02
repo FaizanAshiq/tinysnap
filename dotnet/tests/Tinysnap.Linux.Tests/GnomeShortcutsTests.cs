@@ -79,6 +79,23 @@ public class GnomeShortcutsTests
     }
 
     [Fact]
+    public void QuittingGivesPrintScreenBackBeforeAnythingElse()
+    {
+        // A logout allows only moments before it kills what is left, so the key GNOME needs
+        // most comes back first, then its menu of shortcuts, then the settings behind them.
+        fake.Values[$"{Shell}|show-screenshot-ui"] = "['Print']";
+        using var shortcuts = Shortcuts();
+        shortcuts.Register(HotKeyAction.Area, new HotKeyBinding(0x2C, []));
+        shortcuts.Register(HotKeyAction.Fullscreen, new HotKeyBinding(0x31, [ModifierKey.Control, ModifierKey.Shift]));
+        fake.Calls.Clear();
+        shortcuts.UnregisterAll();
+        var writes = fake.Calls.Where(call => !call.StartsWith("get ")).ToList();
+        Assert.StartsWith($"set {Shell} show-screenshot-ui", writes[0]);
+        Assert.StartsWith($"set {MediaKeys} custom-keybindings", writes[1]);
+        Assert.All(writes.Skip(2), call => Assert.StartsWith("reset-recursively", call));
+    }
+
+    [Fact]
     public void PrintScreenLeftTakenByACopyThatWasKilledIsStillGivenBack()
     {
         fake.Values[$"{Shell}|show-screenshot-ui"] = "['Print', '<Super>Print']";

@@ -70,11 +70,13 @@ internal sealed class GnomeShortcuts : IHotkeys
     {
         // A new round follows, which reads GNOME's shortcuts afresh.
         usedElsewhere = null;
+        // Most needed first, as a logout allows only moments: GNOME's own key, then GNOME's list
+        // of shortcuts, which alone stops ours, then the settings behind them.
+        GivePrintScreenBack();
         var list = settings.GetStrings(MediaKeys, CustomList);
         var ours = list.Where(path => path.StartsWith(Ours)).ToList();
-        foreach (var path in ours) settings.ResetAll($"{Custom}:{path}");
         if (ours.Count > 0) settings.SetStrings(MediaKeys, CustomList, list.Except(ours));
-        GivePrintScreenBack();
+        foreach (var path in ours) settings.ResetAll($"{Custom}:{path}");
     }
 
     public void Dispose() => UnregisterAll();
