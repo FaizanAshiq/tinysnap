@@ -33,8 +33,8 @@ pixel() { convert "gnome/$1.png" -crop "1x1+$2+$3" +repage -format '%[hex:u.p{0,
 # Tinysnap's windows as GNOME sees them: title, place, size and state, one per line.
 windows() {
   eval_js 'global.get_window_actors().map(a => a.meta_window).filter(w => w.get_wm_class() === "Tinysnap").map(w => { const r = w.get_frame_rect();
-    return `${w.get_title()} at ${r.x},${r.y} ${r.width}x${r.height}${w.is_fullscreen() ? " fullscreen" : ""}${w.is_above() ? " above" : ""}`; }).join("\n")' |
-    sed -e "s/^(true, '\"//" -e "s/\"')$//" -e 's/\\n/\n/g'
+    return `${w.get_title()} at ${r.x},${r.y} ${r.width}x${r.height}${w.is_fullscreen() ? " fullscreen" : ""}${w.is_above() ? " above" : ""}`; }).join(";")' |
+    sed -e "s/^(true, '\"//" -e "s/\"')$//" | tr ';' '\n'
 }
 call() { gdbus call --session --dest com.faizanashiq.Tinysnap --object-path /com/faizanashiq/Tinysnap --method com.faizanashiq.Tinysnap.Perform "$1" >/dev/null 2>&1; }
 within() { local tries=$(($1 * 10)); shift; for _ in $(seq 1 $tries); do "$@" && return 0; sleep 0.1; done; return 1; }
@@ -67,8 +67,12 @@ check "the overlay covers the whole screen, full screen" within 10 shown "at 0,0
 sleep 1
 shot overlay
 note "overlay pixels: middle $(pixel overlay 300 600), top $(pixel overlay 300 10)"
-# The frozen blue, dimmed: the picture is drawn, not left black.
-check "the overlay shows the frozen screen" [ "$(pixel overlay 300 600 | cut -c1-6)" = 023C88 ]
+# Which of red, green and blue leads in a pixel, dimmed or not.
+leads() { local hex=$(pixel overlay "$1" "$2"); local r=$((16#${hex:0:2})) g=$((16#${hex:2:2})) b=$((16#${hex:4:2}));
+  case $3 in blue) [ $b -gt $((r + 40)) ] && [ $b -gt $((g + 40)) ];; red) [ $r -gt $((g + 40)) ] && [ $r -gt $((b + 40)) ];; esac; }
+# The picture's blue drawn, not left black, and its red band where the top bar would show.
+check "the overlay shows the frozen screen" leads 300 600 blue
+check "the overlay covers GNOME's top bar" leads 300 10 red
 note "windows: $(windows | tr '\n' ';')"
 # Closed from outside, since no key reaches it here.
 pkill -x Tinysnap
