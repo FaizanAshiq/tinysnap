@@ -2,7 +2,9 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media;
 using Avalonia.Platform;
+using SkiaSharp;
 using Tinysnap.App;
 using Tmds.DBus.Protocol;
 using Velopack;
@@ -19,7 +21,12 @@ internal static class Program
         // only after building it: seconds on a first start. Skia draws in software straight away.
         if (!Directory.Exists("/dev/dri") || !Directory.EnumerateFileSystemEntries("/dev/dri", "renderD*").Any())
             options.RenderingMode = [X11RenderingMode.Software];
-        return builder.UseX11().With(options).UseSkia().UseHarfBuzz();
+        builder = builder.UseX11().With(options).UseSkia().UseHarfBuzz();
+        // Avalonia's default font is Skia's, whichever font fontconfig ranks first: with
+        // Ghostscript's fonts installed that was C059, a serif face with no Medium, and the first
+        // editor crashed. The desktop's own sans-serif is what other apps show.
+        using var sans = SKFontManager.Default.MatchFamily("sans-serif");
+        return sans?.FamilyName is { Length: > 0 } family ? builder.With(new FontManagerOptions { DefaultFamilyName = family }) : builder;
     }
 
     public static int Main(string[] args)

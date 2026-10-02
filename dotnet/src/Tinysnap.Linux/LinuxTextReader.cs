@@ -24,6 +24,16 @@ internal sealed class LinuxTextReader(string? tessdata = null) : ITextReader
     private static readonly Lock Gate = new();
     private static (nint Api, string Key)? engine;
 
+    // Ended on the way out, or Tesseract writes a warning per language it still holds.
+    static LinuxTextReader() => AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+    {
+        lock (Gate)
+        {
+            if (engine is { } kept) Tesseract.TessBaseAPIDelete(kept.Api);
+            engine = null;
+        }
+    };
+
     public Task<TextReading?> Read(SKImage image, bool codes) =>
         codes ? Task.FromResult<TextReading?>(QrCodes.Read(image)) : Task.Run(() => ReadText(image));
 
