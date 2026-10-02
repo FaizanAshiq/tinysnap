@@ -98,6 +98,8 @@ public struct EditorSession {
     /// colour was picked. `merging` is for the colour panel, whose stream of changes
     /// to one annotation undoes as one step.
     public mutating func restyle(merging: Bool = false, _ change: (inout Style) -> Void) {
+        // A locked shape keeps its style, and the tool keeps what it had.
+        if selectedAnnotation?.isLocked == true { return }
         guard let id = selection, var annotation = display.annotation(id) else {
             var style = style(for: tool)
             change(&style)
@@ -150,10 +152,11 @@ public struct EditorSession {
 
     // MARK: Magnifier
 
-    /// The topmost magnifier under `point`, which the scroll wheel zooms.
+    /// The topmost magnifier under `point` the scroll wheel may zoom: not a locked or
+    /// hidden one.
     public func magnifier(at point: CGPoint) -> Annotation.ID? {
         display.annotations.last { annotation in
-            guard case .magnifier = annotation.kind else { return false }
+            guard case .magnifier = annotation.kind, !annotation.isLocked, !annotation.isHidden else { return false }
             return annotation.contains(point, scale: scale)
         }?.id
     }
@@ -161,7 +164,7 @@ public struct EditorSession {
     /// Zooms a magnifier half a step per scroll step, from 1.5x to 4x. A run of scroll
     /// steps on one lens undoes as one step.
     public mutating func zoomMagnifier(_ id: Annotation.ID, steps: Int) {
-        guard phase == .idle, var lens = display.annotation(id),
+        guard phase == .idle, var lens = display.annotation(id), !lens.isLocked, !lens.isHidden,
               case let .magnifier(center, radius, zoom) = lens.kind else { return }
         let zoomed = min(max(zoom + 0.5 * CGFloat(steps), 1.5), 4)
         lens.kind = .magnifier(center: center, radius: radius, zoom: zoomed)
@@ -189,37 +192,40 @@ public struct EditorSession {
             return
         }
 
-        if let selected = selectedAnnotation,
+        if let selected = selectedAnnotation, !selected.isLocked, !selected.isHidden,
            let handle = Self.handle(near: point, in: selected.handles(scale: scale), reach: reach) {
             phase = .resizing(original: selected, handle: handle)
             return
         }
 
-        if clickCount >= 2, let id = display.topmost(at: point),
-           case .text = display.annotation(id)?.kind {
+        if clickCount >= 2, let id = display.topmost(at: point), let text = display.annotation(id),
+           case .text = text.kind, !text.isLocked {
             selection = id
             phase = .typing(id)
             return
         }
 
-        // The select tool, or Command held with any other, picks up what is applied.
+        // The select tool, or Command held with any other, picks up what is applied. A
+        // locked shape is selected, so it can be unlocked, but stays where it is.
         if tool == .select || tool == .image || modifiers.contains(.command) {
             selection = display.topmost(at: point)
-            phase = selection.map { .moving($0, last: point) } ?? .idle
+            phase = selectedAnnotation.flatMap { $0.isLocked ? nil : .moving($0.id, last: point) } ?? .idle
             return
         }
 
         // With the text tool, clicking existing text edits it rather than starting a
-        // new one on top.
-        if tool == .text, let id = display.topmost(at: point), case .text = display.annotation(id)?.kind {
+        // new one on top. Locked text is drawn over instead.
+        if tool == .text, let id = display.topmost(at: point), let text = display.annotation(id),
+           case .text = text.kind, !text.isLocked {
             selection = id
             phase = .typing(id)
             return
         }
 
         // The selection is picked up anywhere on it, so a box just drawn moves at once.
-        if let id = selection, display.annotation(id)?.contains(point, scale: scale) == true {
-            phase = .moving(id, last: point)
+        if let selected = selectedAnnotation, !selected.isLocked, !selected.isHidden,
+           selected.contains(point, scale: scale) {
+            phase = .moving(selected.id, last: point)
             return
         }
 
@@ -392,14 +398,14 @@ public struct EditorSession {
     // MARK: Keyboard
 
     public mutating func deleteSelection() {
-        guard phase == .idle, let id = selection else { return }
+        guard phase == .idle, let id = selection, selectedAnnotation?.isLocked != true else { return }
         display.remove(id)
         selection = nil
         history.commit(display)
     }
 
     public mutating func nudge(dx: CGFloat, dy: CGFloat) {
-        guard phase == .idle, let annotation = selectedAnnotation else { return }
+        guard phase == .idle, let annotation = selectedAnnotation, !annotation.isLocked, !annotation.isHidden else { return }
         display.replace(annotation.moved(by: CGVector(dx: dx, dy: dy)))
         history.commit(display)
     }
@@ -428,6 +434,80 @@ public struct EditorSession {
         history.redo()
         display = history.document
         if let id = selection, display.annotation(id) == nil { selection = nil }
+    }
+
+    // MARK: Layers
+
+    public enum Arrangement: Sendable { case front, forward, backward, back }
+
+    /// Points a duplicate sits right of and below its original.
+    public static let duplicateOffset: CGFloat = 12
+
+    /// Selects a shape from the layers panel, whatever the tool, or nothing.
+    public mutating func select(_ id: Annotation.ID?) {
+        finishTyping()
+        guard phase == .idle else { return }
+        selection = id.flatMap { display.annotation($0)?.id }
+    }
+
+    /// Moves the selection in the order. Front and back are the ends of the list.
+    public mutating func arrange(_ arrangement: Arrangement) {
+        finishTyping()
+        guard let id = selection, let index = display.annotations.firstIndex(where: { $0.id == id }) else { return }
+        let last = display.annotations.count - 1
+        let target = switch arrangement {
+        case .front: last
+        case .forward: min(index + 1, last)
+        case .backward: max(index - 1, 0)
+        case .back: 0
+        }
+        moveLayer(id, to: target)
+    }
+
+    /// Puts a shape at `index` in the list, bottom first, as a drag in the layers panel
+    /// does. One undo step, and none when it lands where it was.
+    public mutating func moveLayer(_ id: Annotation.ID, to index: Int) {
+        finishTyping()
+        guard phase == .idle, let from = display.annotations.firstIndex(where: { $0.id == id }) else { return }
+        let target = min(max(index, 0), display.annotations.count - 1)
+        guard target != from else { return }
+        display.annotations.insert(display.annotations.remove(at: from), at: target)
+        history.commit(display)
+    }
+
+    public mutating func setLocked(_ id: Annotation.ID, _ locked: Bool) {
+        edit(id) { $0.isLocked = locked }
+    }
+
+    public mutating func setHidden(_ id: Annotation.ID, _ hidden: Bool) {
+        edit(id) { $0.isHidden = hidden }
+    }
+
+    public mutating func toggleLock() {
+        guard let annotation = selectedAnnotation else { return }
+        setLocked(annotation.id, !annotation.isLocked)
+    }
+
+    /// A copy right above the original, a little right and down, unlocked and shown, so
+    /// it can be moved at once. It becomes the selection.
+    public mutating func duplicateSelection() {
+        finishTyping()
+        guard phase == .idle, let original = selectedAnnotation,
+              let index = display.annotations.firstIndex(where: { $0.id == original.id }) else { return }
+        let offset = Self.duplicateOffset * scale
+        let moved = original.moved(by: CGVector(dx: offset, dy: offset))
+        let copy = Annotation(kind: moved.kind, style: moved.style, labelAt: moved.labelAt)
+        display.annotations.insert(copy, at: index + 1)
+        selection = copy.id
+        history.commit(display)
+    }
+
+    private mutating func edit(_ id: Annotation.ID, _ change: (inout Annotation) -> Void) {
+        finishTyping()
+        guard phase == .idle, var annotation = display.annotation(id) else { return }
+        change(&annotation)
+        display.replace(annotation)
+        history.commit(display)
     }
 
     // MARK: Images
