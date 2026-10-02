@@ -103,6 +103,10 @@ internal static class Program
             var ready = DateTime.Now - System.Diagnostics.Process.GetCurrentProcess().StartTime;
             Console.Error.WriteLine($"tinysnap: ready {ready.TotalMilliseconds:0} ms after starting, "
                                     + $"{time.TotalMilliseconds:0} ms of it in {runs} runs of GNOME's tools");
+            // And the font, since a desktop's fonts can leave Tinysnap's text unreadable or missing.
+            using var sans = SKFontManager.Default.MatchFamily("sans-serif");
+            Console.Error.WriteLine($"tinysnap: text in {FontManager.Current.DefaultFontFamily.Name}; sans-serif is {sans?.FamilyName ?? "none"}, "
+                                    + $"Skia's default {SKTypeface.Default.FamilyName}, of {SKFontManager.Default.FontFamilyCount} families");
             using var icon = AssetLoader.Open(new Uri("avares://Tinysnap.App/Assets/Tinysnap.png"));
             using var bytes = new MemoryStream();
             icon.CopyTo(bytes);
