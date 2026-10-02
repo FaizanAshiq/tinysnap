@@ -347,7 +347,9 @@ $page = Start-Process powershell -PassThru -ArgumentList '-NoProfile', '-Encoded
 $preferences = Join-Path $env:APPDATA 'Tinysnap\preferences.json'
 New-Item -ItemType Directory -Force (Split-Path $preferences) | Out-Null
 '{"hotkeys": {"window": {"keyCode": 87, "modifiers": ["control", "shift"]}}}' | Set-Content $preferences -Encoding ASCII
+$since = [System.Diagnostics.Stopwatch]::StartNew()
 $script:app = Start-Process $exe -PassThru
+[void](Timed 'starting to holding its hotkeys' { [Desk]::HotkeyTaken($ModControl + $ModShift, 0x31) } 30 $since)
 Check 'Tinysnap starts and holds its hotkeys' {
     if (-not (Until { [Desk]::HotkeyTaken($ModControl + $ModShift, 0x31) } 30)) { return 'Ctrl+Shift+1 is free' }
     if (-not [Desk]::HotkeyTaken(0, 0x2C)) { return 'Print Screen is free' }
@@ -435,8 +437,9 @@ if ($editor)
         $button = $Element::FromHandle($editor.Handle).FindFirst('Descendants',
             (New-Object System.Windows.Automation.PropertyCondition($Element::NameProperty, 'Library')))
         if (-not $button) { return 'no Library button' }
+        $since = [System.Diagnostics.Stopwatch]::StartNew()
         $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-        $window = Until { [Desk]::Windows($script:app.Id) | Where-Object Title -eq 'Library' | Select-Object -First 1 } 10
+        $window = Timed 'the Library button to its window, the first time' { [Desk]::Windows($script:app.Id) | Where-Object Title -eq 'Library' | Select-Object -First 1 } 10 $since
         if (-not $window) { return 'no Library window' }
         $items = New-Object System.Windows.Automation.PropertyCondition($Element::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)
         $tiles = Until { @($Element::FromHandle($window.Handle).FindAll('Descendants', $items) | Where-Object { $_.Current.Name -like 'Capture at*' }) } 5
