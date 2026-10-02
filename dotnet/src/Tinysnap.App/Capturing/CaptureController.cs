@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using SkiaSharp;
 using Tinysnap.App.Editing;
@@ -184,17 +185,31 @@ public sealed class CaptureController
 
     private ITimer? warmingUp;
 
+    /// <summary>The overlay warmed up without a window, where the desktop would pull one into view.</summary>
+    internal bool IsWarm { get; private set; }
+
     /// <summary>Opens one overlay nobody sees, off every screen and never focused, and closes it a
     /// second later, so the first real capture finds the windows and drawing it needs set up and
     /// opens as fast as later ones: cold, the first overlay took 185 ms in CI, warm 56.</summary>
     public void WarmUp()
     {
-        if (WarmingUp is not null) return;
+        if (WarmingUp is not null || IsWarm) return;
         using var surface = SKSurface.Create(new SKImageInfo(16, 16));
         surface.Canvas.Clear(SKColors.Black);
         // Left to the collector rather than disposed: the window may still be drawing it.
         var screen = new FrozenScreen(new Rect(-32000, -32000, 16, 16), 1, surface.Snapshot());
         var window = new AreaOverlay(new FrozenDesktop([screen], []), _ => { }).Windows[0];
+        if (!platform.Screen.KeepsWindowsOffScreen)
+        {
+            // GNOME would show it as a black square for a second, so it is laid out and drawn into
+            // a bitmap instead: the same templates and drawing, with no window to see.
+            window.Measure(new Avalonia.Size(16, 16));
+            window.Arrange(new Avalonia.Rect(0, 0, 16, 16));
+            using (var bitmap = new RenderTargetBitmap(new PixelSize(16, 16))) bitmap.Render(window);
+            window.Close();
+            IsWarm = true;
+            return;
+        }
         window.ShowActivated = false;
         window.Show();
         WarmingUp = window;

@@ -43,11 +43,12 @@ internal sealed record AppSetup(CaptureController Controller, LibraryStore Libra
 internal static class TestServices
 {
     /// <param name="picker">The system's window picker, for a platform that cannot list windows.</param>
-    public static AppSetup Launch(Preferences? preferences = null, Func<Task<Capture?>>? picker = null)
+    /// <param name="keepsWindowsOffScreen">False for a desktop that pulls windows into view, as GNOME does.</param>
+    public static AppSetup Launch(Preferences? preferences = null, Func<Task<Capture?>>? picker = null, bool keepsWindowsOffScreen = true)
     {
         var retina = Screens.Frozen(new Tinysnap.Core.Rect(0, 0, 400, 300), 2, SkiaSharp.SKColors.Blue);
         var platform = new FakePlatform(new FakeScreenCapture(() => Screens.Desktop(retina), () => new Tinysnap.Core.Point(100, 100),
-                                                              pickWindow: picker));
+                                                              pickWindow: picker, keepsWindowsOffScreen: keepsWindowsOffScreen));
         var library = new LibraryStore(TemporaryFolder());
         var dialogs = new FakeDialogs();
         var time = new FakeTime();

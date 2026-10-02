@@ -33,6 +33,8 @@ internal sealed class GdiScreenCapture : IScreenCapture
     /// <summary>None: windows are listed with the frozen screen and picked on the overlay.</summary>
     public Func<Task<Capture?>>? PickWindow => null;
 
+    public bool KeepsWindowsOffScreen => true;
+
     internal static Rect ToRect(RECT rect) => new(rect.Left, rect.Top, rect.Width, rect.Height);
 
     /// <summary>Every monitor's bounds in physical pixels, and its scale from its effective DPI.</summary>

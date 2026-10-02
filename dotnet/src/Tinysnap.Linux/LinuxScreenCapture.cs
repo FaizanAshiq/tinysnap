@@ -58,6 +58,9 @@ internal sealed class LinuxScreenCapture(Func<X11Screen?> screen, Func<DBusConne
 
     public Func<Task<Capture?>>? PickWindow => wayland ? PickWithGnome : null;
 
+    /// <summary>GNOME moves a window placed off screen back into view.</summary>
+    public bool KeepsWindowsOffScreen => false;
+
     /// <summary>The window GNOME's tool picked, at the scale of the last freeze.</summary>
     // ponytail: the scale comes from the last full freeze, 1 before any; Mutter's DisplayConfig
     // gives it directly if a picked window ever opens at the wrong size.

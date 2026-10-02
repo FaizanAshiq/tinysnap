@@ -32,6 +32,10 @@ public interface IScreenCapture
     /// the system's own picker, for Capture Window and Space in the overlay: the capture picked,
     /// or null when the person cancelled.</summary>
     Func<Task<Capture?>>? PickWindow { get; }
+
+    /// <summary>True where a window placed beyond every screen stays out of sight, as on Windows.
+    /// GNOME pulls such a window back into view.</summary>
+    bool KeepsWindowsOffScreen { get; }
 }
 
 public interface IHotkeys : IDisposable
