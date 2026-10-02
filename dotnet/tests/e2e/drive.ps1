@@ -177,9 +177,11 @@ function Until([scriptblock] $condition, [double] $seconds = 15)
 
 # Until, timed from now to the answer at a twentieth of a second, the time kept with the
 # results, so every run shows how quickly a capture appears.
-function Timed([string] $what, [scriptblock] $condition, [double] $seconds = 15)
+function Timed([string] $what, [scriptblock] $condition, [double] $seconds = 15, [System.Diagnostics.Stopwatch] $since = $null)
 {
-    $clock = [System.Diagnostics.Stopwatch]::StartNew()
+    # From $since when given, the moment before a key press: holding and letting go of the keys
+    # takes longer than the app does.
+    $clock = if ($since) { $since } else { [System.Diagnostics.Stopwatch]::StartNew() }
     $deadline = (Get-Date).AddSeconds($seconds)
     do
     {
@@ -407,8 +409,9 @@ if ($icon)
 
 # 4. Fullscreen: capture, keep, copy and close; capture again, save and close
 
+$since = [System.Diagnostics.Stopwatch]::StartNew()
 Press $Ctrl $Shift 0x31
-$editor = Timed 'Ctrl+Shift+1 to an editor' { Editors | Select-Object -First 1 }
+$editor = Timed 'Ctrl+Shift+1 to an editor' { Editors | Select-Object -First 1 } 15 $since
 Check 'Ctrl+Shift+1 opens the screen in an editor' { if (-not $editor) { 'no editor' } }
 if ($editor)
 {
@@ -472,8 +475,9 @@ Check 'the Snipping Tool lets go of Print Screen while Tinysnap runs' {
     $value = (Get-ItemProperty 'HKCU:\Control Panel\Keyboard' -ErrorAction SilentlyContinue).PrintScreenKeyForSnippingEnabled
     if ($value -ne 0) { "the setting holds '$value'" }
 }
+$since = [System.Diagnostics.Stopwatch]::StartNew()
 Press 0x2C
-$overlay = Timed 'Print Screen to the overlay' { Overlay } 10
+$overlay = Timed 'Print Screen to the overlay' { Overlay } 10 $since
 Check 'Print Screen covers the screen with the area overlay' { if (-not $overlay) { 'no overlay' } }
 if ($overlay)
 {
@@ -536,8 +540,9 @@ if ($overlay)
 
 [System.Windows.Forms.Clipboard]::Clear()
 $plain = Grab
+$since = [System.Diagnostics.Stopwatch]::StartNew()
 Press $Ctrl $Shift 0x4F
-$overlay = Timed 'Ctrl+Shift+O to the overlay' { Overlay } 10
+$overlay = Timed 'Ctrl+Shift+O to the overlay' { Overlay } 10 $since
 Check 'Ctrl+Shift+O covers the screen to pick text' { if (-not $overlay) { 'no overlay' } }
 if ($overlay)
 {
