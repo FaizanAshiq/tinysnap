@@ -175,6 +175,29 @@ function Until([scriptblock] $condition, [double] $seconds = 15)
     return $null
 }
 
+# Until, timed from now to the answer at a twentieth of a second, the time kept with the
+# results, so every run shows how quickly a capture appears.
+function Timed([string] $what, [scriptblock] $condition, [double] $seconds = 15, [System.Diagnostics.Stopwatch] $since = $null)
+{
+    # From $since when given, the moment before a key press: holding and letting go of the keys
+    # takes longer than the app does.
+    $clock = if ($since) { $since } else { [System.Diagnostics.Stopwatch]::StartNew() }
+    $deadline = (Get-Date).AddSeconds($seconds)
+    do
+    {
+        try { $value = & $condition } catch { $value = $null }
+        if ($value)
+        {
+            $line = "time    ${what}: $($clock.ElapsedMilliseconds) ms"
+            $results.Add($line)
+            Write-Host $line
+            return $value
+        }
+        Start-Sleep -Milliseconds 50
+    } while ((Get-Date) -lt $deadline)
+    return $null
+}
+
 function Grab
 {
     $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
@@ -267,7 +290,11 @@ function Finish
     if ($env:GITHUB_STEP_SUMMARY)
     {
         $pass, $fail = [char]0x2705, [char]0x274C
-        $lines = $results | ForEach-Object { if ($_ -like 'ok*') { "- $pass $($_.Substring(8))" } else { "- $fail $($_.Substring(8))" } }
+        $lines = $results | ForEach-Object {
+            if ($_ -like 'ok*') { "- $pass $($_.Substring(8))" }
+            elseif ($_ -like 'time*') { "- $($_.Substring(8))" }
+            else { "- $fail $($_.Substring(8))" }
+        }
         (@('### Installed app, end to end', '') + $lines) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY -Encoding UTF8
     }
     exit [int]$script:failed
@@ -382,8 +409,9 @@ if ($icon)
 
 # 4. Fullscreen: capture, keep, copy and close; capture again, save and close
 
+$since = [System.Diagnostics.Stopwatch]::StartNew()
 Press $Ctrl $Shift 0x31
-$editor = Until { Editors | Select-Object -First 1 }
+$editor = Timed 'Ctrl+Shift+1 to an editor' { Editors | Select-Object -First 1 } 15 $since
 Check 'Ctrl+Shift+1 opens the screen in an editor' { if (-not $editor) { 'no editor' } }
 if ($editor)
 {
@@ -447,8 +475,9 @@ Check 'the Snipping Tool lets go of Print Screen while Tinysnap runs' {
     $value = (Get-ItemProperty 'HKCU:\Control Panel\Keyboard' -ErrorAction SilentlyContinue).PrintScreenKeyForSnippingEnabled
     if ($value -ne 0) { "the setting holds '$value'" }
 }
+$since = [System.Diagnostics.Stopwatch]::StartNew()
 Press 0x2C
-$overlay = Until { Overlay } 10
+$overlay = Timed 'Print Screen to the overlay' { Overlay } 10 $since
 Check 'Print Screen covers the screen with the area overlay' { if (-not $overlay) { 'no overlay' } }
 if ($overlay)
 {
@@ -460,7 +489,7 @@ if ($overlay)
     Start-Sleep -Milliseconds 300
     Shot 'area-overlay'
     [Desk]::Up()
-    $editor = Until { Editors | Select-Object -First 1 }
+    $editor = Timed 'releasing an area to its editor' { Editors | Select-Object -First 1 }
     Check 'dragging out an area opens it in an editor' { if (-not $editor) { 'no editor' } }
     if ($editor)
     {
@@ -511,14 +540,15 @@ if ($overlay)
 
 [System.Windows.Forms.Clipboard]::Clear()
 $plain = Grab
+$since = [System.Diagnostics.Stopwatch]::StartNew()
 Press $Ctrl $Shift 0x4F
-$overlay = Until { Overlay } 10
+$overlay = Timed 'Ctrl+Shift+O to the overlay' { Overlay } 10 $since
 Check 'Ctrl+Shift+O covers the screen to pick text' { if (-not $overlay) { 'no overlay' } }
 if ($overlay)
 {
     Start-Sleep -Milliseconds 500
     [Desk]::Drag(70, 70, 950, 290)
-    $text = Until { $t = ClipboardText; if ($t -match 'reads this line') { $t } } 20
+    $text = Timed 'an area of text to the clipboard' { $t = ClipboardText; if ($t -match 'reads this line') { $t } } 20
     $toast = Until { [Desk]::Windows($script:app.Id) | Where-Object Title -eq 'Text copied' | Select-Object -First 1 } 5
     Start-Sleep -Milliseconds 500
     $toast = [Desk]::Windows($script:app.Id) | Where-Object Title -eq 'Text copied' | Select-Object -First 1
