@@ -130,6 +130,13 @@ public class PreferencesTests
     }
 
     [Fact]
+    public void TheLayersPanelStartsClosedAndIsRemembered()
+    {
+        Assert.False(Preferences.Load(TemporaryFile("""{"delaySeconds": 5}""")).ShowsLayers);
+        Assert.True(Reloaded(Preferences.Defaults with { ShowsLayers = true }).ShowsLayers);
+    }
+
+    [Fact]
     public void TheTrayIconCanBeTurnedOffAndABadValueFallsBack()
     {
         Assert.False(Preferences.Load(TemporaryFile("""{"showTrayIcon": false}""")).ShowTrayIcon);

@@ -63,7 +63,10 @@ internal sealed partial class StyleBar : Border
 
     private readonly CanvasControl canvas;
     private readonly StackPanel row = new() { Orientation = Orientation.Horizontal, Spacing = 14 };
-    private (Tool Tool, Style Style, bool Selected, MeasureSettings Measure)? shown;
+    private (Tool Tool, Style Style, bool Selected, MeasureSettings Measure, bool Locked)? shown;
+
+    /// <summary>The chips, for the tests: switched off as a whole while a locked shape is chosen.</summary>
+    internal StackPanel Row => row;
     private Flyout? guide;
 
     public Button? ColorButton { get; private set; }
@@ -137,11 +140,13 @@ internal sealed partial class StyleBar : Border
         var style = selected?.Style ?? session.StyleFor(tool);
         IsVisible = Shows(tool);
         var measure = canvas.MeasureSettings;
-        var now = (tool, style, selected is not null, measure);
+        var locked = selected?.IsLocked == true;
+        var now = (tool, style, selected is not null, measure, locked);
         if (shown == now) return;
         // Only the colour changed: redrawn where it stands. Rebuilding replaced the button the
         // palette hangs from, which closed the palette in the middle of a drag on the spectrum.
         if (shown is { } before && before.Tool == tool && before.Selected == now.Item3 && before.Measure == measure
+            && before.Locked == locked
             && before.Style with { ColorHex = style.ColorHex } == style)
         {
             shown = now;
@@ -150,7 +155,7 @@ internal sealed partial class StyleBar : Border
         }
         var picked = shown?.Tool != Tool.Measure && session.Tool == Tool.Measure;
         shown = now;
-        Rebuild(tool, style, selected is not null);
+        Rebuild(tool, style, selected is not null, locked);
         // The guide shows by itself the first time Measure is picked, once the ? it hangs from is in place.
         if (picked && !measure.GuideSeen)
         {
@@ -175,7 +180,9 @@ internal sealed partial class StyleBar : Border
         ClearSize();
     }
 
-    private void Rebuild(Tool tool, Style style, bool selected)
+    /// <summary><paramref name="locked"/>: a locked shape shows its style dimmed, with nothing to
+    /// press and no delete.</summary>
+    private void Rebuild(Tool tool, Style style, bool selected, bool locked = false)
     {
         Clear();
         if (tool.HasColor()) row.Children.Add(ColorButton = MakeColorButton(style.ColorHex));
@@ -191,7 +198,9 @@ internal sealed partial class StyleBar : Border
             DifferenceChip = difference;
         }
         if (tool == Tool.Measure) AddMeasureChips();
-        if (selected)
+        row.IsEnabled = !locked;
+        row.Opacity = locked ? 0.45 : 1;
+        if (selected && !locked)
         {
             var delete = new Button
             {

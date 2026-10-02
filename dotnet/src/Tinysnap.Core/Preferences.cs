@@ -211,6 +211,9 @@ public sealed record Preferences
     /// <summary>The Measure tool as it was left: its lines, its edge contrast, its guide seen.</summary>
     public MeasureSettings Measure { get; init; } = MeasureSettings.Defaults;
 
+    /// <summary>Whether editors open with the layers panel showing: the last choice made in any.</summary>
+    public bool ShowsLayers { get; init; }
+
     /// <summary>Tool styles compared by content, as the Mac's dictionary is.</summary>
     public bool Equals(Preferences? other) =>
         other is not null && HotKeys == other.HotKeys && SaveFolder == other.SaveFolder && ExportScale == other.ExportScale
@@ -218,7 +221,7 @@ public sealed record Preferences
         && ToolStyles.Count == other.ToolStyles.Count
         && ToolStyles.All(pair => other.ToolStyles.TryGetValue(pair.Key, out var style) && style == pair.Value)
         && AfterCapture == other.AfterCapture && KeepLibrary == other.KeepLibrary && Backdrop == other.Backdrop
-        && Measure == other.Measure;
+        && Measure == other.Measure && ShowsLayers == other.ShowsLayers;
 
     public override int GetHashCode() =>
         HashCode.Combine(HotKeys, SaveFolder, ExportScale, DelaySeconds, ColorHex, ToolStyles.Count, Backdrop, Measure);
@@ -284,6 +287,7 @@ public sealed record Preferences
         ["keepLibrary"] = KeepLibrary,
         ["backdrop"] = Backdrop.ToJson(),
         ["measure"] = Measure.ToJson(),
+        ["showsLayers"] = ShowsLayers,
     };
 
     /// <summary>Every key is optional and a bad value falls back on its own, so a file written
@@ -314,6 +318,7 @@ public sealed record Preferences
             KeepLibrary = Json.Bool(o, "keepLibrary") ?? fallback.KeepLibrary,
             Backdrop = Json.Object(o, "backdrop") is { } backdrop ? Backdrop.FromJson(backdrop) : fallback.Backdrop,
             Measure = Json.Object(o, "measure") is { } measure ? MeasureSettings.FromJson(measure) : fallback.Measure,
+            ShowsLayers = Json.Bool(o, "showsLayers") ?? fallback.ShowsLayers,
         };
     }
 }

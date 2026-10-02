@@ -55,5 +55,23 @@ internal static class ToolIcons
     /// <summary>Two captures stacked, the back one showing past the front, drawn for Tinysnap.</summary>
     public const string Library = "F1 M5 6H12A2 2 0 0 1 14 8V15A2 2 0 0 1 12 17H5A2 2 0 0 1 3 15V8A2 2 0 0 1 5 6ZM5 7A1 1 0 0 0 4 8V15A1 1 0 0 0 5 16H12A1 1 0 0 0 13 15V8A1 1 0 0 0 12 7H5ZM7 3H15A2 2 0 0 1 17 5V13A2 2 0 0 1 15 15H14V14H15A1 1 0 0 0 16 13V5A1 1 0 0 0 15 4H7A1 1 0 0 0 6 5V6H5V5A2 2 0 0 1 7 3Z";
 
+    /// <summary>Three sheets stacked, for the layers panel, drawn for Tinysnap.</summary>
+    public const string Layers = "F1 M10 3L17 7L10 11L3 7ZM10 4.2L5 7L10 9.8L15 7ZM3 10L4 9.45L10 12.85L16 9.45L17 10L10 14ZM3 13L4 12.45L10 15.85L16 12.45L17 13L10 17Z";
+
+    /// <summary>An open eye: the shape shows. Drawn for Tinysnap.</summary>
+    public const string Eye = "F1 M10 5C6 5 3 8 2 10C3 12 6 15 10 15C14 15 17 12 18 10C17 8 14 5 10 5ZM10 6C6.8 6 4.4 8.3 3.2 10C4.4 11.7 6.8 14 10 14C13.2 14 15.6 11.7 16.8 10C15.6 8.3 13.2 6 10 6ZM10 7.5A2.5 2.5 0 1 1 10 12.5A2.5 2.5 0 1 1 10 7.5Z";
+
+    /// <summary>The eye struck through: the shape is hidden. Drawn for Tinysnap.</summary>
+    public const string EyeOff = Eye + "M3.6 2.9L17.1 16.4L16.4 17.1L2.9 3.6Z";
+
+    /// <summary>A closed padlock: the shape is locked. Drawn for Tinysnap.</summary>
+    public const string Lock = "F1 M6 9H14A1 1 0 0 1 15 10V16A1 1 0 0 1 14 17H6A1 1 0 0 1 5 16V10A1 1 0 0 1 6 9ZM7 9V6.5A3 3 0 0 1 13 6.5V9H12V6.5A2 2 0 0 0 8 6.5V9Z";
+
+    /// <summary>An open padlock, outlined: the shape can change. Drawn for Tinysnap.</summary>
+    public const string Unlock = "F1 M6 9H14A1 1 0 0 1 15 10V16A1 1 0 0 1 14 17H6A1 1 0 0 1 5 16V10A1 1 0 0 1 6 9ZM6 10V16H14V10ZM7 9V6.5A3 3 0 0 1 12.8 5.4L11.9 5.9A2 2 0 0 0 8 6.5V9Z";
+
+    /// <summary>A square with a plus over another behind it: duplicate. Drawn for Tinysnap.</summary>
+    public const string Duplicate = "F1 M8 7H15A1 1 0 0 1 16 8V15A1 1 0 0 1 15 16H8A1 1 0 0 1 7 15V8A1 1 0 0 1 8 7ZM8 8V15H15V8ZM4 13V5A1 1 0 0 1 5 4H13V5H5V13ZM11 9.5H12V11H13.5V12H12V13.5H11V12H9.5V11H11Z";
+
     public const string Delete = "M8.5 4H11.5C11.5 3.17157 10.8284 2.5 10 2.5C9.17157 2.5 8.5 3.17157 8.5 4ZM7.5 4C7.5 2.61929 8.61929 1.5 10 1.5C11.3807 1.5 12.5 2.61929 12.5 4H17.5C17.7761 4 18 4.22386 18 4.5C18 4.77614 17.7761 5 17.5 5H16.4456L15.2521 15.3439C15.0774 16.8576 13.7957 18 12.2719 18H7.72813C6.20431 18 4.92256 16.8576 4.7479 15.3439L3.55437 5H2.5C2.22386 5 2 4.77614 2 4.5C2 4.22386 2.22386 4 2.5 4H7.5ZM5.74131 15.2292C5.85775 16.2384 6.71225 17 7.72813 17H12.2719C13.2878 17 14.1422 16.2384 14.2587 15.2292L15.439 5H4.56101L5.74131 15.2292ZM8.5 7.5C8.77614 7.5 9 7.72386 9 8V14C9 14.2761 8.77614 14.5 8.5 14.5C8.22386 14.5 8 14.2761 8 14V8C8 7.72386 8.22386 7.5 8.5 7.5ZM12 8C12 7.72386 11.7761 7.5 11.5 7.5C11.2239 7.5 11 7.72386 11 8V14C11 14.2761 11.2239 14.5 11.5 14.5C11.7761 14.5 12 14.2761 12 14V8Z";
 }

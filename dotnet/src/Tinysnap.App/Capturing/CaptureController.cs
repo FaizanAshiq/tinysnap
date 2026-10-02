@@ -46,7 +46,8 @@ public sealed class CaptureController
                                       preferences.RememberStyles, library, () => LibraryChanged?.Invoke(), time,
                                       () => ShowLibrary(), ReadAndCopy,
                                       measure => preferences.Update(p => p with { Measure = measure }),
-                                      backdrop => preferences.Update(p => p with { Backdrop = backdrop }), ReadWallpaper);
+                                      backdrop => preferences.Update(p => p with { Backdrop = backdrop }), ReadWallpaper,
+                                      shows => preferences.Update(p => p with { ShowsLayers = shows }));
         // A Measure setting changed in one editor reaches every other.
         preferences.Changed += changed =>
         {
