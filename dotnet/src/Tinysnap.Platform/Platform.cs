@@ -33,9 +33,10 @@ public interface IScreenCapture
     /// or null when the person cancelled.</summary>
     Func<Task<Capture?>>? PickWindow { get; }
 
-    /// <summary>True where a window placed beyond every screen stays out of sight, as on Windows.
-    /// GNOME pulls such a window back into view.</summary>
-    bool KeepsWindowsOffScreen { get; }
+    /// <summary>True where a window goes exactly where it is put, beyond every screen or over a
+    /// panel, as on Windows. GNOME keeps windows on screen and below its top bar unless they are
+    /// full screen.</summary>
+    bool PlacesWindowsAsAsked { get; }
 }
 
 public interface IHotkeys : IDisposable

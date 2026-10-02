@@ -124,7 +124,7 @@ jobs:
         with:
           name: Tinysnap-linux-x64
           path: releases
-      - run: sudo apt-get update && sudo apt-get install -y gnome-shell xwayland libfuse2t64 imagemagick python3-gi && chmod +x releases/*.AppImage
+      - run: sudo apt-get update && sudo apt-get install -y gnome-shell xwayland libfuse2t64 imagemagick python3-gi x11-xserver-utils && chmod +x releases/*.AppImage
       - run: dbus-run-session -- bash dotnet/tests/e2e/gnome-windows.sh releases/Tinysnap-linux-x64.AppImage
       - uses: actions/upload-artifact@v7
         if: always()

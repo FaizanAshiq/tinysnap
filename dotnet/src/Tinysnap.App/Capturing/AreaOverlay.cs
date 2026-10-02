@@ -32,13 +32,16 @@ internal sealed class AreaOverlay
 
     /// <param name="pointer">Where the pointer is, in pixels, so the overlay under it takes the keys.</param>
     /// <param name="systemPicker">Where windows cannot be listed, what Space hands over to instead.</param>
-    public AreaOverlay(FrozenDesktop desktop, Action<AreaResult> onFinish, Point? pointer = null, Action? systemPicker = null)
+    /// <param name="fullScreen">Each window asks to be full screen, where the desktop would
+    /// otherwise keep it below its panel.</param>
+    public AreaOverlay(FrozenDesktop desktop, Action<AreaResult> onFinish, Point? pointer = null, Action? systemPicker = null,
+                       bool fullScreen = false)
     {
         this.desktop = desktop;
         this.onFinish = onFinish;
         this.pointer = pointer;
         this.systemPicker = systemPicker;
-        Windows = [.. desktop.Screens.Select(screen => new OverlayWindow(screen, this))];
+        Windows = [.. desktop.Screens.Select(screen => new OverlayWindow(screen, this, fullScreen))];
     }
 
     public void Show()

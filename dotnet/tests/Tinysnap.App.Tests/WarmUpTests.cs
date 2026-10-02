@@ -30,7 +30,7 @@ public class WarmUpTests
     public void WhereTheDesktopPullsWindowsIntoViewTheOverlayWarmsUpWithNoWindow()
     {
         // GNOME moves a window placed off screen back into view: a black square for a second.
-        var setup = Launch(keepsWindowsOffScreen: false);
+        var setup = Launch(placesWindowsAsAsked: false);
         setup.Controller.WarmUp();
         Assert.Null(setup.Controller.WarmingUp);
         Assert.True(setup.Controller.IsWarm);

@@ -6,7 +6,7 @@ namespace Tinysnap.Dev;
 /// <summary>A screen capture that hands back whatever desktop it is given, for the tests and for
 /// running the app on a Mac, which has no Windows screens to read.</summary>
 public sealed class FakeScreenCapture(Func<FrozenDesktop> freeze, Func<Point> pointer, double windowCornerRadius = 0,
-                                      Func<Task<Capture?>>? pickWindow = null, bool keepsWindowsOffScreen = true)
+                                      Func<Task<Capture?>>? pickWindow = null, bool placesWindowsAsAsked = true)
     : IScreenCapture
 {
     public FrozenDesktop Freeze() => freeze();
@@ -17,7 +17,7 @@ public sealed class FakeScreenCapture(Func<FrozenDesktop> freeze, Func<Point> po
 
     public Func<Task<Capture?>>? PickWindow => pickWindow;
 
-    public bool KeepsWindowsOffScreen => keepsWindowsOffScreen;
+    public bool PlacesWindowsAsAsked => placesWindowsAsAsked;
 }
 
 /// <summary>A clipboard that keeps what it was given, for the tests to read back.</summary>

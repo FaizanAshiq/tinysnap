@@ -1,10 +1,12 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Tinysnap.App.Capturing;
 using Tinysnap.Platform;
 using CoreRect = Tinysnap.Core.Rect;
+using static Tinysnap.App.Tests.TestServices;
 
 namespace Tinysnap.App.Tests;
 
@@ -43,6 +45,23 @@ public class OverlayTests
         var window = overlay.Windows[0];
         Assert.Equal(new PixelPoint(1000, 0), window.Position);
         Assert.Equal((1000.0, 800.0), (window.Width, window.Height));
+    }
+
+    [AvaloniaFact]
+    public void WhereTheDesktopKeepsWindowsBelowItsPanelTheOverlayIsFullScreen()
+    {
+        // GNOME put the overlay below its top bar, so the frozen screen showed 32 pixels low.
+        var setup = Launch(placesWindowsAsAsked: false);
+        setup.Controller.CaptureArea();
+        Assert.Equal(WindowState.FullScreen, Assert.Single(setup.Controller.Overlay!.Windows).WindowState);
+    }
+
+    [AvaloniaFact]
+    public void WhereWindowsGoWhereTheyArePutTheOverlayIsAPlainWindow()
+    {
+        var setup = Launch();
+        setup.Controller.CaptureArea();
+        Assert.Equal(WindowState.Normal, Assert.Single(setup.Controller.Overlay!.Windows).WindowState);
     }
 
     [AvaloniaFact]

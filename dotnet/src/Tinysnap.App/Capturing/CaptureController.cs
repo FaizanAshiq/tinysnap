@@ -199,7 +199,7 @@ public sealed class CaptureController
         // Left to the collector rather than disposed: the window may still be drawing it.
         var screen = new FrozenScreen(new Rect(-32000, -32000, 16, 16), 1, surface.Snapshot());
         var window = new AreaOverlay(new FrozenDesktop([screen], []), _ => { }).Windows[0];
-        if (!platform.Screen.KeepsWindowsOffScreen)
+        if (!platform.Screen.PlacesWindowsAsAsked)
         {
             // GNOME would show it as a black square for a second, so it is laid out and drawn into
             // a bitmap instead: the same templates and drawing, with no window to see.
@@ -248,7 +248,7 @@ public sealed class CaptureController
         {
             Overlay = null;
             Finish(result, desktop, purpose);
-        }, platform.Screen.PointerPosition(), systemPicker);
+        }, platform.Screen.PointerPosition(), systemPicker, fullScreen: !platform.Screen.PlacesWindowsAsAsked);
         Overlay.Show();
         if (windowMode) Overlay.ToggleWindowMode();
     }
