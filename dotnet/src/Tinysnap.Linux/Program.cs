@@ -12,8 +12,15 @@ namespace Tinysnap.Linux;
 internal static class Program
 {
     /// <summary>Avalonia on X11, which XWayland gives Wayland sessions too.</summary>
-    private static AppBuilder X11(AppBuilder builder) =>
-        builder.UseX11().With(new X11PlatformOptions { WmClass = "Tinysnap" }).UseSkia().UseHarfBuzz();
+    private static AppBuilder X11(AppBuilder builder)
+    {
+        var options = new X11PlatformOptions { WmClass = "Tinysnap" };
+        // With no graphics device, OpenGL is Mesa's software renderer, which Avalonia turns down
+        // only after building it: seconds on a first start. Skia draws in software straight away.
+        if (!Directory.Exists("/dev/dri") || !Directory.EnumerateFileSystemEntries("/dev/dri", "renderD*").Any())
+            options.RenderingMode = [X11RenderingMode.Software];
+        return builder.UseX11().With(options).UseSkia().UseHarfBuzz();
+    }
 
     public static int Main(string[] args)
     {
