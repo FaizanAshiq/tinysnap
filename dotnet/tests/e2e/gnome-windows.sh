@@ -26,6 +26,14 @@ key() { eval_js "let b; try { b = global.stage.context.get_backend(); } catch (e
 const C = imports.gi.Clutter; const k = b.get_default_seat().create_virtual_device(C.InputDeviceType.KEYBOARD_DEVICE);
 k.notify_keyval(global.get_current_time() * 1000, C.KEY_$1, C.KeyState.PRESSED);
 k.notify_keyval(global.get_current_time() * 1000, C.KEY_$1, C.KeyState.RELEASED); 'sent'" >/dev/null; }
+# A drag through GNOME Shell's own virtual pointer, from one point to another, in screen pixels.
+drag() { eval_js "let b; try { b = global.stage.context.get_backend(); } catch (e) { b = imports.gi.Clutter.get_default_backend(); }
+const C = imports.gi.Clutter; const p = b.get_default_seat().create_virtual_device(C.InputDeviceType.POINTER_DEVICE);
+const t = () => global.get_current_time() * 1000;
+p.notify_absolute_motion(t(), $1, $2);
+p.notify_button(t(), C.BUTTON_PRIMARY, C.ButtonState.PRESSED);
+for (let i = 1; i <= 10; i++) p.notify_absolute_motion(t(), $1 + ($3 - $1) * i / 10, $2 + ($4 - $2) * i / 10);
+p.notify_button(t(), C.BUTTON_PRIMARY, C.ButtonState.RELEASED); 'dragged'" >/dev/null; }
 windows() {
   eval_js 'global.get_window_actors().map(a => { const w = a.meta_window; const r = w.get_frame_rect();
     return `${w.get_title()} [${w.get_wm_class()}] at ${r.x},${r.y} ${r.width}x${r.height}${w.is_above() ? " above" : ""}${w.is_fullscreen() ? " fullscreen" : ""}${a.visible ? "" : " hidden"}${global.display.focus_window === w ? " focused" : ""}`; }).join(" | ")'
@@ -47,6 +55,14 @@ for i in $(seq 1 100); do gdbus introspect --session --dest com.faizanashiq.Tiny
 say "tinysnap up after $((i / 5))s"
 # The first seconds, when the overlay warms up out of sight.
 for i in $(seq 1 15); do say "start +$((i * 200)) ms: $(windows)"; [ $i = 3 ] && shot start; sleep 0.2; done
+
+# A drag first: if pointer input reaches the overlay, an editor of that area opens.
+call area
+sleep 1.5
+drag 100 300 400 450
+sleep 1.5
+say "after a drag: $(windows)"
+shot dragged
 
 call area
 sleep 1.5
