@@ -10,14 +10,15 @@ final class RailButton: NSButton {
     /// A switch reads as on or off to VoiceOver; a plain button, like Library, does not.
     private let isSwitch: Bool
 
-    init(symbol: String, label: String, action: Selector, target: AnyObject?, isSwitch: Bool = false) {
+    /// `tooltip` adds the shortcut to what VoiceOver reads as `label`.
+    init(symbol: String, label: String, tooltip: String? = nil, action: Selector, target: AnyObject?, isSwitch: Bool = false) {
         self.isSwitch = isSwitch
         super.init(frame: NSRect(x: 0, y: 0, width: 32, height: 32))
         image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
         imagePosition = .imageOnly
         imageScaling = .scaleProportionallyDown
         isBordered = false
-        toolTip = label
+        toolTip = tooltip ?? label
         setAccessibilityLabel(label)
         self.action = action
         self.target = target
@@ -65,6 +66,10 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
     /// A click in the list: the keys go back to the canvas.
     var onClicked: (() -> Void)?
     var onClose: (() -> Void)?
+    /// Delete, Undo and Redo while the list has the keys: the canvas does them.
+    var onDelete: (() -> Void)?
+    var onUndo: (() -> Void)?
+    var onRedo: (() -> Void)?
 
     private(set) var rows: [Row] = []
     private var selection: Annotation.ID?
@@ -112,6 +117,9 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
         table.onSpace = { [weak self] in self?.toggleHidden() }
         table.onEscape = { [weak self] in self?.onClose?() }
         table.onClicked = { [weak self] in self?.onClicked?() }
+        table.onDelete = { [weak self] in self?.onDelete?() }
+        table.onUndo = { [weak self] in self?.onUndo?() }
+        table.onRedo = { [weak self] in self?.onRedo?() }
         scroll.documentView = table
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
@@ -169,6 +177,11 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
         isSyncing = false
     }
 
+    /// The keys to the list, for the arrows, Space and Esc: the panel opened from the keyboard.
+    func focusList() {
+        window?.makeFirstResponder(table)
+    }
+
     private func toggleHidden() {
         guard table.selectedRow >= 0, table.selectedRow < rows.count else { return }
         let row = rows[table.selectedRow]
@@ -186,6 +199,7 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
         cell.onLock = { [weak self] id, locked in self?.onLock?(id, locked) }
         cell.onDuplicate = { [weak self] id in self?.onDuplicate?(id) }
         cell.onHover = { [weak self] id in self?.onHover?(id) }
+        cell.onClicked = { [weak self] in self?.onClicked?() }
         return cell
     }
 
@@ -230,20 +244,30 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
     }
 }
 
-/// Space hides or shows the chosen row, Esc closes the panel, and a click hands the keys
-/// back to the canvas. The arrows move between rows, as in any list.
+/// Space hides or shows the chosen row, Esc closes the panel, Delete deletes its shape,
+/// and a click hands the keys back to the canvas. The arrows move between rows, as in any
+/// list.
 private final class LayersTable: NSTableView {
     var onSpace: (() -> Void)?
     var onEscape: (() -> Void)?
     var onClicked: (() -> Void)?
+    var onDelete: (() -> Void)?
+    var onUndo: (() -> Void)?
+    var onRedo: (() -> Void)?
 
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
         case 49: onSpace?()
         case 53: onEscape?()
+        case 51, 117: onDelete?()
         default: super.keyDown(with: event)
         }
     }
+
+    /// The window answers Undo itself before anything past it in the chain is asked, so the
+    /// list passes it to the canvas.
+    @objc func undo(_ sender: Any?) { onUndo?() }
+    @objc func redo(_ sender: Any?) { onRedo?() }
 
     override func mouseDown(with event: NSEvent) {
         super.mouseDown(with: event)
@@ -269,6 +293,8 @@ private final class LayerCell: NSTableCellView {
     var onLock: ((Annotation.ID, Bool) -> Void)?
     var onDuplicate: ((Annotation.ID) -> Void)?
     var onHover: ((Annotation.ID?) -> Void)?
+    /// A button clicked: the keys go back to the canvas.
+    var onClicked: (() -> Void)?
 
     private let icon = NSImageView()
     private let name = NSTextField(labelWithString: "")
@@ -371,13 +397,16 @@ private final class LayerCell: NSTableCellView {
 
     @objc private func duplicated() {
         if let row { onDuplicate?(row.id) }
+        onClicked?()
     }
 
     @objc private func eyed() {
         if let row { onHide?(row.id, !row.isHidden) }
+        onClicked?()
     }
 
     @objc private func locked() {
         if let row { onLock?(row.id, !row.isLocked) }
+        onClicked?()
     }
 }

@@ -10,6 +10,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using Tinysnap.Core;
 using Point = Avalonia.Point;
 
@@ -92,7 +93,8 @@ internal sealed class LayersPanel : Border
             var index = List.SelectedIndex;
             Selected?.Invoke(index >= 0 && index < rows.Count ? rows[index].Id : null);
         };
-        List.KeyDown += OnListKey;
+        // Before the row's own handler, which takes Space to choose the row.
+        List.AddHandler(KeyDownEvent, OnListKey, RoutingStrategies.Tunnel);
         List.AddHandler(PointerPressedEvent, OnPressed, RoutingStrategies.Tunnel);
         List.AddHandler(PointerMovedEvent, OnDragged, RoutingStrategies.Tunnel);
         List.AddHandler(PointerReleasedEvent, OnReleased, RoutingStrategies.Tunnel);
@@ -134,6 +136,27 @@ internal sealed class LayersPanel : Border
     /// <summary>Shows <paramref name="document"/>'s shapes. The rows are rebuilt only when one
     /// changed, since this runs on every change to the canvas, a drag's every step included.</summary>
     public void Show(Document document, Guid? selection)
+    {
+        // Rebuilding drops the focused row; the keys go back to the list, not to nowhere.
+        var hadKeys = List.IsKeyboardFocusWithin;
+        try { Update(document, selection); }
+        finally { if (hadKeys && !List.IsKeyboardFocusWithin) FocusList(); }
+    }
+
+    /// <summary>The keys to the chosen row, or to the list when none is chosen: for opening the
+    /// panel from the keyboard, and after the rows are rebuilt.</summary>
+    internal void FocusList()
+    {
+        var index = List.SelectedIndex;
+        Control target = index >= 0 && index < rows.Count ? rows[index].Item : List;
+        // Once the new rows are laid out; a row not yet in the tree cannot take the keys.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!target.Focus(NavigationMethod.Directional)) List.Focus(NavigationMethod.Directional);
+        });
+    }
+
+    private void Update(Document document, Guid? selection)
     {
         var now = document.Annotations.Reverse()
             .Select(a => new Shape(a.Id, a.Tool, document.LayerName(a.Id), a.IsLocked, a.IsHidden)).ToArray();

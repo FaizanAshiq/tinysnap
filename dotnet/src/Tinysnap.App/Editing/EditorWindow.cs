@@ -379,16 +379,19 @@ internal sealed class EditorWindow : Window
         });
         Layers.HoverChanged += Canvas.Highlight;
         Layers.Clicked += () => Canvas.Focus();
-        Layers.CloseRequested += ToggleLayers;
+        Layers.CloseRequested += () => ToggleLayers();
     }
 
-    /// <summary>Opens or closes the layers panel, and remembers which for the next editor.</summary>
-    private void ToggleLayers()
+    /// <summary>Opens or closes the layers panel, and remembers which for the next editor.
+    /// Opened from the keyboard, the list takes the keys, for the arrows, Space and Esc;
+    /// otherwise they stay with the canvas.</summary>
+    private void ToggleLayers(bool fromKeys = false)
     {
         showsLayers = !showsLayers;
         services.RememberLayers?.Invoke(showsLayers);
         Refresh();
-        if (!showsLayers) Canvas.Focus();
+        if (showsLayers && fromKeys) Layers.FocusList();
+        else Canvas.Focus();
     }
 
     private void RefreshLayers()
@@ -538,7 +541,7 @@ internal sealed class EditorWindow : Window
                     e.Handled = true;
                     return;
                 case Key.L when shift:
-                    ToggleLayers();
+                    ToggleLayers(fromKeys: true);
                     e.Handled = true;
                     return;
                 case Key.L:

@@ -167,6 +167,10 @@ internal sealed partial class StyleBar : Border
     private void Clear()
     {
         row.Children.Clear();
+        // A locked shape dims the tool's chips only; the Backdrop and Size panels are the
+        // capture's own, and stay usable.
+        row.IsEnabled = true;
+        row.Opacity = 1;
         ColorButton = null;
         Swatches = [];
         CustomColor = null;

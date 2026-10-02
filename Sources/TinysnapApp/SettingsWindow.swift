@@ -297,6 +297,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             preferences.colorHex = onDisk.colorHex
             preferences.backdrop = onDisk.backdrop
             preferences.measure = onDisk.measure
+            preferences.showsLayers = onDisk.showsLayers
         }
         try? preferences.save(to: Preferences.defaultFileURL)
         loadValues(taken: onChange(preferences))

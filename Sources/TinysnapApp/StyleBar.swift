@@ -148,6 +148,8 @@ final class StyleBar: NSVisualEffectView {
 
     private func rebuild() {
         row.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        // A locked shape dims the tool's chips only; Backdrop and Size are the capture's own.
+        row.alphaValue = 1
         guard mode == .tool else {
             if mode == .backdrop { buildBackdrop() } else { buildSize() }
             setFrameSize(fittingSize)

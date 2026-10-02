@@ -49,7 +49,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private let rail = NSView()
     private lazy var libraryButton = RailButton(symbol: "photo.stack", label: "Library, every capture from the last 30 days",
                                                 action: #selector(AppDelegate.openLibrary(_:)), target: nil)
-    private lazy var layersButton = RailButton(symbol: "square.3.layers.3d", label: "Layers (⇧⌘L)",
+    private lazy var layersButton = RailButton(symbol: "square.3.layers.3d", label: "Layers", tooltip: "Layers (⇧⌘L)",
                                                action: #selector(toggleLayers(_:)), target: self, isSwitch: true)
     private let layers = LayersPanel()
     private var showsLayers: Bool
@@ -544,19 +544,16 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         placeRailButtons()
         layers.onSelect = { [weak self] id in self?.canvas.session.select(id) }
         layers.onMove = { [weak self] id, index in self?.canvas.session.moveLayer(id, to: index) }
-        layers.onHide = { [weak self] id, hidden in
-            self?.canvas.session.setHidden(id, hidden)
-            self?.handKeysToCanvas()
-        }
-        layers.onLock = { [weak self] id, locked in
-            self?.canvas.session.setLocked(id, locked)
-            self?.handKeysToCanvas()
-        }
+        // Space in the list keeps the keys there; a click on a row button hands them back.
+        layers.onHide = { [weak self] id, hidden in self?.canvas.session.setHidden(id, hidden) }
+        layers.onLock = { [weak self] id, locked in self?.canvas.session.setLocked(id, locked) }
         layers.onDuplicate = { [weak self] id in
             self?.canvas.session.select(id)
             self?.canvas.session.duplicateSelection()
-            self?.handKeysToCanvas()
         }
+        layers.onDelete = { [weak self] in self?.canvas.session.deleteSelection() }
+        layers.onUndo = { [weak self] in self?.canvas.undo(nil) }
+        layers.onRedo = { [weak self] in self?.canvas.redo(nil) }
         layers.onHover = { [weak self] id in self?.canvas.highlight(id) }
         layers.onClicked = { [weak self] in self?.handKeysToCanvas() }
         layers.onClose = { [weak self] in self?.toggleLayers(nil) }
@@ -579,12 +576,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
                               width: LayersPanel.width, height: height)
     }
 
-    /// Opens or closes the layers panel, and remembers which for the next editor.
+    /// Opens or closes the layers panel, and remembers which for the next editor. Opened
+    /// from the menu or its shortcut, the list takes the keys, for the arrows, Space and Esc;
+    /// from the rail, they stay with the canvas.
     @objc func toggleLayers(_ sender: Any?) {
         showsLayers.toggle()
         onShowsLayersChange(showsLayers)
         refreshLayers()
-        if !showsLayers { handKeysToCanvas() }
+        if showsLayers, sender is NSMenuItem { layers.focusList() } else { handKeysToCanvas() }
     }
 
     /// The Layers item is ticked while the panel shows.
@@ -962,6 +961,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     func windowDidEndLiveResize(_ notification: Notification) {
+        // The panel's height follows the window's, so no row is cut off below it.
+        refreshLayers()
         sizedByHand = true
     }
 

@@ -566,7 +566,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// Merged into what is on disk, as the styles are, so Settings is not written over.
-    /// Every open editor follows, so X, Y or a guide closed in one holds in all of them.
     /// Only the next editor follows it; open ones keep the panel as they have it.
     private func remember(showsLayers: Bool) {
         var current = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? preferences
@@ -575,6 +574,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         try? current.save(to: Preferences.defaultFileURL)
     }
 
+    /// Merged into what is on disk, as the styles are, so Settings is not written over.
+    /// Every open editor follows, so X, Y or a guide closed in one holds in all of them.
     private func remember(_ measure: MeasureSettings) {
         var current = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? preferences
         current.measure = measure

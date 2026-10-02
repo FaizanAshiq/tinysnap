@@ -173,6 +173,37 @@ public class LayersPanelTests
     }
 
     [AvaloniaFact]
+    public void ALockedSelectionLeavesTheBackdropAndSizePanelsUsable()
+    {
+        var editor = WithTwoShapes();
+        Press(editor, Key.L, RawInputModifiers.Control, "l");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.False(editor.StyleBar.Row.IsEnabled);
+        Click(editor.BackdropButton);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(editor.StyleBar.Row.IsEnabled);
+        Assert.Equal(1, editor.StyleBar.Row.Opacity);
+    }
+
+    [AvaloniaFact]
+    public void TheShortcutOpensTheListWithTheKeysAndSpaceHidesTheChosenRow()
+    {
+        var editor = WithTwoShapes();
+        Press(editor, Key.L, RawInputModifiers.Control | RawInputModifiers.Shift, "L");
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(editor.Layers.List.IsKeyboardFocusWithin);
+        var chosen = editor.Canvas.Session.Selection!.Value;
+        Press(editor, Key.Space, RawInputModifiers.None, " ");
+        Assert.True(editor.Canvas.Session.Display.Annotation(chosen)!.IsHidden);
+        // The row was rebuilt; the keys stay in the list, so Esc still closes it.
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(editor.Layers.List.IsKeyboardFocusWithin);
+        Press(editor, Key.Escape);
+        Assert.False(editor.Layers.IsVisible);
+        Assert.True(editor.Canvas.IsFocused);
+    }
+
+    [AvaloniaFact]
     public void ALockedSelectionShowsItsStyleWithNothingToPress()
     {
         var editor = WithTwoShapes();

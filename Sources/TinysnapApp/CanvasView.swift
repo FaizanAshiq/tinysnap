@@ -688,7 +688,8 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
             return selected != nil
         case #selector(bringToFront(_:)), #selector(bringForward(_:)), #selector(sendBackward(_:)),
              #selector(sendToBack(_:)), #selector(duplicate(_:)):
-            return selected != nil && session.phase == .idle
+            // While typing too: the session ends the typing first, as Windows does.
+            return selected != nil && (session.phase == .idle || session.typingID != nil)
         default: return true
         }
     }
