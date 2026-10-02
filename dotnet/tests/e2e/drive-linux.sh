@@ -37,7 +37,7 @@ gone() { [ -z "$(window "$1")" ]; }
 press() { xdotool windowactivate --sync "$(window "$1")" key "$2"; }
 drag() { xdotool mousemove "$1" "$2" sleep 0.2 mousedown 1 mousemove $((($1 + $3) / 2)) $((($2 + $4) / 2)) sleep 0.1 mousemove "$3" "$4" sleep 0.2 mouseup 1; }
 size_is() { [ "$(identify -format %wx%h "$1" 2>/dev/null)" = "$2" ]; }
-pixel_is() { [ "$(convert "$1" -format "%[pixel:p{$2,$3}]" info: 2>/dev/null)" = "$4" ]; }
+pixel_is() { [[ "$(convert "$1" -crop "1x1+$2+$3" +repage -format "%[hex:u.p{0,0}]" info: 2>/dev/null)" == "$4"* ]]; }
 clipboard_has() { xclip -selection clipboard -o 2>/dev/null | grep -qF "$1"; }
 clipboard_is() { [ "$(xclip -selection clipboard -o 2>/dev/null)" = "$1" ]; }
 menu_runs() { grep -qF "Exec=\"$1\" %F" "$menu" 2>/dev/null; }
@@ -92,7 +92,7 @@ press "^Capture at" ctrl+c
 check "Copy closes the editor" within 10 gone "^Capture at"
 xclip -selection clipboard -t image/png -o > "$shots/clipboard.png" 2>/dev/null
 check "Copy leaves the whole screen on the clipboard" size_is "$shots/clipboard.png" 1280x800
-check "the copy holds the screen's own pixels" pixel_is "$shots/clipboard.png" 5 795 "srgb(51,102,204)"
+check "the copy holds the screen's own pixels" pixel_is "$shots/clipboard.png" 5 795 3366CC
 check "the library keeps both captures" captures_kept 2
 
 # Text and a QR code, read off the screen.
@@ -128,12 +128,14 @@ check "the menu entry follows the moved AppImage" within 10 menu_runs "$moved"
 # Remove from This Computer: opened again with no editor, Tinysnap shows Settings.
 "$moved" >> "$shots/app.log" 2>&1
 check "a second launch shows Settings" within 15 shown "^Tinysnap Settings"
-# The button is the last control in Settings, and Remove the dialog's first button.
+# The button is the last control in Settings, and Remove the dialog's first button. The window
+# manager leaves the new dialog unfocused, so it is focused first.
 press "^Tinysnap Settings" shift+Tab
 xdotool key space
-sleep 1.5
+within 10 shown "^Tinysnap$"
 import -window root "$shots/remove-dialog.png"
-xdotool key Tab key space
+press "^Tinysnap$" Tab
+xdotool key space
 check "Remove from This Computer quits" within 15 stopped
 check "it leaves no menu entry or icon" removed
 check "it leaves no GNOME shortcuts, Print Screen given back" eval 'no_shortcuts && gnome_has_print'

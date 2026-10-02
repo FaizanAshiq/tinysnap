@@ -14,9 +14,12 @@ internal static class Commands
         try
         {
             using var process = Process.Start(start)!;
+            var error = process.StandardError.ReadToEndAsync();
             var output = process.StandardOutput.ReadToEnd();
-            process.StandardError.ReadToEnd();
             process.WaitForExit();
+            // Into the session's log, where a GNOME tool that refused can be found.
+            if (process.ExitCode != 0 && error.Result.Trim() is { Length: > 0 } said)
+                Console.Error.WriteLine($"tinysnap: {program} {string.Join(' ', args)}: {said}");
             return (process.ExitCode, output.TrimEnd('\n'));
         }
         catch (Win32Exception)
