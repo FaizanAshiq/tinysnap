@@ -114,6 +114,24 @@ jobs:
           path: shots/*
           retention-days: 14
 
+  # For now: where a headless GNOME Shell puts Tinysnap's windows through XWayland.
+  gnome-windows:
+    needs: linux-package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: Tinysnap-linux-x64
+          path: releases
+      - run: sudo apt-get update && sudo apt-get install -y gnome-shell xwayland libfuse2t64 && chmod +x releases/*.AppImage
+      - run: dbus-run-session -- bash dotnet/tests/e2e/gnome-windows.sh releases/Tinysnap-linux-x64.AppImage
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gnome-windows
+          path: gnome/*
+
   # The installer and the portable zip, built on every push and kept as artifacts. Nothing is
   # released from here: publishing is a separate, deliberate step.
   package:
