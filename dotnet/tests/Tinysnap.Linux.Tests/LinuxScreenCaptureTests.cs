@@ -22,7 +22,7 @@ public class LinuxScreenCaptureTests
     {
         Linux.Only();
         using var x11 = X11Screen.TryOpen()!;
-        var capture = new LinuxScreenCapture(x11, () => throw new InvalidOperationException("no portal on X11"), wayland: false);
+        var capture = new LinuxScreenCapture(() => x11, () => throw new InvalidOperationException("no portal on X11"), wayland: false);
         var screen = Assert.Single(capture.Freeze().Screens);
         Assert.Equal(new Rect(0, 0, 1280, 800), screen.Bounds);
         Assert.Equal(1280, screen.Image.Width);
@@ -38,7 +38,7 @@ public class LinuxScreenCaptureTests
         using var _ = owner;
         using var client = await FakePortal.Client();
         using var x11 = X11Screen.TryOpen()!;
-        var capture = new LinuxScreenCapture(x11, () => client, wayland: true, portal: name);
+        var capture = new LinuxScreenCapture(() => x11, () => client, wayland: true, portal: name);
         var desktop = await Task.Run(capture.Freeze, TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
         var screen = Assert.Single(desktop.Screens);
         Assert.Equal(new Rect(0, 0, 2560, 1600), screen.Bounds);
@@ -56,7 +56,7 @@ public class LinuxScreenCaptureTests
         var (_, name, owner) = await FakePortal.Start(1);
         using var _ = owner;
         using var client = await FakePortal.Client();
-        var capture = new LinuxScreenCapture(X11Screen.TryOpen(), () => client, wayland: true, portal: name);
+        var capture = new LinuxScreenCapture(X11Screen.TryOpen, () => client, wayland: true, portal: name);
         Assert.Empty((await Task.Run(capture.Freeze, TestContext.Current.CancellationToken)).Screens);
     }
 
@@ -68,7 +68,7 @@ public class LinuxScreenCaptureTests
         var (portal, name, owner) = await FakePortal.Start(0, new Uri(shot).AbsoluteUri);
         using var _ = owner;
         using var client = await FakePortal.Client();
-        var capture = new LinuxScreenCapture(X11Screen.TryOpen(), () => client, wayland: true, portal: name);
+        var capture = new LinuxScreenCapture(X11Screen.TryOpen, () => client, wayland: true, portal: name);
         var picked = await capture.PickWindow!.Invoke();
         Assert.Equal(600, picked!.Image.Width);
         Assert.Equal([true], portal.Interactive);

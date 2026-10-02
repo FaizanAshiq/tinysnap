@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <OutputType>Exe</OutputType>
     <!-- Tinysnap, carrying the Mac app's version, as the Windows build does. -->
     <AssemblyName>Tinysnap</AssemblyName>
     <RootNamespace>Tinysnap.Linux</RootNamespace>

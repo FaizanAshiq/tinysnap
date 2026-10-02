@@ -8,7 +8,9 @@ namespace Tinysnap.Linux;
 /// <summary>The frozen screen: on X11 read straight from the root window, on Wayland through
 /// GNOME's screenshot portal, cut per monitor. Window picking on Wayland goes through GNOME's own
 /// screenshot tool, since an app there cannot see other windows.</summary>
-internal sealed class LinuxScreenCapture(X11Screen? x11, Func<DBusConnection> bus, bool wayland, string portal = "org.freedesktop.portal.Desktop")
+/// <param name="screen">X11, opened on first use: Xlib must not be called before Avalonia has
+/// made it safe for threads.</param>
+internal sealed class LinuxScreenCapture(Func<X11Screen?> screen, Func<DBusConnection> bus, bool wayland, string portal = "org.freedesktop.portal.Desktop")
     : IScreenCapture
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(30);
@@ -21,7 +23,7 @@ internal sealed class LinuxScreenCapture(X11Screen? x11, Func<DBusConnection> bu
 
     public FrozenDesktop Freeze()
     {
-        if (x11 is null) return new FrozenDesktop([], []);
+        if (screen() is not { } x11) return new FrozenDesktop([], []);
         var monitors = x11.Monitors();
         if (!wayland)
             return new FrozenDesktop([.. monitors.Select(m => x11.Grab(m.Bounds) is { } image ? new FrozenScreen(m.Bounds, x11.Scale, image) : null).OfType<FrozenScreen>()],
@@ -45,6 +47,7 @@ internal sealed class LinuxScreenCapture(X11Screen? x11, Func<DBusConnection> bu
     /// capture takes the primary monitor, whose centre this is.</summary>
     public Point PointerPosition()
     {
+        var x11 = screen();
         if (!wayland && x11?.Pointer() is { } pointer) return pointer;
         var main = primary ?? x11?.Monitors().OrderByDescending(m => m.Primary).FirstOrDefault().Bounds ?? Rect.Zero;
         return new Point(main.X + main.Width / 2, main.Y + main.Height / 2);
@@ -63,7 +66,7 @@ internal sealed class LinuxScreenCapture(X11Screen? x11, Func<DBusConnection> bu
         if (await Portal.Screenshot(bus(), interactive: true, TimeSpan.FromMinutes(5), portal) is not { } path) return null;
         var image = SKImage.FromEncodedData(path);
         TryDelete(path);
-        return image is null ? null : new Capture(image, (x11?.Scale ?? 1) * factor);
+        return image is null ? null : new Capture(image, (screen()?.Scale ?? 1) * factor);
     }
 
     private static void TryDelete(string path)
