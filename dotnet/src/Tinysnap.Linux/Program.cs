@@ -45,7 +45,11 @@ internal static class Program
         bus.Performed += hotkeys.Press;
         // Logging out ends Tinysnap with SIGTERM, which skips Avalonia's own shutdown; .NET still
         // raises this, so GNOME gets Print Screen back and loses Tinysnap's shortcuts.
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => hotkeys.UnregisterAll();
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            Console.Error.WriteLine("tinysnap: ending, giving GNOME its shortcuts back");
+            hotkeys.UnregisterAll();
+        };
         var desktop = DesktopEntries.ForThisUser();
         var wayland = Environment.GetEnvironmentVariable("XDG_SESSION_TYPE") == "wayland";
         // Opened on first use, once Avalonia has made Xlib safe for threads.

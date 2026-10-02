@@ -129,6 +129,8 @@ check "Esc closes the pin" within 10 gone "^Pinned capture"
 # Ended as a logout ends it, then moved: the next start follows the AppImage to its new place.
 pkill -TERM -x Tinysnap
 within 10 stopped
+within 30 eval '! pgrep -x Tinysnap >/dev/null'
+echo "     after SIGTERM the app said: $(tail -n 2 "$shots/app.log" | tr '\n' ' ')" >> "$results"
 check "being ended gives Print Screen back to GNOME" within 30 gnome_has_print
 mkdir -p "$HOME/Applications"
 moved=$HOME/Applications/Tinysnap.AppImage
