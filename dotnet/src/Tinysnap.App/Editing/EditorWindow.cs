@@ -23,6 +23,9 @@ namespace Tinysnap.App.Editing;
 internal sealed class EditorWindow : Window
 {
     private const double ToolbarHeight = 40;
+    /// <summary>The style bar's height, kept clear above the layers panel whether the bar shows
+    /// or not: following it made the panel jump under the pointer as a row click brought it up.</summary>
+    private const double StyleBarSlot = 46;
 
     /// <summary>The toolbar's groups, by what the tools do: pick and frame, draw, label, focus,
     /// redact. Each group is set apart by a divider.</summary>
@@ -80,8 +83,24 @@ internal sealed class EditorWindow : Window
     private readonly Button copyButton;
     private readonly Button saveButton;
 
-    /// <summary>Opens the library window, at the end of the toolbar.</summary>
+    /// <summary>Opens the library window, at the top of the rail.</summary>
     internal Button LibraryButton { get; }
+
+    /// <summary>Opens and closes the layers panel, under Library in the rail.</summary>
+    internal ToggleButton LayersButton { get; }
+
+    /// <summary>The strip down the window's right edge, under the toolbar.</summary>
+    internal Control Rail { get; }
+
+    internal LayersPanel Layers { get; } = new()
+    {
+        IsVisible = false,
+        HorizontalAlignment = HorizontalAlignment.Right,
+        VerticalAlignment = VerticalAlignment.Top,
+        Margin = new Thickness(12, 12 + StyleBarSlot + 8, 12, 12),
+    };
+
+    private bool showsLayers;
 
     /// <summary>Copy Text, lit while it is on.</summary>
     internal ToggleButton CopyTextButton { get; }
@@ -215,8 +234,33 @@ internal sealed class EditorWindow : Window
         bar.Children.Add(readout);
         LibraryButton = OutputButton(ToolIcons.Library, "Library", "Library: every capture of the last 30 days",
                                      () => services.OpenLibrary?.Invoke());
-        LibraryButton.VerticalAlignment = VerticalAlignment.Center;
-        DockPanel.SetDock(LibraryButton, Dock.Right);
+        LibraryButton.Width = LibraryButton.Height = 32;
+        LayersButton = new ToggleButton
+        {
+            Content = Glyphs.Icon(ToolIcons.Layers),
+            Width = 32,
+            Height = 32,
+            Padding = new Thickness(0),
+            BorderThickness = new Thickness(0),
+        };
+        ToolTip.SetTip(LayersButton, "Layers (Ctrl+Shift+L)");
+        AutomationProperties.SetName(LayersButton, "Layers");
+        LayersButton.Click += (_, _) => ToggleLayers();
+        Rail = new Border
+        {
+            Width = 40,
+            BorderThickness = new Thickness(1, 0, 0, 0),
+            Child = new StackPanel
+            {
+                Spacing = 8,
+                Margin = new Thickness(0, 12, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Children = { LibraryButton, LayersButton },
+            },
+            [!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"),
+            [!BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
+        };
+        DockPanel.SetDock(Rail, Dock.Right);
         // On a screen narrower than the tools, as a small laptop at 125% is, they scroll sideways,
         // and a mouse wheel turns sideways here, having nothing else to scroll.
         var tools = new ScrollViewer
@@ -233,16 +277,19 @@ internal sealed class EditorWindow : Window
         }, RoutingStrategies.Tunnel);
         Toolbar = new Border
         {
-            // The library at the far end, as the Mac's toolbar has it, the tools filling the rest.
-            Child = new DockPanel { Children = { LibraryButton, tools } },
+            // Tools only: the library moved to the rail, as on the Mac.
+            Child = tools,
             Height = ToolbarHeight,
             Padding = new Thickness(8, 0),
             [!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"),
         };
         DockPanel.SetDock(Toolbar, Dock.Top);
 
-        var page = new Grid { Children = { scroll, StyleBar, TextHint } };
-        Content = new DockPanel { Children = { Toolbar, page } };
+        var page = new Grid { Children = { scroll, StyleBar, Layers, TextHint } };
+        // Tall lists scroll inside the panel rather than run off the window.
+        page.SizeChanged += (_, e) => Layers.MaxHeight = Math.Max(80, e.NewSize.Height - Layers.Margin.Top - 12);
+        Content = new DockPanel { Children = { Toolbar, Rail, page } };
+        WireLayers();
         PaintGround();
         ActualThemeVariantChanged += (_, _) => PaintGround();
 
@@ -316,8 +363,47 @@ internal sealed class EditorWindow : Window
 
     private void RememberStyles() => services.RememberStyles?.Invoke(Canvas.Session.Styles, Canvas.Session.ColorHex);
 
+    // Layers
+
+    private void WireLayers()
+    {
+        showsLayers = services.Preferences().ShowsLayers;
+        Layers.Selected += id => Canvas.Apply(s => s.Select(id));
+        Layers.Moved += (id, index) => Canvas.Apply(s => s.MoveLayer(id, index));
+        Layers.HideChanged += (id, hidden) => Canvas.Apply(s => s.SetHidden(id, hidden));
+        Layers.LockChanged += (id, locked) => Canvas.Apply(s => s.SetLocked(id, locked));
+        Layers.DuplicateRequested += id => Canvas.Apply(s =>
+        {
+            s.Select(id);
+            s.DuplicateSelection();
+        });
+        Layers.HoverChanged += Canvas.Highlight;
+        Layers.Clicked += () => Canvas.Focus();
+        Layers.CloseRequested += () => ToggleLayers();
+    }
+
+    /// <summary>Opens or closes the layers panel, and remembers which for the next editor.
+    /// Opened from the keyboard, the list takes the keys, for the arrows, Space and Esc;
+    /// otherwise they stay with the canvas.</summary>
+    private void ToggleLayers(bool fromKeys = false)
+    {
+        showsLayers = !showsLayers;
+        services.RememberLayers?.Invoke(showsLayers);
+        Refresh();
+        if (showsLayers && fromKeys) Layers.FocusList();
+        else Canvas.Focus();
+    }
+
+    private void RefreshLayers()
+    {
+        LayersButton.IsChecked = showsLayers;
+        Layers.IsVisible = showsLayers;
+        if (showsLayers) Layers.Show(Canvas.Session.Display, Canvas.Session.Selection);
+    }
+
     private void Refresh()
     {
+        RefreshLayers();
         foreach (var (tool, button) in ToolButtons) button.IsChecked = tool == Canvas.Session.Tool;
         var framed = Canvas.Session.Display.Backdrop is not null;
         // A backdrop turned on, off or padded differently changes what the canvas shows: refitted,
@@ -443,6 +529,27 @@ internal sealed class EditorWindow : Window
                     return;
                 case Key.P:
                     PinImage();
+                    e.Handled = true;
+                    return;
+                // Here rather than on the canvas, so they work while the layers list has the keys.
+                case Key.OemCloseBrackets:
+                    Canvas.Apply(s => s.Arrange(shift ? Arrangement.Front : Arrangement.Forward));
+                    e.Handled = true;
+                    return;
+                case Key.OemOpenBrackets:
+                    Canvas.Apply(s => s.Arrange(shift ? Arrangement.Back : Arrangement.Backward));
+                    e.Handled = true;
+                    return;
+                case Key.L when shift:
+                    ToggleLayers(fromKeys: true);
+                    e.Handled = true;
+                    return;
+                case Key.L:
+                    Canvas.Apply(s => s.ToggleLock());
+                    e.Handled = true;
+                    return;
+                case Key.D:
+                    Canvas.Apply(s => s.DuplicateSelection());
                     e.Handled = true;
                     return;
                 case Key.W:

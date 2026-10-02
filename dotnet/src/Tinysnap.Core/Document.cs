@@ -131,7 +131,8 @@ public sealed record Document
         {
             var margin = GrowthMargin * Scale;
             var bounds = Capture.Bounds;
-            return Annotations.Aggregate(bounds, (extent, annotation) =>
+            // A hidden shape is left out of the output, so it grows nothing.
+            return Annotations.Where(a => !a.IsHidden).Aggregate(bounds, (extent, annotation) =>
             {
                 var box = annotation.Bounds(Scale);
                 return bounds.Contains(box) ? extent : extent.Union(box.Inset(-margin, -margin));
@@ -141,44 +142,68 @@ public sealed record Document
 
     public Annotation? Annotation(Guid id) => Annotations.FirstOrDefault(a => a.Id == id);
 
-    /// <summary>Not stored: 1 plus the number of steps before this one, so deleting a step
-    /// renumbers every step after it.</summary>
+    /// <summary>Not stored: 1 plus the number of shown steps before this one, so deleting or
+    /// hiding a step renumbers every step after it. Null for a hidden step, which shows no
+    /// number.</summary>
     public int? StepNumber(Guid id)
     {
         var number = 0;
         foreach (var annotation in Annotations)
         {
-            if (annotation.Kind is not AnnotationKind.Step) continue;
+            if (annotation.Kind is not AnnotationKind.Step || annotation.IsHidden) continue;
             number++;
             if (annotation.Id == id) return number;
         }
         return null;
     }
 
-    /// <summary>The topmost annotation under <paramref name="point"/>.</summary>
+    /// <summary>What the layers panel calls a shape: its tool, its text's first line, a step's
+    /// number.</summary>
+    public string LayerName(Guid id)
+    {
+        if (Annotation(id) is not { } annotation) return "";
+        return annotation.Kind switch
+        {
+            AnnotationKind.Text(_, var text) => text.Split('\n', '\r').FirstOrDefault()?.Trim() is { Length: > 0 } line
+                ? line[..Math.Min(line.Length, 40)]
+                : "Text",
+            AnnotationKind.Step => StepNumber(id) is { } number ? $"Step {number}" : "Step",
+            // Their tool titles carry a warning that has no place in a list of names.
+            AnnotationKind.Blur => "Blur",
+            AnnotationKind.Pixelate => "Pixelate",
+            AnnotationKind.Erase => "Erase",
+            _ => annotation.Tool.Title(),
+        };
+    }
+
+    /// <summary>The topmost shown annotation under <paramref name="point"/>. A locked one
+    /// counts: it can be selected.</summary>
     public Guid? Topmost(Point point) =>
-        Annotations.LastOrDefault(a => a.Contains(point, Scale))?.Id;
+        Annotations.LastOrDefault(a => !a.IsHidden && a.Contains(point, Scale))?.Id;
 
     /// <summary>What a click with a drawing tool picks up instead of drawing: the topmost
     /// annotation it lands on, or whose hover border it lands on. Landing on means inside for
     /// whatever changes its middle, a blur, an erase, text, an image, a filled box, and on the
     /// stroke for lines and outlines, whose empty middle is still drawn in. A spotlight's clear
-    /// middle is where arrows and boxes go, so only its border counts.</summary>
+    /// middle is where arrows and boxes go, so only its border counts. Locked and hidden
+    /// shapes are never picked up: the click draws over them.</summary>
     public Guid? PickUp(Point point, double reach)
     {
-        var border = BorderHit(point, reach);
-        return Annotations.LastOrDefault(a =>
-            a.Id == border || (a.Kind is not AnnotationKind.Spotlight && a.Contains(point, Scale)))?.Id;
+        var border = BorderHit(point, reach, pickable: true);
+        return Annotations.LastOrDefault(a => !a.IsLocked && !a.IsHidden
+            && (a.Id == border || (a.Kind is not AnnotationKind.Spotlight && a.Contains(point, Scale))))?.Id;
     }
 
-    /// <summary>The topmost annotation whose hover border runs under <paramref name="point"/>.
-    /// The border is drawn half a reach outside the annotation's bounds, and anything within
-    /// a reach of it counts, so the border can be clicked as readily as it is seen.</summary>
-    public Guid? BorderHit(Point point, double reach)
+    /// <summary>The topmost shown annotation whose hover border runs under
+    /// <paramref name="point"/>, leaving out locked ones when <paramref name="pickable"/>. The
+    /// border is drawn half a reach outside the annotation's bounds, and anything within a
+    /// reach of it counts, so the border can be clicked as readily as it is seen.</summary>
+    public Guid? BorderHit(Point point, double reach, bool pickable = false)
     {
         if (reach <= 0) return null;
         return Annotations.LastOrDefault(a =>
         {
+            if (a.IsHidden || (pickable && a.IsLocked)) return false;
             var border = a.Bounds(Scale).Inset(-reach / 2, -reach / 2);
             var inner = border.Inset(reach, reach);
             var inside = !inner.IsNull && inner.Width > 0 && inner.Height > 0 && inner.Contains(point);

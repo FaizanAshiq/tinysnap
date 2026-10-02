@@ -447,6 +447,18 @@ if ($editor)
         if (-not $tiles) { 'no capture among its list items' }
     }
     Front $editor
+    # The layers list, by its name, as a screen reader finds it. The rail's switch shares
+    # the name, so only a list counts.
+    function LayersList {
+        $Element = [System.Windows.Automation.AutomationElement]
+        $named = New-Object System.Windows.Automation.PropertyCondition($Element::NameProperty, 'Layers')
+        @($Element::FromHandle($editor.Handle).FindAll('Descendants', $named)) |
+            Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::List } | Select-Object -First 1
+    }
+    Press $Ctrl $Shift 0x4C
+    Check 'Ctrl+Shift+L opens the layers list' { if (-not (Until { LayersList } 5)) { 'no list named Layers' } }
+    Press $Ctrl $Shift 0x4C
+    Check 'Ctrl+Shift+L again closes it' { if (-not (Until { -not (LayersList) } 5)) { 'still open' } }
     [System.Windows.Forms.Clipboard]::Clear()
     Press $Ctrl 0x43
     Check 'Ctrl+C copies it as a PNG and as a bitmap' {

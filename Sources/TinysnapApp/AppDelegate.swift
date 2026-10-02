@@ -494,6 +494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
             onBackdropChange: { [weak self] backdrop in self?.remember(backdrop) },
             onMeasureChange: { [weak self] measure in self?.remember(measure) },
+            onShowsLayersChange: { [weak self] shows in self?.remember(showsLayers: shows) },
             onClose: { [weak self] closed in
                 self?.editors.removeAll { $0 === closed }
                 self?.updateDockIcon()
@@ -560,6 +561,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func remember(_ backdrop: Backdrop) {
         var current = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? preferences
         current.backdrop = backdrop
+        preferences = current
+        try? current.save(to: Preferences.defaultFileURL)
+    }
+
+    /// Merged into what is on disk, as the styles are, so Settings is not written over.
+    /// Only the next editor follows it; open ones keep the panel as they have it.
+    private func remember(showsLayers: Bool) {
+        var current = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? preferences
+        current.showsLayers = showsLayers
         preferences = current
         try? current.save(to: Preferences.defaultFileURL)
     }

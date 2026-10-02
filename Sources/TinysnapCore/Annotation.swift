@@ -20,12 +20,19 @@ public struct Annotation: Equatable, Identifiable, Sendable {
     /// Where a measurement's tag sits along its line, 0 at its start and 1 at its end.
     /// Off the middle only when it slid clear of another tag.
     public var labelAt: CGFloat
+    /// Locked: nothing about it changes until it is unlocked, and drawing tools draw over it.
+    public var isLocked: Bool
+    /// Hidden: kept, but not drawn, clicked, copied or saved into an image.
+    public var isHidden: Bool
 
-    public init(id: UUID = UUID(), kind: Kind, style: Style, labelAt: CGFloat = 0.5) {
+    public init(id: UUID = UUID(), kind: Kind, style: Style, labelAt: CGFloat = 0.5,
+                isLocked: Bool = false, isHidden: Bool = false) {
         self.id = id
         self.kind = kind
         self.style = style
         self.labelAt = labelAt
+        self.isLocked = isLocked
+        self.isHidden = isHidden
     }
 
     public enum Kind: Equatable, Sendable {

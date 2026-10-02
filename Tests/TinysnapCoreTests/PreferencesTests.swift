@@ -20,6 +20,15 @@ struct PreferencesTests {
         #expect(preferences.hotkeys == .defaults)
     }
 
+    @Test func theLayersPanelStartsClosedAndIsRemembered() throws {
+        #expect(try Preferences.load(from: temporaryFile(containing: #"{"delaySeconds": 5}"#)).showsLayers == false)
+        var preferences = Preferences.defaults
+        preferences.showsLayers = true
+        let url = try temporaryFile()
+        try preferences.save(to: url)
+        #expect(try Preferences.load(from: url).showsLayers)
+    }
+
     @Test func nullMeansNoHotkeyAndMissingMeansTheDefault() throws {
         let preferences = try Preferences.load(from: temporaryFile(containing: #"{"hotkeys": {"area": null}}"#))
         #expect(preferences.hotkeys.area == nil)

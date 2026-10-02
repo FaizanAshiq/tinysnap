@@ -47,6 +47,13 @@ public sealed record Annotation(Guid Id, AnnotationKind Kind, Style Style, doubl
     // LabelAt: where a measurement's tag sits along its line, 0 at `from` and 1 at `to`.
     // Every other kind ignores it.
 
+    /// <summary>Locked: nothing about it changes until it is unlocked, and drawing tools draw
+    /// over it.</summary>
+    public bool IsLocked { get; init; }
+
+    /// <summary>Hidden: kept, but not drawn, clicked, copied or saved into an image.</summary>
+    public bool IsHidden { get; init; }
+
     public static Annotation New(AnnotationKind kind, Style style, double labelAt = 0.5) =>
         new(Guid.NewGuid(), kind, style, labelAt);
 

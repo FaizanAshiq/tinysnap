@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using SkiaSharp;
 using Tinysnap.Core;
+using AvaloniaPoint = Avalonia.Point;
 using AvaloniaRect = Avalonia.Rect;
 using AvaloniaSize = Avalonia.Size;
 using Point = Tinysnap.Core.Point;
@@ -171,7 +172,7 @@ internal sealed partial class CanvasControl : Control
         var showAll = commandHeld || Session.Tool == Tool.Select;
         foreach (var annotation in Session.Display.Annotations)
         {
-            if (annotation.Id == Session.Selection) continue;
+            if (annotation.Id == Session.Selection || annotation.IsHidden) continue;
             var isHovered = annotation.Id == Hovered;
             if (!showAll && !isHovered) continue;
             var box = ToDips(annotation.Bounds(Session.Scale)).Inflate(3);
@@ -180,12 +181,45 @@ internal sealed partial class CanvasControl : Control
         }
     }
 
+    /// <summary>A hidden selection shows nothing; a locked one its outline and a lock, no
+    /// handles.</summary>
     private void DrawSelection(DrawingContext context)
     {
-        if (Session.SelectedAnnotation is not { } annotation || Session.TypingId is not null) return;
+        if (Session.SelectedAnnotation is not { IsHidden: false } annotation || Session.TypingId is not null) return;
         var outline = ToDips(annotation.Bounds(Session.Scale)).Inflate(2);
         context.DrawRectangle(null, new Pen(AccentBrush, 1, new DashStyle([4, 3], 0)), outline);
+        if (annotation.IsLocked)
+        {
+            DrawLockBadge(context, outline.TopRight);
+            return;
+        }
         DrawHandles(context, annotation.Handles(Session.Scale).Select(h => h.Point));
+    }
+
+    private static readonly Avalonia.Media.Geometry LockGlyph = Avalonia.Media.Geometry.Parse(ToolIcons.Lock);
+
+    /// <summary>An accent disc with a white lock, centred on the outline's top right corner.</summary>
+    private void DrawLockBadge(DrawingContext context, AvaloniaPoint corner)
+    {
+        context.DrawEllipse(AccentBrush, null, corner, 9, 9);
+        // The 20 point glyph at 12 points, centred on the disc.
+        using (context.PushTransform(Matrix.CreateScale(0.6, 0.6) * Matrix.CreateTranslation(corner.X - 6, corner.Y - 6.5)))
+            context.DrawGeometry(Brushes.White, null, LockGlyph);
+    }
+
+    /// <summary>The layers panel's row under the pointer borders its shape, as hovering it here does.</summary>
+    internal void Highlight(Guid? id)
+    {
+        Hovered = id;
+        InvalidateVisual();
+    }
+
+    /// <summary>For the layers panel and its shortcuts: a session change, then everything that
+    /// follows one.</summary>
+    internal void Apply(Action<EditorSession> change)
+    {
+        change(Session);
+        SessionChanged();
     }
 
     private void DrawHandles(DrawingContext context, IEnumerable<Point> points)

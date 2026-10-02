@@ -32,6 +32,28 @@ public class DocumentArchiveTests
     }
 
     [Fact]
+    public void LockedAndHiddenComeBackAndAreWrittenOnlyWhenOn()
+    {
+        var locked = Fixture.Annotation(new AnnotationKind.Rectangle(new Rect(10, 10, 40, 30))) with { IsLocked = true };
+        var hidden = Fixture.Annotation(new AnnotationKind.Oval(new Rect(60, 10, 40, 30))) with { IsHidden = true };
+        var plain = Fixture.Annotation(new AnnotationKind.Line(new Point(5, 5), new Point(90, 90)));
+        var document = new Document(Fixture.Capture(200, 100), annotations: [locked, hidden, plain]);
+        var (json, _) = DocumentArchive.Encode(document, Captured);
+        var items = Root(json)["annotations"]!.AsArray().Select(item => item!.AsObject()).ToList();
+        Assert.Equal([true, false, false], items.Select(item => item.ContainsKey("locked")));
+        Assert.Equal([false, true, false], items.Select(item => item.ContainsKey("hidden")));
+        Assert.Equal(new[] { locked, hidden, plain }, DocumentArchive.Decode(json, _ => null).Annotations);
+    }
+
+    [Fact]
+    public void AFileFromBeforeLayersOpensUnlockedAndShown()
+    {
+        var annotation = Decode("""{"version":1,"captured":"2026-10-02T16:34:05Z","scale":2,"annotations":[{"id":"F86ED62D-E65F-492A-9835-C9A1EF940F71","kind":"pixelate","rect":{"x":34,"y":240,"width":300,"height":200},"style":{"colorHex":"#FF3B30","size":"large"}}]}""")
+            .Annotations.Single();
+        Assert.False(annotation.IsLocked || annotation.IsHidden);
+    }
+
+    [Fact]
     public void AMeasurementsMovedTagComesBack()
     {
         var moved = Annotation.New(new AnnotationKind.Measure(new Point(150, 20), new Point(150, 180)), Fixture.Red, 0.3);

@@ -90,7 +90,8 @@ public struct Document: Equatable, Sendable {
     /// the canvas back as readily as drawing grows it.
     public var extent: CGRect {
         let margin = Self.growthMargin * scale
-        return annotations.reduce(capture.bounds) { extent, annotation in
+        // A hidden shape is left out of the output, so it grows nothing.
+        return annotations.filter { !$0.isHidden }.reduce(capture.bounds) { extent, annotation in
             let bounds = annotation.bounds(scale: scale)
             guard !capture.bounds.contains(bounds) else { return extent }
             return extent.union(bounds.insetBy(dx: -margin, dy: -margin))
@@ -102,11 +103,11 @@ public struct Document: Equatable, Sendable {
         annotations.first { $0.id == id }
     }
 
-    /// Not stored: 1 plus the number of steps before this one, so deleting a step
-    /// renumbers every step after it.
+    /// Not stored: 1 plus the number of shown steps before this one, so deleting or hiding
+    /// a step renumbers every step after it. Nil for a hidden step, which shows no number.
     public func stepNumber(of id: Annotation.ID) -> Int? {
         var number = 0
-        for annotation in annotations {
+        for annotation in annotations where !annotation.isHidden {
             guard case .step = annotation.kind else { continue }
             number += 1
             if annotation.id == id { return number }
@@ -114,9 +115,26 @@ public struct Document: Equatable, Sendable {
         return nil
     }
 
-    /// The topmost annotation under `point`.
+    /// What the layers panel calls a shape: its tool, its text's first line, a step's number.
+    public func layerName(of id: Annotation.ID) -> String {
+        guard let annotation = annotation(id) else { return "" }
+        switch annotation.kind {
+        case let .text(_, string):
+            let line = string.split(whereSeparator: \.isNewline).first.map(String.init)?
+                .trimmingCharacters(in: .whitespaces) ?? ""
+            return line.isEmpty ? "Text" : String(line.prefix(40))
+        case .step: return stepNumber(of: id).map { "Step \($0)" } ?? "Step"
+        // Their tool titles carry a warning that has no place in a list of names.
+        case .blur: return "Blur"
+        case .pixelate: return "Pixelate"
+        case .erase: return "Erase"
+        default: return annotation.tool.title
+        }
+    }
+
+    /// The topmost shown annotation under `point`. A locked one counts: it can be selected.
     public func topmost(at point: CGPoint) -> Annotation.ID? {
-        annotations.last { $0.contains(point, scale: scale) }?.id
+        annotations.last { !$0.isHidden && $0.contains(point, scale: scale) }?.id
     }
 
     /// What a click with a drawing tool picks up instead of drawing: the topmost
@@ -124,21 +142,25 @@ public struct Document: Equatable, Sendable {
     /// for whatever changes its middle, a blur, an erase, text, an image, a filled box,
     /// and on the stroke for lines and outlines, whose empty middle is still drawn in. A
     /// spotlight's clear middle is where arrows and boxes go, so only its border counts.
+    /// Locked and hidden shapes are never picked up: the click draws over them.
     public func pickUp(at point: CGPoint, reach: CGFloat) -> Annotation.ID? {
-        let border = borderHit(at: point, reach: reach)
+        let border = borderHit(at: point, reach: reach, pickable: true)
         return annotations.last { annotation in
+            guard !annotation.isLocked, !annotation.isHidden else { return false }
             if annotation.id == border { return true }
             if case .spotlight = annotation.kind { return false }
             return annotation.contains(point, scale: scale)
         }?.id
     }
 
-    /// The topmost annotation whose hover border runs under `point`. The border is drawn
-    /// half a reach outside the annotation's bounds, and anything within a reach of it
-    /// counts, so the border can be clicked as readily as it is seen.
-    public func borderHit(at point: CGPoint, reach: CGFloat) -> Annotation.ID? {
+    /// The topmost shown annotation whose hover border runs under `point`, leaving out
+    /// locked ones when `pickable`. The border is drawn half a reach outside the
+    /// annotation's bounds, and anything within a reach of it counts, so the border can be
+    /// clicked as readily as it is seen.
+    public func borderHit(at point: CGPoint, reach: CGFloat, pickable: Bool = false) -> Annotation.ID? {
         guard reach > 0 else { return nil }
         return annotations.last { annotation in
+            guard !annotation.isHidden, !(pickable && annotation.isLocked) else { return false }
             let border = annotation.bounds(scale: scale).insetBy(dx: -reach / 2, dy: -reach / 2)
             let inner = border.insetBy(dx: reach, dy: reach)
             let inside = inner.width > 0 && inner.height > 0 && inner.contains(point)

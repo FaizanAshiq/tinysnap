@@ -79,6 +79,8 @@ final class StyleBar: NSVisualEffectView {
     private var backdrop: Backdrop?
     private var measure = MeasureSettings.defaults
     private var selected = false
+    /// A locked shape picked up: its style shows, but nothing in the bar changes it.
+    private var locked = false
     /// The settings a backdrop starts from when it is turned on.
     private var remembered = Backdrop.defaults
     /// The export size in use, as a fraction of full resolution, and the pixels it makes.
@@ -115,15 +117,16 @@ final class StyleBar: NSVisualEffectView {
     static func shows(_ tool: Tool) -> Bool { tool.hasColor || tool.hasSize || tool.hasFill || tool.hasCorners || tool.hasOverlay }
 
     /// `selected` is a shape picked up rather than a tool about to draw, and adds the
-    /// trash chip.
-    func show(tool: Tool, style: Style, measure: MeasureSettings = .defaults, selected: Bool = false) {
+    /// trash chip. `locked` shows its style dimmed, with nothing to press and no trash.
+    func show(tool: Tool, style: Style, measure: MeasureSettings = .defaults, selected: Bool = false, locked: Bool = false) {
         guard mode != .tool || tool != self.tool || style != self.style || measure != self.measure
-                || selected != self.selected || row.arrangedSubviews.isEmpty else { return }
+                || selected != self.selected || locked != self.locked || row.arrangedSubviews.isEmpty else { return }
         mode = .tool
         self.tool = tool
         self.style = style
         self.measure = measure
         self.selected = selected
+        self.locked = locked
         rebuild()
     }
 
@@ -145,6 +148,8 @@ final class StyleBar: NSVisualEffectView {
 
     private func rebuild() {
         row.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        // A locked shape dims the tool's chips only; Backdrop and Size are the capture's own.
+        row.alphaValue = 1
         guard mode == .tool else {
             if mode == .backdrop { buildBackdrop() } else { buildSize() }
             setFrameSize(fittingSize)
@@ -163,8 +168,15 @@ final class StyleBar: NSVisualEffectView {
             row.addArrangedSubview(contrastControl())
             row.addArrangedSubview(group([measureHelpChip()]))
         }
-        if selected { row.addArrangedSubview(group([deleteChip()])) }
+        if selected, !locked { row.addArrangedSubview(group([deleteChip()])) }
+        row.alphaValue = locked ? 0.45 : 1
+        if locked { disable(row) }
         setFrameSize(fittingSize)
+    }
+
+    private func disable(_ view: NSView) {
+        (view as? NSControl)?.isEnabled = false
+        view.subviews.forEach(disable)
     }
 
     private func group(_ chips: [NSView]) -> NSStackView {

@@ -32,6 +32,9 @@ public static class DocumentArchive
             var item = new JsonObject { ["id"] = Json.Uuid(annotation.Id), ["style"] = annotation.Style.ToJson() };
             // Only a tag slid off its middle is written, so everything else reads as before.
             if (annotation.LabelAt != 0.5) item["labelAt"] = annotation.LabelAt;
+            // Written only when on, so an older Tinysnap reads the file as before.
+            if (annotation.IsLocked) item["locked"] = true;
+            if (annotation.IsHidden) item["hidden"] = true;
             void Ends(string kind, Point from, Point to)
             {
                 item["kind"] = kind;
@@ -198,7 +201,11 @@ public static class DocumentArchive
             "image" => PastedKind(file ?? throw Missing("file"), image, Box),
             _ => throw new ArchiveException($"unknown kind {kindName}"),
         };
-        return new Annotation(id, kind, Style.FromJson(style), labelAt);
+        return new Annotation(id, kind, Style.FromJson(style), labelAt)
+        {
+            IsLocked = Json.Bool(item, "locked") ?? false,
+            IsHidden = Json.Bool(item, "hidden") ?? false,
+        };
     }
 
     private static AnnotationKind PastedKind(string name, Func<string, SKImage?> image, Func<Rect> rect)

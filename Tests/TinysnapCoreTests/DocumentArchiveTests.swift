@@ -34,6 +34,26 @@ struct DocumentArchiveTests {
         #expect(edits.annotations.map(\.labelAt) == [0.3, 0.5])
     }
 
+    @Test func lockedAndHiddenComeBackAndAreWrittenOnlyWhenOn() throws {
+        var locked = Fixture.annotation(.rectangle(CGRect(x: 10, y: 10, width: 40, height: 30)))
+        locked.isLocked = true
+        var hidden = Fixture.annotation(.oval(CGRect(x: 60, y: 10, width: 40, height: 30)))
+        hidden.isHidden = true
+        let plain = Fixture.annotation(.line(from: CGPoint(x: 5, y: 5), to: CGPoint(x: 90, y: 90)))
+        let document = Document(capture: Fixture.capture(width: 200, height: 100), annotations: [locked, hidden, plain])
+        let (json, _) = try DocumentArchive.encode(document, captured: captured)
+        let text = String(decoding: json, as: UTF8.self)
+        #expect(text.components(separatedBy: "\"locked\"").count == 2)
+        #expect(text.components(separatedBy: "\"hidden\"").count == 2)
+        #expect(try DocumentArchive.decode(json) { _ in nil }.annotations == [locked, hidden, plain])
+    }
+
+    @Test func aFileFromBeforeLayersOpensUnlockedAndShown() throws {
+        let json = Data(##"{"version":1,"captured":"2026-10-02T16:34:05Z","scale":2,"annotations":[{"id":"F86ED62D-E65F-492A-9835-C9A1EF940F71","kind":"pixelate","rect":{"x":34,"y":240,"width":300,"height":200},"style":{"colorHex":"#FF3B30","size":"large"}}]}"##.utf8)
+        let annotation = try #require(try DocumentArchive.decode(json) { _ in nil }.annotations.first)
+        #expect(!annotation.isLocked && !annotation.isHidden)
+    }
+
     @Test func aBackdropAndItsWallpaperComeBack() throws {
         let backdrop = wallpaperBackdrop()
         let document = Document(capture: Fixture.capture(width: 40, height: 30), backdrop: backdrop)

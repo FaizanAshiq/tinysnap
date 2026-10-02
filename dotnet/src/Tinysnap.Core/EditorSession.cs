@@ -19,6 +19,9 @@ public enum Modifiers
 
 public enum EscapeResult { FinishedTyping, Deselected, Close }
 
+/// <summary>Where Bring to Front, Bring Forward, Send Backward and Send to Back put a shape.</summary>
+public enum Arrangement { Front, Forward, Backward, Back }
+
 /// <summary>What the pointer is doing to the document, if anything.</summary>
 public abstract record EditorPhase
 {
@@ -108,6 +111,8 @@ public sealed class EditorSession
     /// changes to one annotation undoes as one step.</summary>
     public void Restyle(Func<Style, Style> change, bool merging = false)
     {
+        // A locked shape keeps its style, and the tool keeps what it had.
+        if (SelectedAnnotation?.IsLocked == true) return;
         if (Selection is not { } id || Display.Annotation(id) is not { } annotation)
         {
             var style = change(StyleFor(Tool));
@@ -164,15 +169,18 @@ public sealed class EditorSession
 
     // Magnifier
 
-    /// <summary>The topmost magnifier under <paramref name="point"/>, which the scroll wheel zooms.</summary>
+    /// <summary>The topmost magnifier under <paramref name="point"/> the scroll wheel may zoom: not
+    /// a locked or hidden one.</summary>
     public Guid? Magnifier(Point point) =>
-        Display.Annotations.LastOrDefault(a => a.Kind is AnnotationKind.Magnifier && a.Contains(point, Scale))?.Id;
+        Display.Annotations.LastOrDefault(a => a.Kind is AnnotationKind.Magnifier && !a.IsLocked && !a.IsHidden
+                                               && a.Contains(point, Scale))?.Id;
 
     /// <summary>Zooms a magnifier half a step per scroll step, from 1.5x to 4x. A run of
     /// scroll steps on one lens undoes as one step.</summary>
     public void ZoomMagnifier(Guid id, int steps)
     {
-        if (!IsIdle || Display.Annotation(id) is not { Kind: AnnotationKind.Magnifier(var center, var radius, var zoom) } lens)
+        if (!IsIdle || Display.Annotation(id) is not { Kind: AnnotationKind.Magnifier(var center, var radius, var zoom) } lens
+            || lens.IsLocked || lens.IsHidden)
             return;
         var zoomed = Math.Min(Math.Max(zoom + 0.5 * steps, 1.5), 4);
         Display = Display.Replacing(lens with { Kind = new AnnotationKind.Magnifier(center, radius, zoomed) });
@@ -201,31 +209,34 @@ public sealed class EditorSession
             return;
         }
 
-        if (SelectedAnnotation is { } selected && HandleNear(point, selected.Handles(Scale), reach) is { } handle)
+        if (SelectedAnnotation is { IsLocked: false, IsHidden: false } selected
+            && HandleNear(point, selected.Handles(Scale), reach) is { } handle)
         {
             Phase = new EditorPhase.Resizing(selected, handle);
             return;
         }
 
         if (clickCount >= 2 && Display.Topmost(point) is { } doubleClicked
-            && Display.Annotation(doubleClicked)?.Kind is AnnotationKind.Text)
+            && Display.Annotation(doubleClicked) is { Kind: AnnotationKind.Text, IsLocked: false })
         {
             Selection = doubleClicked;
             Phase = new EditorPhase.Typing(doubleClicked);
             return;
         }
 
-        // The select tool, or Command held with any other, picks up what is applied.
+        // The select tool, or Command held with any other, picks up what is applied. A locked
+        // shape is selected, so it can be unlocked, but stays where it is.
         if (Tool is Tool.Select or Tool.Image || modifiers.HasFlag(Modifiers.Command))
         {
             Selection = Display.Topmost(point);
-            Phase = Selection is { } picked ? new EditorPhase.Moving(picked, point) : EditorPhase.Idle;
+            Phase = SelectedAnnotation is { IsLocked: false } picked ? new EditorPhase.Moving(picked.Id, point) : EditorPhase.Idle;
             return;
         }
 
         // With the text tool, clicking existing text edits it rather than starting a new one
-        // on top.
-        if (Tool == Tool.Text && Display.Topmost(point) is { } text && Display.Annotation(text)?.Kind is AnnotationKind.Text)
+        // on top. Locked text is drawn over instead.
+        if (Tool == Tool.Text && Display.Topmost(point) is { } text
+            && Display.Annotation(text) is { Kind: AnnotationKind.Text, IsLocked: false })
         {
             Selection = text;
             Phase = new EditorPhase.Typing(text);
@@ -233,9 +244,9 @@ public sealed class EditorSession
         }
 
         // The selection is picked up anywhere on it, so a box just drawn moves at once.
-        if (Selection is { } id && Display.Annotation(id)?.Contains(point, Scale) == true)
+        if (SelectedAnnotation is { IsLocked: false, IsHidden: false } chosen && chosen.Contains(point, Scale))
         {
-            Phase = new EditorPhase.Moving(id, point);
+            Phase = new EditorPhase.Moving(chosen.Id, point);
             return;
         }
 
@@ -434,7 +445,7 @@ public sealed class EditorSession
 
     public void DeleteSelection()
     {
-        if (!IsIdle || Selection is not { } id) return;
+        if (!IsIdle || Selection is not { } id || SelectedAnnotation?.IsLocked == true) return;
         Display = Display.Removing(id);
         Selection = null;
         History.Commit(Display);
@@ -442,7 +453,7 @@ public sealed class EditorSession
 
     public void Nudge(double dx, double dy)
     {
-        if (!IsIdle || SelectedAnnotation is not { } annotation) return;
+        if (!IsIdle || SelectedAnnotation is not { IsLocked: false, IsHidden: false } annotation) return;
         Display = Display.Replacing(annotation.Moved(new Vector(dx, dy)));
         History.Commit(Display);
     }
@@ -476,6 +487,82 @@ public sealed class EditorSession
         History.Redo();
         Display = History.Document;
         if (Selection is { } id && Display.Annotation(id) is null) Selection = null;
+    }
+
+    // Layers
+
+    /// <summary>Points a duplicate sits right of and below its original.</summary>
+    public const double DuplicateOffset = 12;
+
+    /// <summary>Selects a shape from the layers panel, whatever the tool, or nothing.</summary>
+    public void Select(Guid? id)
+    {
+        FinishTyping();
+        if (!IsIdle) return;
+        Selection = id is { } chosen ? Display.Annotation(chosen)?.Id : null;
+    }
+
+    /// <summary>Moves the selection in the order. Front and back are the ends of the list.</summary>
+    public void Arrange(Arrangement arrangement)
+    {
+        FinishTyping();
+        if (Selection is not { } id) return;
+        var index = Display.Annotations.FindIndex(a => a.Id == id);
+        if (index < 0) return;
+        var last = Display.Annotations.Length - 1;
+        MoveLayer(id, arrangement switch
+        {
+            Arrangement.Front => last,
+            Arrangement.Forward => Math.Min(index + 1, last),
+            Arrangement.Backward => Math.Max(index - 1, 0),
+            _ => 0,
+        });
+    }
+
+    /// <summary>Puts a shape at <paramref name="index"/> in the list, bottom first, as a drag in the
+    /// layers panel does. One undo step, and none when it lands where it was.</summary>
+    public void MoveLayer(Guid id, int index)
+    {
+        FinishTyping();
+        var from = Display.Annotations.FindIndex(a => a.Id == id);
+        if (!IsIdle || from < 0) return;
+        var target = Math.Clamp(index, 0, Display.Annotations.Length - 1);
+        if (target == from) return;
+        var moving = Display.Annotations[from];
+        Display = Display with { Annotations = Display.Annotations.RemoveAt(from).Insert(target, moving) };
+        History.Commit(Display);
+    }
+
+    public void SetLocked(Guid id, bool locked) => Edit(id, a => a with { IsLocked = locked });
+
+    public void SetHidden(Guid id, bool hidden) => Edit(id, a => a with { IsHidden = hidden });
+
+    public void ToggleLock()
+    {
+        if (SelectedAnnotation is { } annotation) SetLocked(annotation.Id, !annotation.IsLocked);
+    }
+
+    /// <summary>A copy right above the original, a little right and down, unlocked and shown, so
+    /// it can be moved at once. It becomes the selection.</summary>
+    public void DuplicateSelection()
+    {
+        FinishTyping();
+        if (!IsIdle || SelectedAnnotation is not { } original) return;
+        var index = Display.Annotations.FindIndex(a => a.Id == original.Id);
+        var offset = DuplicateOffset * Scale;
+        var moved = original.Moved(new Vector(offset, offset));
+        var copy = Annotation.New(moved.Kind, moved.Style, moved.LabelAt);
+        Display = Display with { Annotations = Display.Annotations.Insert(index + 1, copy) };
+        Selection = copy.Id;
+        History.Commit(Display);
+    }
+
+    private void Edit(Guid id, Func<Annotation, Annotation> change)
+    {
+        FinishTyping();
+        if (!IsIdle || Display.Annotation(id) is not { } annotation) return;
+        Display = Display.Replacing(change(annotation));
+        History.Commit(Display);
     }
 
     // Images

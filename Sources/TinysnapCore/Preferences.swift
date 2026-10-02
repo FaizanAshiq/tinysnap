@@ -199,6 +199,8 @@ public struct Preferences: Equatable, Sendable, Codable {
     }
     /// The Measure tool as it was left: its lines, its edge contrast, its guide seen.
     public var measure: MeasureSettings
+    /// Whether editors open with the layers panel showing: the last choice made in any.
+    public var showsLayers: Bool
 
     public static let defaults = Preferences(
         hotkeys: .defaults,
@@ -212,14 +214,16 @@ public struct Preferences: Equatable, Sendable, Codable {
         afterCapture: .editor,
         keepLibrary: true,
         backdrop: .defaults,
-        measure: .defaults
+        measure: .defaults,
+        showsLayers: false
     )
 
     public static let delayRange = 1...60
 
     public init(hotkeys: HotKeys, saveFolder: String, exportScale: ExportScale, delaySeconds: Int,
                 showMenuBarIcon: Bool, showDockIconWhileCapturing: Bool, colorHex: String, toolStyles: [String: Style],
-                afterCapture: AfterCapture, keepLibrary: Bool, backdrop: Backdrop, measure: MeasureSettings = .defaults) {
+                afterCapture: AfterCapture, keepLibrary: Bool, backdrop: Backdrop, measure: MeasureSettings = .defaults,
+                showsLayers: Bool = false) {
         self.hotkeys = hotkeys
         self.saveFolder = saveFolder
         self.exportScale = exportScale
@@ -234,6 +238,7 @@ public struct Preferences: Equatable, Sendable, Codable {
         // An observer does not run in init.
         self.backdrop.wallpaper = nil
         self.measure = measure
+        self.showsLayers = showsLayers
     }
 
     /// Every key is optional and a bad value falls back on its own, so a file written
@@ -256,6 +261,7 @@ public struct Preferences: Equatable, Sendable, Codable {
         keepLibrary = (try? container.decodeIfPresent(Bool.self, forKey: .keepLibrary)) ?? fallback.keepLibrary
         backdrop = (try? container.decodeIfPresent(Backdrop.self, forKey: .backdrop)) ?? fallback.backdrop
         measure = (try? container.decodeIfPresent(MeasureSettings.self, forKey: .measure)) ?? fallback.measure
+        showsLayers = (try? container.decodeIfPresent(Bool.self, forKey: .showsLayers)) ?? fallback.showsLayers
     }
 
     public var saveFolderURL: URL {

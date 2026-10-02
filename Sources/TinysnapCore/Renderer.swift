@@ -39,7 +39,7 @@ public enum Renderer {
         }
         canvas.draw(document.capture.image, in: document.capture.bounds)
 
-        let visible = document.annotations.filter { !hidden.contains($0.id) }
+        let visible = document.annotations.filter { !$0.isHidden && !hidden.contains($0.id) }
         var spotlightDrawn = false
         for annotation in visible {
             if case .spotlight = annotation.kind {

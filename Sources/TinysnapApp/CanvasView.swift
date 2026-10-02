@@ -230,7 +230,7 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         let showAll = commandHeld || session.tool == .select
         context.saveGState()
         context.setStrokeColor(NSColor.controlAccentColor.cgColor)
-        for annotation in session.display.annotations where annotation.id != session.selection {
+        for annotation in session.display.annotations where annotation.id != session.selection && !annotation.isHidden {
             let isHovered = annotation.id == hovered
             guard showAll || isHovered else { continue }
             let box = viewRect(annotation.bounds(scale: scale)).insetBy(dx: -3 / magnification, dy: -3 / magnification)
@@ -430,8 +430,9 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         }
     }
 
+    /// A hidden selection shows nothing; a locked one its outline and a lock, no handles.
     private func drawSelection(in context: CGContext) {
-        guard let annotation = session.selectedAnnotation, session.typingID == nil else { return }
+        guard let annotation = session.selectedAnnotation, session.typingID == nil, !annotation.isHidden else { return }
         let outline = viewRect(annotation.bounds(scale: scale)).insetBy(dx: -2 / magnification, dy: -2 / magnification)
         context.saveGState()
         context.setStrokeColor(NSColor.controlAccentColor.cgColor)
@@ -439,7 +440,33 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         context.setLineDash(phase: 0, lengths: [4 / magnification, 3 / magnification])
         context.stroke(outline)
         context.restoreGState()
+        guard !annotation.isLocked else {
+            drawLockBadge(at: CGPoint(x: outline.maxX, y: outline.minY), in: context)
+            return
+        }
         drawHandles(annotation.handles(scale: scale).map(\.1), in: context)
+    }
+
+    /// An accent disc with a white lock, centred on the outline's top right corner.
+    private func drawLockBadge(at corner: CGPoint, in context: CGContext) {
+        let size = 18 / magnification
+        let disc = CGRect(x: corner.x - size / 2, y: corner.y - size / 2, width: size, height: size)
+        context.saveGState()
+        context.setFillColor(NSColor.controlAccentColor.cgColor)
+        context.fillEllipse(in: disc)
+        context.restoreGState()
+        let configuration = NSImage.SymbolConfiguration(pointSize: 10 / magnification, weight: .semibold)
+            .applying(.init(paletteColors: [.white]))
+        guard let lock = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "Locked")?
+            .withSymbolConfiguration(configuration) else { return }
+        let box = CGRect(x: disc.midX - lock.size.width / 2, y: disc.midY - lock.size.height / 2,
+                         width: lock.size.width, height: lock.size.height)
+        lock.draw(in: box)
+    }
+
+    /// The layers panel's row under the pointer borders its shape, as hovering it here does.
+    func highlight(_ id: Annotation.ID?) {
+        hovered = id
     }
 
     private func drawHandles(_ points: [CGPoint], in context: CGContext) {
@@ -643,11 +670,26 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         session.deleteSelection()
     }
 
+    @objc func bringToFront(_ sender: Any?) { session.arrange(.front) }
+    @objc func bringForward(_ sender: Any?) { session.arrange(.forward) }
+    @objc func sendBackward(_ sender: Any?) { session.arrange(.backward) }
+    @objc func sendToBack(_ sender: Any?) { session.arrange(.back) }
+    @objc func toggleLock(_ sender: Any?) { session.toggleLock() }
+    @objc func duplicate(_ sender: Any?) { session.duplicateSelection() }
+
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        let selected = session.selectedAnnotation
         switch menuItem.action {
         case #selector(undo(_:)): return session.history.canUndo && session.phase == .idle
         case #selector(redo(_:)): return session.history.canRedo && session.phase == .idle
-        case #selector(delete(_:)): return session.selection != nil
+        case #selector(delete(_:)): return selected.map { !$0.isLocked } ?? false
+        case #selector(toggleLock(_:)):
+            menuItem.title = selected?.isLocked == true ? "Unlock" : "Lock"
+            return selected != nil
+        case #selector(bringToFront(_:)), #selector(bringForward(_:)), #selector(sendBackward(_:)),
+             #selector(sendToBack(_:)), #selector(duplicate(_:)):
+            // While typing too: the session ends the typing first, as Windows does.
+            return selected != nil && (session.phase == .idle || session.typingID != nil)
         default: return true
         }
     }
