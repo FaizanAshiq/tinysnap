@@ -44,16 +44,6 @@ jobs:
       - run: dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' sh -c 'openbox & dotnet test dotnet/tests/Tinysnap.Linux.Tests --configuration Release'
       - run: dotnet test dotnet/tests/Tinysnap.Core.Tests --configuration Release
       - run: dotnet test dotnet/tests/Tinysnap.App.Tests --configuration Release
-      # The real program, published as it ships, driven over D-Bus as GNOME's shortcuts drive it.
-      - run: sudo apt-get install -y xdotool xclip imagemagick
-      - run: dotnet publish dotnet/src/Tinysnap.Linux --configuration Release --runtime linux-x64 --self-contained --output linux-app
-      - run: dbus-run-session -- xvfb-run -a sh -c 'linux-app/Tinysnap --self-check "$PWD/self-check.txt"; code=$?; cat self-check.txt; exit $code'
-      - run: dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' bash dotnet/tests/e2e/smoke-linux.sh "$PWD/linux-app/Tinysnap"
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: linux-smoke
-          path: smoke/*.*
 
   # The AppImage for each architecture, Tesseract and its languages inside. The system's own
   # Tesseract is removed before the self-check, so the check proves the bundle reads alone.
@@ -91,6 +81,37 @@ jobs:
         with:
           name: Tinysnap-${{ matrix.runtime }}
           path: releases/*.AppImage
+          retention-days: 14
+
+  # Each AppImage just built, driven like a person would on an X11 desktop: hotkeys as GNOME's
+  # shortcuts send them, real drags and keys, then removed from the computer. A screenshot of
+  # each step is kept.
+  linux-e2e:
+    needs: linux-package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, runtime: linux-x64 }
+          - { runner: ubuntu-24.04-arm, runtime: linux-arm64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: Tinysnap-${{ matrix.runtime }}
+          path: releases
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb openbox x11-utils x11-xserver-utils xdotool xclip imagemagick qrencode libfuse2t64 \
+            dconf-gsettings-backend dconf-service gsettings-desktop-schemas gnome-settings-daemon-common gnome-shell-common
+          chmod +x releases/*.AppImage
+      - run: dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' bash dotnet/tests/e2e/drive-linux.sh releases/*.AppImage
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: linux-e2e-${{ matrix.runtime }}
+          path: shots/*
           retention-days: 14
 
   # The installer and the portable zip, built on every push and kept as artifacts. Nothing is
