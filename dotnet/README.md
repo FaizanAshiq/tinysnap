@@ -43,7 +43,11 @@ AppImage for x64 and ARM64 with Tesseract and fifteen languages inside, runs its
 no Tesseract on the system, and drives each AppImage end to end on an X11 desktop
 (`tests/e2e/drive-linux.sh`): GNOME's shortcut calls, an area saved, the screen copied, text and
 a QR code read, Open With, a pin, the AppImage moved, and Remove from This Computer. Its
-screenshots are the `linux-e2e-linux-x64` and `linux-e2e-linux-arm64` artifacts.
+screenshots are the `linux-e2e-linux-x64` and `linux-e2e-linux-arm64` artifacts. A last job runs
+the x64 AppImage on Wayland in a headless GNOME Shell (`tests/e2e/gnome-windows.sh`), with a
+small stand-in for the screenshot portal, which GNOME's own cannot run there: the self-check in
+the session, nothing showing at start, the overlay full screen over the top bar with the frozen
+screen in it, an editor for a fullscreen capture, and Capture Window through GNOME's picker.
 
 What only a person on a Windows machine can check: capture on real monitors at mixed scales,
 pasting into other apps, dragging out, how a pin resizes on a real wheel and touchpad, the
@@ -51,9 +55,11 @@ thumbnail's slide and swipe, the tray menu, start at login, the Recycle Bin, a s
 with no file bringing the first forward, text in the person's own languages, the desktop
 picture as a backdrop, the ARM64 build, and how it all feels.
 
-What only a person on a real GNOME desktop can check: the Wayland path (GNOME's screenshot
-permission, the flash on each capture, GNOME's own window picker), the overlay above the top bar,
-the tray where GNOME has one, the shortcuts in GNOME Settings, a 200% monitor, and how it feels.
+What only a person on a real GNOME desktop can check: that the overlay takes keys and drags at
+once after Print Screen (GNOME's virtual input does not reach XWayland windows in CI, and GNOME
+shows its top bar over a full screen window that is not focused), GNOME's screenshot permission
+and the flash on each capture, GNOME's own window picker, the tray where GNOME has one, the
+shortcuts in GNOME Settings, a 200% monitor, and how it feels.
 
 ## Linux
 
