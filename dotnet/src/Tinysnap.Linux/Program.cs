@@ -79,7 +79,9 @@ internal static class Program
             using var icon = AssetLoader.Open(new Uri("avares://Tinysnap.App/Assets/Tinysnap.png"));
             using var bytes = new MemoryStream();
             icon.CopyTo(bytes);
-            desktop.Write(DesktopEntries.Exe, bytes.ToArray());
+            // Off the UI thread: rebuilding the desktop database takes a moment the first capture should not wait for.
+            var png = bytes.ToArray();
+            _ = Task.Run(() => desktop.Write(DesktopEntries.Exe, png));
         }
     }
 }
