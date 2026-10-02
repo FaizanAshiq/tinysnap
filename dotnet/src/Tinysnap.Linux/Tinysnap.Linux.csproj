@@ -14,6 +14,7 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
     <!-- Avalonia ships it on Linux; referenced directly for the app's own D-Bus service and the portals. -->
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.1" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 
   <ItemGroup>

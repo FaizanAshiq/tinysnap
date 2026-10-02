@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform;
 using Tinysnap.App;
 using Tmds.DBus.Protocol;
+using Velopack;
 
 namespace Tinysnap.Linux;
 
@@ -15,6 +16,8 @@ internal static class Program
 
     public static int Main(string[] args)
     {
+        // First of all, as the AppImage's runtime expects. No update is ever checked for.
+        VelopackApp.Build().Run();
         if (DBusAddress.Session is not { } address)
         {
             Console.Error.WriteLine("Tinysnap needs a desktop session: no session bus was found.");
