@@ -72,7 +72,7 @@ internal sealed class LibraryWindow : Window
             saveButton,
             ToolbarButton(ToolIcons.For(Tool.Freehand), "Edit", "Edit (Enter)", EditSelected),
             ToolbarButton(ToolIcons.Pin, "Pin", "Pin on top of every window (Ctrl+P)", PinSelected),
-            ToolbarButton(ToolIcons.Delete, "Move to Recycle Bin", "Move to Recycle Bin (Delete)", TrashSelected),
+            ToolbarButton(ToolIcons.Delete, $"Move to {SystemWords.Bin}", $"Move to {SystemWords.Bin} (Delete)", TrashSelected),
         ];
         var toolbar = new Border
         {
@@ -218,8 +218,8 @@ internal sealed class LibraryWindow : Window
                      ("Copy", () => Copy(entry, null)),
                      ("Save", () => Save(entry, null)),
                      ("Pin", () => Pin(entry)),
-                     ("Show in Explorer", () => Reveal(entry)),
-                     ("Move to Recycle Bin", () => Trash(entry)),
+                     ($"Show in {SystemWords.FileManager}", () => Reveal(entry)),
+                     ($"Move to {SystemWords.Bin}", () => Trash(entry)),
                  })
         {
             var item = new MenuItem { Header = title };
@@ -322,12 +322,12 @@ internal sealed class LibraryWindow : Window
     {
         if (captures.OpenEntryNames.Contains(entry.Name))
         {
-            _ = captures.Services.Dialogs.Tell(this, "This capture is open in an editor. Close its window, then move it to the Recycle Bin.");
+            _ = captures.Services.Dialogs.Tell(this, $"This capture is open in an editor. Close its window, then move it to the {SystemWords.Bin}.");
             return;
         }
         if (!captures.Files.MoveToRecycleBin(entry.Folder))
         {
-            _ = captures.Services.Dialogs.Tell(this, "Tinysnap could not move this capture to the Recycle Bin.");
+            _ = captures.Services.Dialogs.Tell(this, $"Tinysnap could not move this capture to the {SystemWords.Bin}.");
             return;
         }
         captures.NotifyLibraryChanged();

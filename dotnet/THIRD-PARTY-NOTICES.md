@@ -31,7 +31,7 @@ SOFTWARE.
 
 ## ZXing.Net
 
-The Windows app reads QR codes with ZXing.Net (https://github.com/micjahn/ZXing.Net), by Michael
+The Windows and Linux apps read QR codes with ZXing.Net (https://github.com/micjahn/ZXing.Net), by Michael
 Jahn and the ZXing authors, under the Apache License, Version 2.0:
 
 ```
@@ -48,7 +48,7 @@ permissions and limitations under the License.
 
 ## Velopack
 
-The Windows installer and its install and uninstall steps come from Velopack
+The Windows installer and its install and uninstall steps, and the Linux AppImage, come from Velopack
 (https://github.com/velopack/velopack), by Velopack Ltd, Caelan Sayler and Kevin Bost, under the
 MIT License:
 
@@ -73,3 +73,44 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Tesseract
+
+The Linux app reads text with Tesseract (https://github.com/tesseract-ocr/tesseract) and its
+fast language models (https://github.com/tesseract-ocr/tessdata_fast), by the Tesseract authors,
+under the Apache License, Version 2.0, whose text is given under ZXing.Net above.
+
+## Leptonica and the libraries Tesseract needs
+
+Tesseract reads images through Leptonica (http://www.leptonica.org), by Dan Bloomberg, under the
+BSD 2-Clause License:
+
+```
+Copyright (C) 2001-2020 Leptonica.  All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above
+   copyright notice, this list of conditions and the following
+   disclaimer in the documentation and/or other materials
+   provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL ANY
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+The AppImage also carries the image and compression libraries Tesseract and Leptonica load,
+taken from Ubuntu 24.04. Each one's licence, as its Ubuntu package states it, is in the
+AppImage's `tesseract/licenses` folder.

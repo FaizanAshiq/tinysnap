@@ -32,6 +32,109 @@ jobs:
       - run: dotnet test dotnet/tests/Tinysnap.Core.Tests --configuration Release
       - run: dotnet test dotnet/tests/Tinysnap.App.Tests --configuration Release
 
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - run: sudo apt-get update && sudo apt-get install -y xvfb openbox x11-utils x11-xserver-utils xdotool libtesseract5 tesseract-ocr-eng
+      # A session bus for the D-Bus tests, and an X server with a window manager for the X11 ones.
+      - run: dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' sh -c 'openbox & dotnet test dotnet/tests/Tinysnap.Linux.Tests --configuration Release'
+      - run: dotnet test dotnet/tests/Tinysnap.Core.Tests --configuration Release
+      - run: dotnet test dotnet/tests/Tinysnap.App.Tests --configuration Release
+
+  # The AppImage for each architecture, Tesseract and its languages inside. The system's own
+  # Tesseract is removed before the self-check, so the check proves the bundle reads alone.
+  linux-package:
+    needs: linux
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, runtime: linux-x64 }
+          - { runner: ubuntu-24.04-arm, runtime: linux-arm64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - run: sudo apt-get update && sudo apt-get install -y libtesseract5 patchelf xvfb
+      - name: Publish
+        run: dotnet publish dotnet/src/Tinysnap.Linux --configuration Release --runtime ${{ matrix.runtime }} --self-contained --output publish
+      - name: Bundle Tesseract
+        run: bash dotnet/build/bundle-tesseract.sh publish
+      - name: Self-check, with no Tesseract on the system
+        run: |
+          sudo apt-get remove -y libtesseract5 liblept5
+          dbus-run-session -- xvfb-run -a sh -c 'publish/Tinysnap --self-check "$PWD/self-check.txt"; code=$?; cat self-check.txt; exit $code'
+      - name: Pack
+        run: |
+          version=$(dotnet msbuild dotnet/src/Tinysnap.Linux -getProperty:Version)
+          dotnet tool install --global vpk --version 1.2.161
+          vpk pack --packId Tinysnap --packVersion $version --packDir publish --mainExe Tinysnap \
+            --packTitle Tinysnap --packAuthors "Faizan Ashiq" --icon dotnet/src/Tinysnap.App/Assets/Tinysnap.png \
+            --categories "Graphics;Utility" --runtime ${{ matrix.runtime }} --channel ${{ matrix.runtime }} --outputDir releases
+          ls -l releases
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Tinysnap-${{ matrix.runtime }}
+          path: releases/*.AppImage
+          retention-days: 14
+
+  # Each AppImage just built, driven like a person would on an X11 desktop: hotkeys as GNOME's
+  # shortcuts send them, real drags and keys, then removed from the computer. A screenshot of
+  # each step is kept.
+  linux-e2e:
+    needs: linux-package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, runtime: linux-x64 }
+          - { runner: ubuntu-24.04-arm, runtime: linux-arm64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: Tinysnap-${{ matrix.runtime }}
+          path: releases
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb openbox x11-utils x11-xserver-utils xdotool xclip imagemagick qrencode libfuse2t64 \
+            dconf-gsettings-backend dconf-service gsettings-desktop-schemas gnome-settings-daemon-common gnome-shell-common
+          chmod +x releases/*.AppImage
+      - run: dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' bash dotnet/tests/e2e/drive-linux.sh releases/*.AppImage
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: linux-e2e-${{ matrix.runtime }}
+          path: shots/*
+          retention-days: 14
+
+  # The x64 AppImage on Wayland in a headless GNOME Shell, with a stand-in for the screenshot
+  # portal: the overlay, editors and Capture Window as GNOME places them. Typing and dragging
+  # stay a check on a real desktop: GNOME's virtual input does not reach XWayland windows here.
+  gnome-windows:
+    needs: linux-package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: Tinysnap-linux-x64
+          path: releases
+      - run: sudo apt-get update && sudo apt-get install -y gnome-shell xwayland libfuse2t64 imagemagick python3-gi x11-xserver-utils && chmod +x releases/*.AppImage
+      - run: dbus-run-session -- bash dotnet/tests/e2e/gnome-windows.sh releases/Tinysnap-linux-x64.AppImage
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gnome-windows
+          path: gnome/*
+          retention-days: 14
+
   # The installer and the portable zip, built on every push and kept as artifacts. Nothing is
   # released from here: publishing is a separate, deliberate step.
   package:

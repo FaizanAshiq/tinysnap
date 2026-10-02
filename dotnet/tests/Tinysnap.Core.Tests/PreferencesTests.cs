@@ -2,6 +2,20 @@ namespace Tinysnap.Core.Tests;
 
 public class PreferencesTests
 {
+    [Fact]
+    public void OnAFreshLinuxAccountThePreferencesStillGoInTheConfigFolder()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var before = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+        var fresh = Path.Combine(Path.GetTempPath(), $"tinysnap-fresh-{Guid.NewGuid():N}", "config");
+        try
+        {
+            Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", fresh);
+            Assert.Equal(Path.Combine(fresh, "Tinysnap", "preferences.json"), Preferences.DefaultFilePath);
+        }
+        finally { Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", before); }
+    }
+
     private static string TemporaryFile(string? json = null)
     {
         var path = Path.Combine(Path.GetTempPath(), $"tinysnap-tests-{Guid.NewGuid()}.json");

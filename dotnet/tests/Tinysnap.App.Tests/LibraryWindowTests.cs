@@ -75,7 +75,7 @@ public class LibraryWindowTests
         Assert.All(window.ToolbarButtons, button => Assert.False(button.IsEnabled));
         window.Selected = newer;
         Assert.All(window.ToolbarButtons, button => Assert.True(button.IsEnabled));
-        Assert.Equal(["Copy", "Save", "Edit", "Pin", "Move to Recycle Bin"],
+        Assert.Equal(["Copy", "Save", "Edit", "Pin", $"Move to {SystemWords.Bin}"],
                      window.ToolbarButtons.Select(b => Avalonia.Automation.AutomationProperties.GetName(b)));
     }
 

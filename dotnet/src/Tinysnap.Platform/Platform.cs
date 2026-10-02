@@ -7,8 +7,10 @@ namespace Tinysnap.Platform;
 // primary monitor's top left corner at (0, 0), so a monitor left of or above it sits at
 // negative coordinates. A point is a pixel divided by its monitor's scale.
 
-/// <summary>One monitor as it looked the moment a capture began.</summary>
-public sealed record FrozenScreen(Rect Bounds, double Scale, SKImage Image);
+/// <summary>One monitor as it looked the moment a capture began. <paramref name="Place"/> is
+/// where the system puts windows over it, when that is counted in other pixels than the image's,
+/// as XWayland counts them on a scaled GNOME desktop; otherwise it is <paramref name="Bounds"/>.</summary>
+public sealed record FrozenScreen(Rect Bounds, double Scale, SKImage Image, Rect? Place = null);
 
 /// <summary>A window that window mode can pick, its shadow left out of its bounds.</summary>
 public sealed record PickableWindow(Rect Bounds, string Title);
@@ -25,6 +27,21 @@ public interface IScreenCapture
     /// <summary>How round a window's corners are, in points, so a window capture can leave them
     /// see-through as the window shows them: 8 on Windows 11, 0 before it.</summary>
     double WindowCornerRadius { get; }
+
+    /// <summary>Null where windows are listed with the frozen screen and picked on it. Otherwise
+    /// the system's own picker, for Capture Window and Space in the overlay: the capture picked,
+    /// or null when the person cancelled.</summary>
+    Func<Task<Capture?>>? PickWindow { get; }
+
+    /// <summary>True where a window goes exactly where it is put, beyond every screen or over a
+    /// panel, as on Windows. GNOME keeps windows on screen and below its top bar unless they are
+    /// full screen.</summary>
+    bool PlacesWindowsAsAsked { get; }
+
+    /// <summary>Gives a window just shown, by its native handle, the keyboard, where asking as an
+    /// app may be turned down: GNOME refuses an app that a hotkey reached without any input of its
+    /// own. Windows needs nothing past the window's own activation.</summary>
+    void Focus(nint window);
 }
 
 public interface IHotkeys : IDisposable
@@ -105,4 +122,8 @@ public interface IPlatform
     /// <summary>True when the taskbar or bar the tray icon sits on is light, so the icon is drawn
     /// dark; read each time, since it can change while the app runs.</summary>
     bool LightTaskbar { get; }
+
+    /// <summary>Null where the system uninstalls apps. Otherwise what Settings' Remove from This
+    /// Computer does: takes away everything Tinysnap added to the desktop, before it quits.</summary>
+    Action? RemoveFromComputer { get; }
 }

@@ -27,6 +27,9 @@ internal sealed class WindowsPlatform(IScreenCapture screen, IHotkeys hotkeys, I
         Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
                                           "SystemUsesLightTheme", 0) is 1;
 
+    /// <summary>None: Windows uninstalls Tinysnap from Settings, Apps.</summary>
+    public Action? RemoveFromComputer => null;
+
     /// <summary>Settings, Accessibility, Visual effects, Animation effects off.</summary>
     public bool ReduceMotion =>
         Native.SystemParametersInfoW(Native.SPI_GETCLIENTAREAANIMATION, 0, out var animate, 0) && !animate;
@@ -46,7 +49,10 @@ internal static class Program
             .Run();
         if (args is ["--self-check", var report])
         {
-            Environment.ExitCode = SelfCheck.Run(report);
+            // No recogniser on a machine without a language pack, so text is checked where there is one.
+            Environment.ExitCode = SelfCheck.Run(report, () => new WindowsPlatform(new GdiScreenCapture(), new Win32Hotkeys(), new Win32Clipboard(),
+                                                                                  new SingleInstance($"TinysnapSelfCheck{Guid.NewGuid():N}")),
+                                                 builder => builder.UsePlatformDetect(), textRequired: false);
             return;
         }
         using var instance = new SingleInstance();

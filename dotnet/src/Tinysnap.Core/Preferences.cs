@@ -245,8 +245,12 @@ public sealed record Preferences
             .Where(pair => pair.Tool is not null)
             .ToDictionary(pair => pair.Tool!.Value, pair => pair.Style);
 
+    /// <summary>In the app data folder, asked for even when it is not there yet, as on a fresh
+    /// Linux account: otherwise .NET answers nothing and the path is relative to wherever Tinysnap
+    /// was started.</summary>
     public static string DefaultFilePath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Tinysnap", "preferences.json");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify),
+                     "Tinysnap", "preferences.json");
 
     /// <summary>Returns defaults when the file does not exist, so first launch needs no setup.</summary>
     public static Preferences Load(string path)

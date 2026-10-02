@@ -24,7 +24,7 @@ internal sealed class OverlayWindow : Window
 
     public FrozenScreen Screen { get; }
 
-    public OverlayWindow(FrozenScreen screen, AreaOverlay owner)
+    public OverlayWindow(FrozenScreen screen, AreaOverlay owner, bool fullScreen = false)
     {
         Screen = screen;
         this.owner = owner;
@@ -33,9 +33,12 @@ internal sealed class OverlayWindow : Window
         ShowInTaskbar = false;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.Manual;
-        Position = new PixelPoint((int)screen.Bounds.X, (int)screen.Bounds.Y);
+        var place = screen.Place ?? screen.Bounds;
+        Position = new PixelPoint((int)place.X, (int)place.Y);
         Width = screen.Bounds.Width / screen.Scale;
         Height = screen.Bounds.Height / screen.Scale;
+        // Full screen on the monitor it was placed on: GNOME puts any other window below its top bar.
+        if (fullScreen) WindowState = WindowState.FullScreen;
         Background = Brushes.Black;
         Cursor = new Cursor(StandardCursorType.Cross);
         selection = new AreaSelection(new CoreSize(Width, Height));

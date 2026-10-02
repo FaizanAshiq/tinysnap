@@ -15,6 +15,15 @@ namespace Tinysnap.App.Tests;
 
 public class CaptureFlowTests
 {
+    [AvaloniaFact]
+    public void AnEditorFromAHotkeyAsksThePlatformForTheKeyboard()
+    {
+        var setup = TestServices.Launch();
+        setup.Controller.CaptureFullscreen();
+        Assert.Single(setup.Controller.Editors);
+        Assert.Single(((Tinysnap.Dev.FakeScreenCapture)setup.Platform.Screen).Focused);
+    }
+
     private static CaptureController Controller(FrozenDesktop desktop, CorePoint pointer, double cornerRadius = 0) =>
         new(new FakePlatform(new FakeScreenCapture(() => desktop, () => pointer, cornerRadius)), TestServices.Store(),
             new LibraryStore(TestServices.TemporaryFolder()));

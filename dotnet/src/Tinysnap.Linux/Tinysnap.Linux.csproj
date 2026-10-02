@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Tinysnap, carrying the Mac app's version, as the Windows build does. -->
+    <AssemblyName>Tinysnap</AssemblyName>
+    <RootNamespace>Tinysnap.Linux</RootNamespace>
+    <Product>Tinysnap</Product>
+    <Version>1.1.0</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- As on Windows: the shipped build leaves out the .NET code it never calls, and is compiled
+         ahead for the processor so the first capture does not wait. CI runs the self-check and
+         the end to end job on that build. -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
+    <!-- Avalonia ships it on Linux; referenced directly for the app's own D-Bus service and the portals. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.1" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tinysnap.App\Tinysnap.App.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tinysnap.Linux.Tests" />
+  </ItemGroup>
+
+  <!-- Kept whole when trimming: the colour picker's theme is compiled XAML found by name. -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="Avalonia.Controls.ColorPicker" />
+  </ItemGroup>
+
+  <!-- Debug symbols, the runtime's debugger and its crash dump helper stay out of what ships. -->
+  <Target Name="LeaveOutDebugging" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="'%(Extension)' == '.pdb' Or '%(Extension)' == '.dbg'" />
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(Filename)' == 'libmscordaccore' Or '%(Filename)' == 'libmscordbi' Or '%(Filename)' == 'createdump'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

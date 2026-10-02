@@ -1,4 +1,6 @@
 using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using SkiaSharp;
 using Tinysnap.App.Editing;
@@ -67,6 +69,7 @@ public sealed class CaptureController
         switch (action)
         {
             case HotKeyAction.Area: CaptureArea(); break;
+            case HotKeyAction.Window when platform.Screen.PickWindow is { } pick: PickWithSystem(pick); break;
             case HotKeyAction.Window: OpenOverlay(Purpose.Picture, windowMode: true); break;
             case HotKeyAction.Fullscreen: CaptureFullscreen(); break;
             case HotKeyAction.Text: OpenOverlay(Purpose.Text); break;
@@ -92,7 +95,7 @@ public sealed class CaptureController
             ShowSettings();
             return;
         }
-        foreach (var editor in editors) editor.Activate();
+        foreach (var editor in editors) Raise(editor);
     }
 
     /// <summary>The countdown, the last area, or anything else the tray menu shows changed.</summary>
@@ -165,6 +168,9 @@ public sealed class CaptureController
 
     internal IStartup Startup => platform.Startup;
 
+    /// <summary>Null where the system uninstalls Tinysnap itself.</summary>
+    internal Action? RemoveFromComputer => platform.RemoveFromComputer;
+
     internal LibraryStore Library => library;
 
     /// <summary>Why the last capture was not kept, for Settings; null once one is.</summary>
@@ -180,17 +186,31 @@ public sealed class CaptureController
 
     private ITimer? warmingUp;
 
+    /// <summary>The overlay warmed up without a window, where the desktop would pull one into view.</summary>
+    internal bool IsWarm { get; private set; }
+
     /// <summary>Opens one overlay nobody sees, off every screen and never focused, and closes it a
     /// second later, so the first real capture finds the windows and drawing it needs set up and
     /// opens as fast as later ones: cold, the first overlay took 185 ms in CI, warm 56.</summary>
     public void WarmUp()
     {
-        if (WarmingUp is not null) return;
+        if (WarmingUp is not null || IsWarm) return;
         using var surface = SKSurface.Create(new SKImageInfo(16, 16));
         surface.Canvas.Clear(SKColors.Black);
         // Left to the collector rather than disposed: the window may still be drawing it.
         var screen = new FrozenScreen(new Rect(-32000, -32000, 16, 16), 1, surface.Snapshot());
         var window = new AreaOverlay(new FrozenDesktop([screen], []), _ => { }).Windows[0];
+        if (!platform.Screen.PlacesWindowsAsAsked)
+        {
+            // GNOME would show it as a black square for a second, so it is laid out and drawn into
+            // a bitmap instead: the same templates and drawing, with no window to see.
+            window.Measure(new Avalonia.Size(16, 16));
+            window.Arrange(new Avalonia.Rect(0, 0, 16, 16));
+            using (var bitmap = new RenderTargetBitmap(new PixelSize(16, 16))) bitmap.Render(window);
+            window.Close();
+            IsWarm = true;
+            return;
+        }
         window.ShowActivated = false;
         window.Show();
         WarmingUp = window;
@@ -223,13 +243,39 @@ public sealed class CaptureController
         if (Overlay is not null) return;
         var desktop = platform.Screen.Freeze();
         if (desktop.Screens.Count == 0) return;
+        // Text and codes are read from a box, so only a picture hands Space to the system's picker.
+        var systemPicker = purpose == Purpose.Picture && platform.Screen.PickWindow is { } pick ? () => PickWithSystem(pick) : (Action?)null;
         Overlay = new AreaOverlay(desktop, result =>
         {
             Overlay = null;
             Finish(result, desktop, purpose);
-        }, platform.Screen.PointerPosition());
+        }, platform.Screen.PointerPosition(), systemPicker, fullScreen: !platform.Screen.PlacesWindowsAsAsked, raise: Raise);
         Overlay.Show();
         if (windowMode) Overlay.ToggleWindowMode();
+    }
+
+    /// <summary>Brings a window forward with the keyboard, asking the platform too: a hotkey or a
+    /// second launch reaches Tinysnap with no input of its own, which GNOME holds against it.</summary>
+    internal void Raise(Window window)
+    {
+        window.Activate();
+        platform.Screen.Focus(window.TryGetPlatformHandle()?.Handle ?? 0);
+    }
+
+    private Task picking = Task.CompletedTask;
+
+    /// <summary>The system picker last opened, finished.</summary>
+    internal Task WhenPicked() => picking;
+
+    /// <summary>A window through the system's own picker, where the overlay cannot list them.</summary>
+    private void PickWithSystem(Func<Task<Capture?>> pick)
+    {
+        picking = Pick();
+        async Task Pick()
+        {
+            if (await pick() is not { } capture) return;
+            Dispatcher.UIThread.Post(() => Open(capture, new Rect(0, 0, capture.PixelSize.Width, capture.PixelSize.Height)));
+        }
     }
 
     private Task reading = Task.CompletedTask;
@@ -346,7 +392,7 @@ public sealed class CaptureController
     {
         if (editors.FirstOrDefault(e => e.Entry == entry) is { } open)
         {
-            open.Activate();
+            Raise(open);
             return;
         }
         if (library.Open(entry) is not { } opened) return;
@@ -391,7 +437,7 @@ public sealed class CaptureController
             if (editor.PendingRender() is var (edited, kept)) Render(kept, edited);
         };
         editor.Show();
-        editor.Activate();
+        Raise(editor);
     }
 
     private void ShowThumbnail(Document document, PixelRect around, LibraryEntry? entry)
@@ -511,7 +557,7 @@ public sealed class CaptureController
             settingsWindow.Closed += (_, _) => settingsWindow = null;
         }
         if (!settingsWindow.IsVisible) settingsWindow.Show();
-        settingsWindow.Activate();
+        Raise(settingsWindow);
         return settingsWindow;
     }
 

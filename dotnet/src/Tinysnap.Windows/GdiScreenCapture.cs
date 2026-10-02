@@ -30,6 +30,14 @@ internal sealed class GdiScreenCapture : IScreenCapture
     /// <summary>Windows 11 rounds window corners by 8 points; Windows 10 leaves them square.</summary>
     public double WindowCornerRadius => Environment.OSVersion.Version.Build >= 22000 ? 8 : 0;
 
+    /// <summary>None: windows are listed with the frozen screen and picked on the overlay.</summary>
+    public Func<Task<Capture?>>? PickWindow => null;
+
+    public bool PlacesWindowsAsAsked => true;
+
+    /// <summary>Nothing: the window's own activation gives it the keyboard on Windows.</summary>
+    public void Focus(nint window) { }
+
     internal static Rect ToRect(RECT rect) => new(rect.Left, rect.Top, rect.Width, rect.Height);
 
     /// <summary>Every monitor's bounds in physical pixels, and its scale from its effective DPI.</summary>

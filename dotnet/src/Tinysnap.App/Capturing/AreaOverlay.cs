@@ -24,25 +24,35 @@ internal sealed class AreaOverlay
     private readonly FrozenDesktop desktop;
     private readonly Action<AreaResult> onFinish;
     private readonly Point? pointer;
+    private readonly Action? systemPicker;
+    private readonly Action<Avalonia.Controls.Window> raise;
     private bool isFinished;
 
     public IReadOnlyList<OverlayWindow> Windows { get; }
     public bool WindowMode { get; private set; }
 
     /// <param name="pointer">Where the pointer is, in pixels, so the overlay under it takes the keys.</param>
-    public AreaOverlay(FrozenDesktop desktop, Action<AreaResult> onFinish, Point? pointer = null)
+    /// <param name="systemPicker">Where windows cannot be listed, what Space hands over to instead.</param>
+    /// <param name="fullScreen">Each window asks to be full screen, where the desktop would
+    /// otherwise keep it below its panel.</param>
+    /// <param name="raise">How the window under the pointer is given the keyboard; its own
+    /// activation when not given.</param>
+    public AreaOverlay(FrozenDesktop desktop, Action<AreaResult> onFinish, Point? pointer = null, Action? systemPicker = null,
+                       bool fullScreen = false, Action<Avalonia.Controls.Window>? raise = null)
     {
         this.desktop = desktop;
         this.onFinish = onFinish;
         this.pointer = pointer;
-        Windows = [.. desktop.Screens.Select(screen => new OverlayWindow(screen, this))];
+        this.systemPicker = systemPicker;
+        this.raise = raise ?? (window => window.Activate());
+        Windows = [.. desktop.Screens.Select(screen => new OverlayWindow(screen, this, fullScreen))];
     }
 
     public void Show()
     {
         foreach (var window in Windows) window.Show();
         var underPointer = pointer is { } at ? Windows.FirstOrDefault(w => w.Screen.Bounds.Contains(at)) : null;
-        (underPointer ?? Windows.FirstOrDefault())?.Activate();
+        if ((underPointer ?? Windows.FirstOrDefault()) is { } keyed) raise(keyed);
     }
 
     /// <summary>The frontmost window under <paramref name="pixel"/>.</summary>
@@ -50,6 +60,12 @@ internal sealed class AreaOverlay
 
     internal void ToggleWindowMode()
     {
+        if (systemPicker is not null)
+        {
+            Finish(new AreaResult.Cancelled());
+            systemPicker();
+            return;
+        }
         WindowMode = !WindowMode;
         foreach (var window in Windows) window.WindowModeChanged();
     }

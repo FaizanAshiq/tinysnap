@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -34,7 +35,8 @@ internal sealed class SettingsWindow : Window
     internal CheckBox KeepLibrary { get; } = new() { Content = "Keep captures in the library for 30 days" };
     internal NumericUpDown Delay { get; } = new() { Minimum = Preferences.DelayMin, Maximum = 10, Increment = 1, FormatString = "0", Width = 120 };
     internal CheckBox OpenAtLogin { get; } = new() { Content = "Open Tinysnap when you log in" };
-    internal CheckBox ShowTrayIcon { get; } = new() { Content = "Show the tray icon" };
+    internal CheckBox ShowTrayIcon { get; } = new() { Content = $"Show the {SystemWords.TrayIcon}" };
+    internal Button RemoveFromComputer { get; } = new() { Content = "Remove from This Computer..." };
 
     public SettingsWindow(CaptureController captures)
     {
@@ -96,6 +98,10 @@ internal sealed class SettingsWindow : Window
         rows.Add(("", OpenAtLogin));
         ToolTip.SetTip(ShowTrayIcon, "Hidden, the hotkeys still work, and opening Tinysnap again shows Settings");
         rows.Add(("", ShowTrayIcon));
+        // Only where the system has no uninstaller of its own, as with an AppImage.
+        RemoveFromComputer.IsVisible = captures.RemoveFromComputer is not null;
+        RemoveFromComputer.Click += (_, _) => _ = RemoveFromThisComputer();
+        if (RemoveFromComputer.IsVisible) rows.Add(("", RemoveFromComputer));
 
         var grid = new Grid
         {
@@ -210,14 +216,14 @@ internal sealed class SettingsWindow : Window
         return true;
     }
 
-    /// <summary>Asked of Windows every time rather than stored, so it never disagrees with the
-    /// startup list in Windows' own settings.</summary>
+    /// <summary>Asked of the system every time rather than stored, so it never disagrees with the
+    /// startup list in the system's own settings.</summary>
     private void ChangeLogin()
     {
         if (loading) return;
         var wanted = OpenAtLogin.IsChecked == true;
         if (captures.Startup.SetEnabled(wanted)) return;
-        _ = captures.Services.Dialogs.Tell(this, "Windows did not change whether Tinysnap opens when you log in.");
+        _ = captures.Services.Dialogs.Tell(this, $"{SystemWords.Os} did not change whether Tinysnap opens when you log in.");
         loading = true;
         OpenAtLogin.IsChecked = captures.Startup.IsEnabled;
         loading = false;
@@ -253,5 +259,20 @@ internal sealed class SettingsWindow : Window
         captures.Library.Clear(captures.OpenEntryNames);
         captures.NotifyLibraryChanged();
         RefreshLibrary();
+    }
+
+    /// <summary>Asks first, then closes everything, asking about unsaved edits as Quit does, takes
+    /// away what Tinysnap added to the desktop, and quits. The library stays, as an uninstaller
+    /// leaves it.</summary>
+    internal async Task RemoveFromThisComputer()
+    {
+        if (captures.RemoveFromComputer is not { } remove) return;
+        var sure = await captures.Services.Dialogs.Confirm(this, "Remove Tinysnap from this computer?",
+            "Its menu entry, Open With and start at login go, and Tinysnap quits. Your captures stay, and the app file is yours to delete.",
+            "Remove");
+        if (!sure || !await captures.CloseAll()) return;
+        remove();
+        Close();
+        (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
     }
 }

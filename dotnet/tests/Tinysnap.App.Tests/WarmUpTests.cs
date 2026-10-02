@@ -25,4 +25,16 @@ public class WarmUpTests
         Assert.False(warm.IsVisible);
         Assert.Null(setup.Controller.WarmingUp);
     }
+
+    [AvaloniaFact]
+    public void WhereTheDesktopPullsWindowsIntoViewTheOverlayWarmsUpWithNoWindow()
+    {
+        // GNOME moves a window placed off screen back into view: a black square for a second.
+        var setup = Launch(placesWindowsAsAsked: false);
+        setup.Controller.WarmUp();
+        Assert.Null(setup.Controller.WarmingUp);
+        Assert.True(setup.Controller.IsWarm);
+        setup.Controller.CaptureArea();
+        Assert.NotNull(setup.Controller.Overlay);
+    }
 }

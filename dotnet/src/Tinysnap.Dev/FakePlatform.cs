@@ -5,7 +5,8 @@ namespace Tinysnap.Dev;
 
 /// <summary>A screen capture that hands back whatever desktop it is given, for the tests and for
 /// running the app on a Mac, which has no Windows screens to read.</summary>
-public sealed class FakeScreenCapture(Func<FrozenDesktop> freeze, Func<Point> pointer, double windowCornerRadius = 0)
+public sealed class FakeScreenCapture(Func<FrozenDesktop> freeze, Func<Point> pointer, double windowCornerRadius = 0,
+                                      Func<Task<Capture?>>? pickWindow = null, bool placesWindowsAsAsked = true)
     : IScreenCapture
 {
     public FrozenDesktop Freeze() => freeze();
@@ -13,6 +14,15 @@ public sealed class FakeScreenCapture(Func<FrozenDesktop> freeze, Func<Point> po
     public Point PointerPosition() => pointer();
 
     public double WindowCornerRadius => windowCornerRadius;
+
+    public Func<Task<Capture?>>? PickWindow => pickWindow;
+
+    public bool PlacesWindowsAsAsked => placesWindowsAsAsked;
+
+    /// <summary>Every window handle given the keyboard, for the tests.</summary>
+    public List<nint> Focused { get; } = [];
+
+    public void Focus(nint window) => Focused.Add(window);
 }
 
 /// <summary>A clipboard that keeps what it was given, for the tests to read back.</summary>
@@ -101,6 +111,9 @@ public sealed class FakePlatform(IScreenCapture screen) : IPlatform
     public bool ReduceMotion => false;
 
     public bool LightTaskbar => false;
+
+    /// <summary>None unless a test stands in for a system with no uninstaller of its own.</summary>
+    public Action? RemoveFromComputer { get; set; }
 
     public event Action<IReadOnlyList<string>>? Reopened;
 
