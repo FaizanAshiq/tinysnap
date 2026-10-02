@@ -437,8 +437,9 @@ if ($editor)
         $button = $Element::FromHandle($editor.Handle).FindFirst('Descendants',
             (New-Object System.Windows.Automation.PropertyCondition($Element::NameProperty, 'Library')))
         if (-not $button) { return 'no Library button' }
+        $since = [System.Diagnostics.Stopwatch]::StartNew()
         $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-        $window = Until { [Desk]::Windows($script:app.Id) | Where-Object Title -eq 'Library' | Select-Object -First 1 } 10
+        $window = Timed 'the Library button to its window, the first time' { [Desk]::Windows($script:app.Id) | Where-Object Title -eq 'Library' | Select-Object -First 1 } 10 $since
         if (-not $window) { return 'no Library window' }
         $items = New-Object System.Windows.Automation.PropertyCondition($Element::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)
         $tiles = Until { @($Element::FromHandle($window.Handle).FindAll('Descendants', $items) | Where-Object { $_.Current.Name -like 'Capture at*' }) } 5
