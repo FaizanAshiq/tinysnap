@@ -11,8 +11,25 @@ public class LibraryStoreTests
     public void TheLibraryLivesWithDataOnLinuxAndBesideThePreferencesElsewhere()
     {
         var expected = Environment.GetFolderPath(OperatingSystem.IsLinux() ? Environment.SpecialFolder.LocalApplicationData
-                                                                           : Environment.SpecialFolder.ApplicationData);
+                                                                           : Environment.SpecialFolder.ApplicationData,
+                                                 Environment.SpecialFolderOption.DoNotVerify);
         Assert.Equal(Path.Combine(expected, "Tinysnap", "Library"), LibraryStore.DefaultRoot);
+    }
+
+    [Fact]
+    public void OnAFreshLinuxAccountTheLibraryStillGoesInTheDataFolder()
+    {
+        // .NET answers nothing for a folder that is not there yet, which left the library
+        // relative to wherever Tinysnap was started.
+        if (!OperatingSystem.IsLinux()) return;
+        var before = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+        var fresh = Path.Combine(Path.GetTempPath(), $"tinysnap-fresh-{Guid.NewGuid():N}", "share");
+        try
+        {
+            Environment.SetEnvironmentVariable("XDG_DATA_HOME", fresh);
+            Assert.Equal(Path.Combine(fresh, "Tinysnap", "Library"), LibraryStore.DefaultRoot);
+        }
+        finally { Environment.SetEnvironmentVariable("XDG_DATA_HOME", before); }
     }
 
     private static LibraryStore Store() => new(Path.Combine(Path.GetTempPath(), $"tinysnap-library-{Guid.NewGuid()}"));

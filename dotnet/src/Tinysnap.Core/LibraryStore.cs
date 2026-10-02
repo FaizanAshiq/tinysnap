@@ -34,12 +34,13 @@ public sealed class LibraryStore(string? root = null)
 
     /// <summary>On Windows beside the preferences, in the app data folder, never in the local one:
     /// the app itself is installed there, and uninstalling deletes that whole folder. Linux keeps
-    /// data apart from settings, in <c>~/.local/share</c>.</summary>
+    /// data apart from settings, in <c>~/.local/share</c>, asked for even before it exists.</summary>
     // ponytail: roaming app data on Windows, which a roaming profile would carry between machines;
     // a local folder outside the install if that ever matters.
     public static string DefaultRoot =>
         Path.Combine(Environment.GetFolderPath(OperatingSystem.IsLinux() ? Environment.SpecialFolder.LocalApplicationData
-                                                                         : Environment.SpecialFolder.ApplicationData),
+                                                                         : Environment.SpecialFolder.ApplicationData,
+                                               Environment.SpecialFolderOption.DoNotVerify),
                      "Tinysnap", "Library");
 
     // Writing
