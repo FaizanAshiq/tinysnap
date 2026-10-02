@@ -65,6 +65,15 @@ public class OverlayTests
     }
 
     [AvaloniaFact]
+    public void TheOverlayAsksThePlatformForTheKeyboard()
+    {
+        // GNOME refused Avalonia's own request, made with the time of an input Tinysnap never had.
+        var setup = Launch();
+        setup.Controller.CaptureArea();
+        Assert.Single(((Tinysnap.Dev.FakeScreenCapture)setup.Platform.Screen).Focused);
+    }
+
+    [AvaloniaFact]
     public void EscapeCancels()
     {
         var (overlay, results) = Show(Screens.Desktop(Retina));

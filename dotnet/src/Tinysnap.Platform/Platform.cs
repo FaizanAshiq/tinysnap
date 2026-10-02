@@ -37,6 +37,11 @@ public interface IScreenCapture
     /// panel, as on Windows. GNOME keeps windows on screen and below its top bar unless they are
     /// full screen.</summary>
     bool PlacesWindowsAsAsked { get; }
+
+    /// <summary>Gives a window just shown, by its native handle, the keyboard, where asking as an
+    /// app may be turned down: GNOME refuses an app that a hotkey reached without any input of its
+    /// own. Windows needs nothing past the window's own activation.</summary>
+    void Focus(nint window);
 }
 
 public interface IHotkeys : IDisposable

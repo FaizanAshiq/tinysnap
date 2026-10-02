@@ -18,6 +18,11 @@ public sealed class FakeScreenCapture(Func<FrozenDesktop> freeze, Func<Point> po
     public Func<Task<Capture?>>? PickWindow => pickWindow;
 
     public bool PlacesWindowsAsAsked => placesWindowsAsAsked;
+
+    /// <summary>Every window handle given the keyboard, for the tests.</summary>
+    public List<nint> Focused { get; } = [];
+
+    public void Focus(nint window) => Focused.Add(window);
 }
 
 /// <summary>A clipboard that keeps what it was given, for the tests to read back.</summary>

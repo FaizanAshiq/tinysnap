@@ -39,7 +39,7 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
-      - run: sudo apt-get update && sudo apt-get install -y xvfb openbox x11-utils x11-xserver-utils libtesseract5 tesseract-ocr-eng
+      - run: sudo apt-get update && sudo apt-get install -y xvfb openbox x11-utils x11-xserver-utils xdotool libtesseract5 tesseract-ocr-eng
       # A session bus for the D-Bus tests, and an X server with a window manager for the X11 ones.
       - run: dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' sh -c 'openbox & dotnet test dotnet/tests/Tinysnap.Linux.Tests --configuration Release'
       - run: dotnet test dotnet/tests/Tinysnap.Core.Tests --configuration Release

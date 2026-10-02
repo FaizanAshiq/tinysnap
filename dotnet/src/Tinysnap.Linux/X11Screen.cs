@@ -120,6 +120,25 @@ internal sealed unsafe class X11Screen : IDisposable
         return windows;
     }
 
+    /// <summary>Asks the window manager to raise and focus <paramref name="window"/> as a pager
+    /// does, which, unlike an app's own request, is not weighed against its last input.</summary>
+    public void Activate(nuint window)
+    {
+        var message = new X11.XClientMessageEvent
+        {
+            Type = X11.ClientMessage,
+            SendEvent = 1,
+            Display = display,
+            Window = window,
+            MessageType = Atom("_NET_ACTIVE_WINDOW"),
+            Format = 32,
+            Data0 = 2, // the request comes from a pager
+            Data1 = 0, // at the current time
+        };
+        X11.XSendEvent(display, root, 0, X11.SubstructureRedirectMask | X11.SubstructureNotifyMask, ref message);
+        X11.XFlush(display);
+    }
+
     private nuint Atom(string name) => X11.XInternAtom(display, name, 0);
 
     /// <summary>A property of 32 bit items, which Xlib hands back as longs.</summary>

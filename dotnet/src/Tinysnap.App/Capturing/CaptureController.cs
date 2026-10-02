@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using SkiaSharp;
@@ -94,7 +95,7 @@ public sealed class CaptureController
             ShowSettings();
             return;
         }
-        foreach (var editor in editors) editor.Activate();
+        foreach (var editor in editors) Raise(editor);
     }
 
     /// <summary>The countdown, the last area, or anything else the tray menu shows changed.</summary>
@@ -248,9 +249,17 @@ public sealed class CaptureController
         {
             Overlay = null;
             Finish(result, desktop, purpose);
-        }, platform.Screen.PointerPosition(), systemPicker, fullScreen: !platform.Screen.PlacesWindowsAsAsked);
+        }, platform.Screen.PointerPosition(), systemPicker, fullScreen: !platform.Screen.PlacesWindowsAsAsked, raise: Raise);
         Overlay.Show();
         if (windowMode) Overlay.ToggleWindowMode();
+    }
+
+    /// <summary>Brings a window forward with the keyboard, asking the platform too: a hotkey or a
+    /// second launch reaches Tinysnap with no input of its own, which GNOME holds against it.</summary>
+    internal void Raise(Window window)
+    {
+        window.Activate();
+        platform.Screen.Focus(window.TryGetPlatformHandle()?.Handle ?? 0);
     }
 
     private Task picking = Task.CompletedTask;
@@ -383,7 +392,7 @@ public sealed class CaptureController
     {
         if (editors.FirstOrDefault(e => e.Entry == entry) is { } open)
         {
-            open.Activate();
+            Raise(open);
             return;
         }
         if (library.Open(entry) is not { } opened) return;
@@ -428,7 +437,7 @@ public sealed class CaptureController
             if (editor.PendingRender() is var (edited, kept)) Render(kept, edited);
         };
         editor.Show();
-        editor.Activate();
+        Raise(editor);
     }
 
     private void ShowThumbnail(Document document, PixelRect around, LibraryEntry? entry)
@@ -548,7 +557,7 @@ public sealed class CaptureController
             settingsWindow.Closed += (_, _) => settingsWindow = null;
         }
         if (!settingsWindow.IsVisible) settingsWindow.Show();
-        settingsWindow.Activate();
+        Raise(settingsWindow);
         return settingsWindow;
     }
 

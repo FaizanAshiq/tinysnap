@@ -35,6 +35,9 @@ internal sealed class GdiScreenCapture : IScreenCapture
 
     public bool PlacesWindowsAsAsked => true;
 
+    /// <summary>Nothing: the window's own activation gives it the keyboard on Windows.</summary>
+    public void Focus(nint window) { }
+
     internal static Rect ToRect(RECT rect) => new(rect.Left, rect.Top, rect.Width, rect.Height);
 
     /// <summary>Every monitor's bounds in physical pixels, and its scale from its effective DPI.</summary>

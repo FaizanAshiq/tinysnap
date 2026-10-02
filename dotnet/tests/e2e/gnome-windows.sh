@@ -33,7 +33,7 @@ pixel() { convert "gnome/$1.png" -crop "1x1+$2+$3" +repage -format '%[hex:u.p{0,
 # Tinysnap's windows as GNOME sees them: title, place, size and state, one per line.
 windows() {
   eval_js 'global.get_window_actors().map(a => a.meta_window).filter(w => w.get_wm_class() === "Tinysnap").map(w => { const r = w.get_frame_rect();
-    return `${w.get_title()} at ${r.x},${r.y} ${r.width}x${r.height}${w.is_fullscreen() ? " fullscreen" : ""}${w.is_above() ? " above" : ""}`; }).join(";")' |
+    return `${w.get_title()} at ${r.x},${r.y} ${r.width}x${r.height}${w.is_fullscreen() ? " fullscreen" : ""}${w.is_above() ? " above" : ""}${w.has_focus() ? " focused" : ""}`; }).join(";")' |
     sed -e "s/^(true, '\"//" -e "s/\"')$//" | tr ';' '\n'
 }
 call() { gdbus call --session --dest com.faizanashiq.Tinysnap --object-path /com/faizanashiq/Tinysnap --method com.faizanashiq.Tinysnap.Perform "$1" >/dev/null 2>&1; }
@@ -64,6 +64,7 @@ check "nothing shows while the overlay warms up" $start_clear
 
 call area
 check "the overlay covers the whole screen, full screen" within 10 shown "at 0,0 1280x800 fullscreen"
+check "the overlay has the keyboard" within 5 shown "fullscreen.*focused"
 sleep 1
 shot overlay
 note "overlay pixels: middle $(pixel overlay 300 600), top $(pixel overlay 300 10)"
@@ -74,14 +75,16 @@ leads() { local hex=$(pixel overlay "$1" "$2"); local r=$((16#${hex:0:2})) g=$((
 check "the overlay shows the frozen screen" leads 300 600 blue
 check "the overlay covers GNOME's top bar" leads 300 10 red
 note "windows: $(windows | tr '\n' ';')"
-# Closed from outside, since no key reaches it here.
+# Closed from outside, since no key reaches it here; the next copy starts once this one has let
+# go of its name, or it would hand over to it and quit.
 pkill -x Tinysnap
-sleep 1
+for _ in $(seq 1 50); do gdbus introspect --session --dest com.faizanashiq.Tinysnap --object-path /com/faizanashiq/Tinysnap >/dev/null 2>&1 || break; sleep 0.2; done
 DISPLAY=:0 XAUTHORITY=$auth "$app" >> gnome/app.log 2>&1 &
 started
 
 call fullscreen
 check "a fullscreen capture opens an editor" within 10 shown "^Capture at"
+check "the editor has the keyboard" within 5 shown "^Capture at.*focused"
 note "windows: $(windows | tr '\n' ';')"
 shot editor
 

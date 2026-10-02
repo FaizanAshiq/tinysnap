@@ -32,8 +32,25 @@ internal static unsafe partial class X11
         public nint Screen;
     }
 
+    /// <summary>A ClientMessage event, padded to the size of every X event.</summary>
+    [StructLayout(LayoutKind.Sequential, Size = 192)]
+    public struct XClientMessageEvent
+    {
+        public int Type;
+        public nuint Serial;
+        public int SendEvent;
+        public nint Display;
+        public nuint Window;
+        public nuint MessageType;
+        public int Format;
+        public nint Data0, Data1, Data2, Data3, Data4;
+    }
+
     public const int IsViewable = 2;
     public const int ZPixmap = 2;
+    public const int ClientMessage = 33;
+    public const nint SubstructureNotifyMask = 1 << 19;
+    public const nint SubstructureRedirectMask = 1 << 20;
 
     [LibraryImport(Lib)] public static partial nint XOpenDisplay(nint name);
     [LibraryImport(Lib)] public static partial int XCloseDisplay(nint display);
@@ -47,6 +64,8 @@ internal static unsafe partial class X11
     [LibraryImport(Lib)] public static partial int XGetWindowAttributes(nint display, nuint window, out XWindowAttributes attributes);
     [LibraryImport(Lib)] public static partial int XTranslateCoordinates(nint display, nuint from, nuint to, int x, int y, out int toX, out int toY, out nuint child);
     [LibraryImport(Lib)] public static partial int XFree(nint data);
+    [LibraryImport(Lib)] public static partial int XSendEvent(nint display, nuint window, int propagate, nint mask, ref XClientMessageEvent message);
+    [LibraryImport(Lib)] public static partial int XFlush(nint display);
     [LibraryImport(RandR)] public static partial XRRMonitorInfo* XRRGetMonitors(nint display, nuint window, int active, out int count);
     [LibraryImport(RandR)] public static partial void XRRFreeMonitors(XRRMonitorInfo* monitors);
 

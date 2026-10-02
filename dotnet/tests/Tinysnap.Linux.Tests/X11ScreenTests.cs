@@ -40,6 +40,43 @@ public class X11ScreenTests
         Assert.Null(screen.Grab(new Rect(2000, 2000, 10, 10)));
     }
 
+    private static string Run(string program, params string[] args)
+    {
+        var start = new ProcessStartInfo(program) { RedirectStandardOutput = true };
+        foreach (var arg in args) start.ArgumentList.Add(arg);
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEnd().Trim();
+        process.WaitForExit();
+        return output;
+    }
+
+    [Fact]
+    public void AWindowAskedForAsAPagerWouldGetsTheKeyboard()
+    {
+        // A hotkey reaches Tinysnap with no input of its own, and GNOME refused it focus.
+        Linux.Only();
+        using var first = Process.Start("xmessage", ["-geometry", "+100+100", "-name", "first", "-title", "first", "first"])!;
+        Thread.Sleep(700);
+        using var second = Process.Start("xmessage", ["-geometry", "+300+300", "-name", "second", "-title", "second", "second"])!;
+        try
+        {
+            string firstWindow = "";
+            for (var i = 0; i < 30 && (firstWindow.Length == 0 || Run("xdotool", "getactivewindow") == firstWindow); i++, Thread.Sleep(100))
+                firstWindow = Run("xdotool", "search", "--name", "^first$").Split('\n')[0];
+            Assert.NotEqual(firstWindow, Run("xdotool", "getactivewindow"));
+            using var screen = X11Screen.TryOpen()!;
+            screen.Activate(nuint.Parse(firstWindow));
+            var active = "";
+            for (var i = 0; i < 30 && active != firstWindow; i++, Thread.Sleep(100)) active = Run("xdotool", "getactivewindow");
+            Assert.Equal(firstWindow, active);
+        }
+        finally
+        {
+            first.Kill();
+            second.Kill();
+        }
+    }
+
     [Fact]
     public void TheWindowManagersWindowsAreListedFrontToBack()
     {
