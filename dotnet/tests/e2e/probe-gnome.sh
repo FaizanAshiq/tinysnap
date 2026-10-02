@@ -16,6 +16,9 @@ gnome-shell --headless --wayland --virtual-monitor 1280x800 --unsafe-mode > prob
 for i in $(seq 1 60); do gdbus introspect --session --dest org.gnome.Shell --object-path /org/gnome/Shell >/dev/null 2>&1 && break; sleep 1; done
 gdbus introspect --session --dest org.gnome.Shell --object-path /org/gnome/Shell >/dev/null 2>&1 && say "shell: up after ${i}s" || say "shell: DOWN"
 say "show-screenshot-ui: $(gsettings get org.gnome.shell.keybindings show-screenshot-ui 2>&1)"
+eval_js() { gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.gnome.Shell.Eval "$1" 2>&1; }
+# GNOME starts in the Overview; a desktop session leaves it at once.
+say "overview hidden: $(eval_js 'Main.overview.hide(); Main.overview.visible')"
 say "portals: $(ls /usr/share/xdg-desktop-portal/portals/ 2>&1 | tr '\n' ' ')"
 say "runtime dir: $(ls -a "$XDG_RUNTIME_DIR" | tr '\n' ' ')"
 G_MESSAGES_DEBUG=all /usr/libexec/xdg-desktop-portal-gnome --verbose > probe/portal-gnome.log 2>&1 &
@@ -40,8 +43,12 @@ k.notify_keyval(global.get_current_time() * 1000, C.KEY_$1, C.KeyState.PRESSED);
 k.notify_keyval(global.get_current_time() * 1000, C.KEY_$1, C.KeyState.RELEASED); 'sent'" >/dev/null 2>&1; }
 sleep 3
 shot dialog
-say "windows: $(gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell --method org.gnome.Shell.Eval 'global.get_window_actors().map(a => a.meta_window.get_title() + "/" + a.meta_window.get_wm_class()).join(", ")' 2>&1)"
-# The access dialog's Allow, by keyboard: Return takes the default button.
+say "windows: $(eval_js 'global.display.list_all_windows().map(w => w.get_title() + "/" + w.get_wm_class() + "/" + w.get_window_type()).join(", ")')"
+say "modal dialogs: $(eval_js 'Main.modalCount + " " + (global.stage.key_focus ? global.stage.key_focus.toString() : "none")')"
+# Whatever asks, focused, then answered by keyboard: Return takes the default button.
+say "focus: $(eval_js 'const ws = global.display.list_all_windows(); if (ws.length) ws[ws.length - 1].activate(global.get_current_time()); ws.length')"
+sleep 1
+shot focused
 key Return
 for i in $(seq 1 40); do grep -q "Response" probe/monitor.log && break; sleep 0.25; done
 grep -q "Response" probe/monitor.log || { key Tab; key Return; for i in $(seq 1 40); do grep -q "Response" probe/monitor.log && break; sleep 0.25; done; }
