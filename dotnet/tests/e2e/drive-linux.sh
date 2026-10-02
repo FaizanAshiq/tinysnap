@@ -71,6 +71,11 @@ saves=$HOME/Pictures/Screenshots
 start=$(date +%s%N)
 gsettings set org.gnome.desktop.interface enable-animations true
 echo "     one gsettings set took $((($(date +%s%N) - start) / 1000000)) ms" >> "$results"
+# The test home has no font cache yet, unlike a real desktop's; fontconfig builds it here, timed,
+# rather than inside Tinysnap's first start.
+start=$(date +%s%N)
+fonts=$(fc-list | wc -l)
+echo "     fontconfig listed $fonts fonts in $((($(date +%s%N) - start) / 1000000)) ms" >> "$results"
 
 # The desktop: a known colour, a line of text and a QR code to capture.
 openbox &
