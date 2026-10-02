@@ -41,7 +41,7 @@ public static partial class Renderer
         }
         painter.Draw(document.Capture.Image, document.Capture.Bounds);
 
-        var visible = document.Annotations.Where(a => hidden is null || !hidden.Contains(a.Id)).ToList();
+        var visible = document.Annotations.Where(a => !a.IsHidden && (hidden is null || !hidden.Contains(a.Id))).ToList();
         var spotlightDrawn = false;
         foreach (var annotation in visible)
         {
