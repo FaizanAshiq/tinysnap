@@ -23,6 +23,12 @@ cd tinysnap
 Both compile on your machine, which is what keeps first launch clean. See below for
 why that matters. Tinysnap needs macOS 14 Sonoma or later.
 
+On Windows 10 or 11, run `Tinysnap-win-x64-Setup.exe` (or `-arm64`) from the
+[latest release](https://github.com/FaizanAshiq/tinysnap/releases/latest); it installs for you
+alone, with no admin prompt. On Linux with GNOME, download `Tinysnap-linux-x64.AppImage` (or
+`-arm64`) from the same release, make it executable and run it. More in
+[dotnet/README.md](dotnet/README.md).
+
 ## Capturing
 
 | Hotkey | What it does |
