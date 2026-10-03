@@ -363,7 +363,9 @@ internal sealed partial class CanvasControl : Control
         Hovered = Session.Hovered(point, reach);
         overPickUp = Session.Phase is EditorPhase.IdlePhase && Session.Tool != Tool.Crop
             && Session.Display.PickUp(point, reach) is not null;
-        Cursor = (commandHeld || overPickUp || Session.Tool is Tool.Select or Tool.Image) && Hovered is not null
+        // The open hand only over what can be moved: never over a locked shape.
+        Cursor = (commandHeld || overPickUp || Session.Tool is Tool.Select or Tool.Image)
+                 && Hovered is { } hovered && Session.Display.Annotation(hovered) is { IsLocked: false }
             ? new Cursor(StandardCursorType.Hand)
             : Cursor.Default;
     }

@@ -110,6 +110,67 @@ public class LayersPanelTests
     }
 
     [AvaloniaFact]
+    public void ADragThatStartsOnARowsButtonMovesNothing()
+    {
+        var editor = WithTwoShapes();
+        Open(editor);
+        editor.UpdateLayout();
+        var ids = Order(editor);
+        var eye = editor.Layers.Rows[0].HideButton;
+        var start = eye.TranslatePoint(new Point(eye.Bounds.Width / 2, eye.Bounds.Height / 2), editor)!.Value;
+        var end = new Point(start.X, start.Y + 42);
+        editor.MouseDown(start, MouseButton.Left);
+        editor.MouseMove(new Point(start.X, start.Y + 6), RawInputModifiers.LeftMouseButton);
+        editor.MouseMove(end, RawInputModifiers.LeftMouseButton);
+        editor.MouseUp(end, MouseButton.Left);
+        Assert.Equal(ids, Order(editor));
+    }
+
+    [AvaloniaFact]
+    public void ADraggedRowLiftsAndSettlesWhenDropped()
+    {
+        var editor = WithTwoShapes();
+        Open(editor);
+        editor.UpdateLayout();
+        var top = editor.Layers.Rows[0].Item;
+        var start = top.TranslatePoint(new Point(40, 16), editor)!.Value;
+        editor.MouseDown(start, MouseButton.Left);
+        editor.MouseMove(new Point(start.X, start.Y + 20), RawInputModifiers.LeftMouseButton);
+        Assert.True(editor.Layers.DragGhost.IsVisible);
+        Assert.Contains(editor.Layers.Rows[0].Name, editor.Layers.DragGhost.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text));
+        editor.MouseUp(new Point(start.X, start.Y + 20), MouseButton.Left);
+        Assert.False(editor.Layers.DragGhost.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void ANameChangeKeepsTheRowsAsTheyAre()
+    {
+        var editor = Editor(Make(), Tool.Rectangle);
+        DrawAt(editor, new Point(20, 20), new Point(70, 60));
+        Open(editor);
+        var text = Annotation.New(new AnnotationKind.Text(new Core.Point(10, 10), "A"), new Style(Palette.Red));
+        var document = editor.Canvas.Session.Display with { Annotations = editor.Canvas.Session.Display.Annotations.Add(text) };
+        editor.Layers.Show(document, null);
+        var item = editor.Layers.Rows[0].Item;
+        editor.Layers.Show(document.Replacing(text with { Kind = new AnnotationKind.Text(new Core.Point(10, 10), "AB") }), null);
+        Assert.Same(item, editor.Layers.Rows[0].Item);
+        Assert.Equal("AB", editor.Layers.Rows[0].Name);
+        Assert.Equal("AB", AutomationProperties.GetName(item));
+    }
+
+    [AvaloniaFact]
+    public void TheHandShowsOnlyOverWhatCanBeMoved()
+    {
+        var editor = WithTwoShapes();
+        Press(editor, Key.L, RawInputModifiers.Control, "l");
+        editor.Canvas.Choose(Tool.Select);
+        var over = editor.Canvas.TranslatePoint(new Point(125, 20), editor)!.Value;
+        editor.MouseMove(over);
+        Assert.NotNull(editor.Canvas.Hovered);
+        Assert.Same(Cursor.Default, editor.Canvas.Cursor);
+    }
+
+    [AvaloniaFact]
     public void AClickOnARowWithoutMovingMovesNothing()
     {
         var editor = WithTwoShapes();
