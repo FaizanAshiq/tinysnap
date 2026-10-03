@@ -74,10 +74,19 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     override func mouseMoved(with event: NSEvent) {
         // Command may have been let go in another window, so the flag is read again here.
         commandHeld = event.modifierFlags.contains(.command)
+        // Over the style bar or the layers panel the pointer is not on the capture, and the
+        // border a hovered layer row put up stays.
+        guard !isOverFloatingView(event) else { return }
         let point = pixelPoint(event)
         reportColor(at: point)
         hover(at: point)
         measurePointer = session.tool == .measure ? point : nil
+    }
+
+    private func isOverFloatingView(_ event: NSEvent) -> Bool {
+        guard let content = window?.contentView, let scroll = enclosingScrollView,
+              let hit = content.hitTest(content.convert(event.locationInWindow, from: nil)) else { return false }
+        return !hit.isDescendant(of: scroll)
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -218,7 +227,9 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
             return
         }
         let picksUp = commandHeld || overPickUp || session.tool == .select || session.tool == .image
-        (picksUp && hovered != nil ? NSCursor.openHand : NSCursor.arrow).set()
+        // The open hand only over what can be moved: never over a locked shape.
+        let movable = hovered.flatMap { session.display.annotation($0) }.map { !$0.isLocked } ?? false
+        (picksUp && movable ? NSCursor.openHand : NSCursor.arrow).set()
     }
 
     private func hover(at point: CGPoint) {

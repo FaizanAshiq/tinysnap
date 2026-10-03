@@ -45,10 +45,10 @@ enum MainMenu {
             item("Duplicate", "duplicate:", "d"),
             item("Lock", "toggleLock:", "l"),
             submenu("Arrange", [
-                item("Bring to Front", "bringToFront:", "}"),
+                shifted(item("Bring to Front", "bringToFront:", "]")),
                 item("Bring Forward", "bringForward:", "]"),
                 item("Send Backward", "sendBackward:", "["),
-                item("Send to Back", "sendToBack:", "{"),
+                shifted(item("Send to Back", "sendToBack:", "[")),
             ]),
             .separator(),
             item("Copy Text", "copyText:", "C"),
@@ -77,6 +77,12 @@ enum MainMenu {
     /// An upper case key equivalent adds Shift, which is how ⌘⇧S and ⌘⇧Z are written.
     private static func item(_ title: String, _ action: String, _ key: String) -> NSMenuItem {
         NSMenuItem(title: title, action: NSSelectorFromString(action), keyEquivalent: key)
+    }
+
+    /// Shift added to a key with no capital, so the menu reads ⇧⌘] rather than ⌘}.
+    private static func shifted(_ item: NSMenuItem) -> NSMenuItem {
+        item.keyEquivalentModifierMask = [.command, .shift]
+        return item
     }
 
     private static func submenu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {

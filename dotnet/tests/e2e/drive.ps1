@@ -459,6 +459,25 @@ if ($editor)
     Check 'Ctrl+Shift+L opens the layers list' { if (-not (Until { LayersList } 5)) { 'no list named Layers' } }
     Press $Ctrl $Shift 0x4C
     Check 'Ctrl+Shift+L again closes it' { if (-not (Until { -not (LayersList) } 5)) { 'still open' } }
+    # A rectangle, then an oval beside it, in the middle of the capture; Ctrl+[ sends the
+    # oval, still chosen, below the rectangle, which the list reads out top first.
+    $midX = $editor.X + [int]($editor.Width / 2)
+    $midY = $editor.Y + [int]($editor.Height / 2)
+    Press 0x52
+    [Desk]::Drag($midX - 140, $midY - 60, $midX - 30, $midY + 30)
+    Press 0x4F
+    [Desk]::Drag($midX + 30, $midY - 60, $midX + 140, $midY + 30)
+    Press $Ctrl 0xDB
+    Press $Ctrl $Shift 0x4C
+    Check 'Ctrl+[ sends the oval below the rectangle, as the layers list reads' {
+        $list = Until { LayersList } 5
+        if (-not $list) { return 'no list named Layers' }
+        $items = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+                                                                          [System.Windows.Automation.ControlType]::ListItem)
+        $names = @($list.FindAll('Descendants', $items) | ForEach-Object { $_.Current.Name })
+        if (($names -join ',') -ne 'Rectangle,Oval') { "rows read $($names -join ', ')" }
+    }
+    Press $Ctrl $Shift 0x4C
     [System.Windows.Forms.Clipboard]::Clear()
     Press $Ctrl 0x43
     Check 'Ctrl+C copies it as a PNG and as a bitmap' {
