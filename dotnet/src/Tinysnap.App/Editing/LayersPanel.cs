@@ -22,12 +22,13 @@ namespace Tinysnap.App.Editing;
 /// work as in any list. A row dragged up or down moves its shape in the order.</summary>
 internal sealed class LayersPanel : Border
 {
-    public const double PanelWidth = 220;
+    public const double PanelWidth = 244;
     public const double RowHeight = 32;
 
     /// <summary>One row, for the window and the tests.</summary>
     internal sealed record LayerRow(Guid Id, string Name, bool IsLocked, bool IsHidden, ListBoxItem Item,
-                                    Button DuplicateButton, Button HideButton, Button LockButton, TextBlock Label);
+                                    Button DuplicateButton, Button DeleteButton, Button HideButton, Button LockButton,
+                                    TextBlock Label);
 
     private readonly record struct Shape(Guid Id, Tool Tool, string Name, bool IsLocked, bool IsHidden);
 
@@ -40,6 +41,7 @@ internal sealed class LayersPanel : Border
     public event Action<Guid, bool>? HideChanged;
     public event Action<Guid, bool>? LockChanged;
     public event Action<Guid>? DuplicateRequested;
+    public event Action<Guid>? DeleteRequested;
 
     /// <summary>The row under the pointer, so the canvas can border its shape.</summary>
     public event Action<Guid?>? HoverChanged;
@@ -207,6 +209,7 @@ internal sealed class LayersPanel : Border
     {
         AutomationProperties.SetName(row.Item, row.Name + (row.IsLocked ? ", locked" : "") + (row.IsHidden ? ", hidden" : ""));
         AutomationProperties.SetName(row.DuplicateButton, $"Duplicate {row.Name}");
+        AutomationProperties.SetName(row.DeleteButton, $"Delete {row.Name}");
         AutomationProperties.SetName(row.HideButton, $"{(row.IsHidden ? "Show" : "Hide")} {row.Name}");
         AutomationProperties.SetName(row.LockButton, $"{(row.IsLocked ? "Unlock" : "Lock")} {row.Name}");
     }
@@ -243,31 +246,37 @@ internal sealed class LayersPanel : Border
         var lockButton = RowButton(shape.IsLocked ? ToolIcons.Lock : ToolIcons.Unlock, $"{(shape.IsLocked ? "Unlock" : "Lock")} {name}",
                                    shape.IsLocked ? "Unlock (Ctrl+L)" : "Lock (Ctrl+L)", () => LockChanged?.Invoke(id, !shape.IsLocked));
         lockButton.Opacity = shape.IsLocked ? 1 : 0.5;
+        var delete = RowButton(ToolIcons.Delete, $"Delete {name}", "Delete, or the Delete key", () => DeleteRequested?.Invoke(id));
+        // A locked shape cannot be deleted until it is unlocked.
+        delete.IsEnabled = !shape.IsLocked;
         duplicate.IsVisible = false;
+        delete.IsVisible = false;
 
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto"), Height = RowHeight };
-        foreach (var (control, column) in new (Control, int)[] { (icon, 0), (label, 1), (duplicate, 2), (hide, 3), (lockButton, 4) })
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto,Auto"), Height = RowHeight };
+        foreach (var (control, column) in new (Control, int)[] { (icon, 0), (label, 1), (duplicate, 2), (delete, 3), (hide, 4), (lockButton, 5) })
         {
             Grid.SetColumn(control, column);
             grid.Children.Add(control);
         }
         var item = new ListBoxItem { Content = grid, Padding = new Thickness(8, 0, 4, 0), MinHeight = RowHeight };
-        // Duplicate shows under the pointer and on the chosen row; the canvas borders the shape.
+        // Duplicate and delete show under the pointer and on the chosen row; the canvas borders
+        // the shape.
+        void ShowActions(bool shown) => duplicate.IsVisible = delete.IsVisible = shown;
         item.PointerEntered += (_, _) =>
         {
-            duplicate.IsVisible = true;
+            ShowActions(true);
             HoverChanged?.Invoke(id);
         };
         item.PointerExited += (_, _) =>
         {
-            duplicate.IsVisible = item.IsSelected;
+            ShowActions(item.IsSelected);
             HoverChanged?.Invoke(null);
         };
         item.PropertyChanged += (_, e) =>
         {
-            if (e.Property == ListBoxItem.IsSelectedProperty) duplicate.IsVisible = item.IsSelected || item.IsPointerOver;
+            if (e.Property == ListBoxItem.IsSelectedProperty) ShowActions(item.IsSelected || item.IsPointerOver);
         };
-        var row = new LayerRow(id, name, shape.IsLocked, shape.IsHidden, item, duplicate, hide, lockButton, label);
+        var row = new LayerRow(id, name, shape.IsLocked, shape.IsHidden, item, duplicate, delete, hide, lockButton, label);
         Describe(row);
         return row;
     }

@@ -392,6 +392,11 @@ internal sealed class EditorWindow : Window
             s.Select(id);
             s.DuplicateSelection();
         });
+        Layers.DeleteRequested += id => Canvas.Apply(s =>
+        {
+            s.Select(id);
+            s.DeleteSelection();
+        });
         Layers.HoverChanged += Canvas.Highlight;
         Layers.Clicked += () => Canvas.Focus();
         Layers.CloseRequested += () => ToggleLayers();

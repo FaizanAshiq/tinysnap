@@ -37,11 +37,16 @@ internal sealed class TextToast : Window
     internal Button OpenLink { get; } = new() { Content = "Open Link", FontSize = 12 };
     internal bool IsGone { get; private set; }
 
+    /// <summary>Still reading: a spinner beside the heading, and no timer, as the result
+    /// replaces it.</summary>
+    internal bool IsWorking { get; }
+
     /// <param name="on">A point on the monitor the text came from, in physical pixels.</param>
     public TextToast(string title, string shown, TextReading? reading, IClipboard clipboard, IFileActions files, PixelPoint? on,
-                     TimeProvider? time = null)
+                     TimeProvider? time = null, bool working = false)
     {
         this.on = on;
+        IsWorking = working;
         heading.Text = title;
         preview.Text = shown;
         preview.IsVisible = shown.Length > 0;
@@ -85,7 +90,18 @@ internal sealed class TextToast : Window
                 Spacing = 6,
                 Children =
                 {
-                    heading,
+                    working
+                        ? new StackPanel
+                        {
+                            Orientation = Orientation.Horizontal,
+                            Spacing = 8,
+                            Children =
+                            {
+                                new ProgressBar { IsIndeterminate = true, Width = 16, Height = 16, MinWidth = 16, VerticalAlignment = VerticalAlignment.Center },
+                                heading,
+                            },
+                        }
+                        : heading,
                     preview,
                     new StackPanel
                     {
@@ -101,11 +117,12 @@ internal sealed class TextToast : Window
         card.PointerEntered += (_, _) => timer!.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         card.PointerExited += (_, _) =>
         {
-            if (!IsGone) timer!.Change(Wait, Timeout.InfiniteTimeSpan);
+            if (!IsGone && !IsWorking) timer!.Change(Wait, Timeout.InfiniteTimeSpan);
         };
         Content = card;
 
-        timer = (time ?? TimeProvider.System).CreateTimer(_ => Dispatcher.Post(Dismiss), null, Wait, Timeout.InfiniteTimeSpan);
+        timer = (time ?? TimeProvider.System).CreateTimer(_ => Dispatcher.Post(Dismiss), null,
+                                                          working ? Timeout.InfiniteTimeSpan : Wait, Timeout.InfiniteTimeSpan);
         Opened += (_, _) => Place();
     }
 

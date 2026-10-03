@@ -54,6 +54,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private let layers = LayersPanel()
     private var showsLayers: Bool
     private static let railWidth: CGFloat = 40
+    /// What every capture window and the library share, so they open as tabs of one window.
+    static let tabbingIdentifier = "Tinysnap"
     /// The style bar's height before it has first shown, for the panel's place under it.
     private static let styleBarHeight: CGFloat = 46
     /// The Measure guide while it is open.
@@ -139,9 +141,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         // Wide enough for every toolbar button: narrower, and the last ones go into an
         // overflow menu, the library button first.
         window.minSize = NSSize(width: 1180, height: 280)
-        // Every capture its own window. With tabbing left to macOS, a second capture
-        // could land as a tab inside the first.
-        window.tabbingMode = .disallowed
+        // Captures and the library share one window as tabs, whatever the system's own
+        // preference for tabs says.
+        window.tabbingMode = .preferred
+        window.tabbingIdentifier = Self.tabbingIdentifier
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
@@ -218,11 +221,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             self?.measureChanged(settings)
         }
         styleBar.onMeasureHelp = { [weak self] in self?.showMeasureGuide() }
-        styleBar.onDelete = { [weak self] in
-            guard let self else { return }
-            self.canvas.session.deleteSelection()
-            self.window?.makeFirstResponder(self.canvas)
-        }
         styleBar.onSize = { [weak self] request in
             guard let self else { return }
             let document = self.canvas.session.display
@@ -282,7 +280,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         let view = scrollView.contentSize
         let magnification = scrollView.magnification
         guard old.width * magnification <= view.width + 0.5, old.height * magnification <= view.height + 0.5 else { return }
-        guard sizedByHand else {
+        // A window shared as tabs keeps its size: another capture's tab is showing in it too.
+        guard sizedByHand || (window.tabbedWindows?.count ?? 0) > 1 else {
             place(on: window.screen, around: NSPoint(x: window.frame.midX, y: window.frame.midY))
             return
         }
@@ -457,12 +456,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             return
         }
         let target = styleTarget
-        // Shown only for a tool with something to set.
-        // A shape picked up shows the panel even when it has no style to set, for its trash.
-        let deletable = session.selection != nil && session.typingID == nil
-        styleBar.isHidden = !(StyleBar.shows(target.tool) || deletable) || session.phase != .idle && session.typingID == nil
+        // Shown only for a tool with something to set. Deleting is the layers panel's bin.
+        styleBar.isHidden = !StyleBar.shows(target.tool) || session.phase != .idle && session.typingID == nil
         if !styleBar.isHidden {
-            styleBar.show(tool: target.tool, style: target.style, measure: canvas.measure, selected: deletable,
+            styleBar.show(tool: target.tool, style: target.style, measure: canvas.measure,
                           locked: session.selectedAnnotation?.isLocked == true)
             placeStyleBar()
         }
@@ -550,6 +547,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             self?.canvas.session.duplicateSelection()
         }
         layers.onDelete = { [weak self] in self?.canvas.session.deleteSelection() }
+        layers.onDeleteRow = { [weak self] id in
+            self?.canvas.session.select(id)
+            self?.canvas.session.deleteSelection()
+        }
         layers.onUndo = { [weak self] in self?.canvas.undo(nil) }
         layers.onRedo = { [weak self] in self?.canvas.redo(nil) }
         layers.onHover = { [weak self] id in self?.canvas.highlight(id) }
@@ -704,11 +705,31 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     @objc func zoomOut(_ sender: Any?) { zoom(to: scrollView.magnification / 1.25) }
     @objc func zoomToActualSize(_ sender: Any?) { zoom(to: 1) }
 
-    @objc func zoomToFit(_ sender: Any?) {
+    /// Joined as a tab: the window keeps the size it has, at least as wide as the toolbar
+    /// needs, and the capture shrinks to fit it. A smaller one stays at 100%, as in a window
+    /// of its own: enlarged, its pixels would show as squares and its shapes as steps.
+    func joinedTabs() {
+        sizedByHand = true
+        guard let window else { return }
+        if window.frame.width < window.minSize.width {
+            var frame = window.frame
+            frame.size.width = window.minSize.width
+            window.setFrame(frame, display: true)
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            zoom(to: min(1, fit))
+        }
+    }
+
+    @objc func zoomToFit(_ sender: Any?) { zoom(to: fit) }
+
+    /// The zoom that shows the whole canvas in the window, with its margin.
+    private var fit: CGFloat {
         let margins = Self.fitMargin * 2
         let visible = scrollView.contentSize
         let size = canvas.bounds.size
-        zoom(to: min((visible.width - margins) / size.width, (visible.height - margins) / size.height))
+        return min((visible.width - margins) / size.width, (visible.height - margins) / size.height)
     }
 
     // MARK: Output

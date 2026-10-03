@@ -268,10 +268,30 @@ public class LayersPanelTests
     public void ALockedSelectionShowsItsStyleWithNothingToPress()
     {
         var editor = WithTwoShapes();
-        Assert.NotNull(editor.StyleBar.DeleteChip);
         Press(editor, Key.L, RawInputModifiers.Control, "l");
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-        Assert.Null(editor.StyleBar.DeleteChip);
         Assert.False(editor.StyleBar.Row.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public void ARowsBinDeletesItsShapeAndALockedRowHasNone()
+    {
+        var editor = WithTwoShapes();
+        Open(editor);
+        var ids = Order(editor);
+        Assert.Equal("Delete Rectangle", AutomationProperties.GetName(editor.Layers.Rows[0].DeleteButton));
+        Click(editor.Layers.Rows[0].DeleteButton);
+        Assert.Equal([ids[0]], Order(editor));
+        Click(editor.Layers.Rows[0].LockButton);
+        Assert.False(editor.Layers.Rows[0].DeleteButton.IsEnabled);
+        Click(editor.Layers.Rows[0].DeleteButton);
+        Assert.Equal([ids[0]], Order(editor));
+        // On the chosen row, where the other icons are white, it is dimmed: it does nothing.
+        editor.Layers.Rows[0].Item.IsSelected = true;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var bin = editor.Layers.Rows[0].DeleteButton;
+        Assert.True(bin.IsVisible);
+        Assert.True(bin.GetVisualDescendants().OfType<PathIcon>().Single().Foreground is not Avalonia.Media.ISolidColorBrush { Color.A: 255 }
+                    || bin.Opacity < 1);
     }
 }

@@ -75,6 +75,30 @@ public enum TextReader {
         return rows.flatMap { row in row.sorted { boxes[$0].minX < boxes[$1].minX } }
     }
 
+    /// Reads a few words once, at launch, so the first Copy Text does not wait while macOS
+    /// gets its text model ready, which took 26 seconds the first time on this machine and
+    /// a sixth of a second after.
+    public static func warmUp() {
+        guard let sample = warmUpSample() else { return }
+        _ = try? read(sample, for: .text)
+    }
+
+    /// Black words on white, as a capture would have them: a blank image never wakes the
+    /// text model, since there is nothing in it to read.
+    static func warmUpSample() -> CGImage? {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: 480, height: 80, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 480, height: 80))
+        // The text layout draws with y growing downward, as captures are.
+        context.translateBy(x: 0, y: 80)
+        context.scaleBy(x: 1, y: -1)
+        TextLayout.draw("Tinysnap reads text", at: CGPoint(x: 20, y: 20), points: 18, scale: 2,
+                        color: CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1), in: context)
+        return context.makeImage()
+    }
+
     /// Join Lines: every run of spaces and line breaks becomes one space.
     public static func join(_ text: String) -> String {
         text.split(whereSeparator: \.isWhitespace).joined(separator: " ")

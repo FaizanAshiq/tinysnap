@@ -54,8 +54,6 @@ final class StyleBar: NSVisualEffectView {
     var onMeasure: ((MeasureSettings) -> Void)?
     /// The ? in the Measure panel.
     var onMeasureHelp: (() -> Void)?
-    /// The trash chip, shown while a shape is selected.
-    var onDelete: (() -> Void)?
     /// A size chip, or a width or height typed into the Size panel and entered.
     enum SizeRequest: Equatable {
         case fraction(CGFloat), width(Int), height(Int)
@@ -78,7 +76,6 @@ final class StyleBar: NSVisualEffectView {
     private var mode = Mode.tool
     private var backdrop: Backdrop?
     private var measure = MeasureSettings.defaults
-    private var selected = false
     /// A locked shape picked up: its style shows, but nothing in the bar changes it.
     private var locked = false
     /// The settings a backdrop starts from when it is turned on.
@@ -116,16 +113,15 @@ final class StyleBar: NSVisualEffectView {
     /// Whether this tool has anything to set, and so whether the bar shows at all.
     static func shows(_ tool: Tool) -> Bool { tool.hasColor || tool.hasSize || tool.hasFill || tool.hasCorners || tool.hasOverlay }
 
-    /// `selected` is a shape picked up rather than a tool about to draw, and adds the
-    /// trash chip. `locked` shows its style dimmed, with nothing to press and no trash.
-    func show(tool: Tool, style: Style, measure: MeasureSettings = .defaults, selected: Bool = false, locked: Bool = false) {
+    /// `locked` shows a locked shape's style dimmed, with nothing to press. Deleting is the
+    /// layers panel's bin, or the Delete key.
+    func show(tool: Tool, style: Style, measure: MeasureSettings = .defaults, locked: Bool = false) {
         guard mode != .tool || tool != self.tool || style != self.style || measure != self.measure
-                || selected != self.selected || locked != self.locked || row.arrangedSubviews.isEmpty else { return }
+                || locked != self.locked || row.arrangedSubviews.isEmpty else { return }
         mode = .tool
         self.tool = tool
         self.style = style
         self.measure = measure
-        self.selected = selected
         self.locked = locked
         rebuild()
     }
@@ -168,7 +164,6 @@ final class StyleBar: NSVisualEffectView {
             row.addArrangedSubview(contrastControl())
             row.addArrangedSubview(group([measureHelpChip()]))
         }
-        if selected, !locked { row.addArrangedSubview(group([deleteChip()])) }
         row.alphaValue = locked ? 0.45 : 1
         if locked { disable(row) }
         setFrameSize(fittingSize)
@@ -602,27 +597,6 @@ final class StyleBar: NSVisualEffectView {
         }
         onSize?(request(pixels))
         rebuild()
-    }
-
-    // MARK: Delete
-
-    /// The Delete key's button, so a shape can go without the keyboard.
-    private func deleteChip() -> NSView {
-        let chip = ChipButton(label: "Delete, or the Delete key") { box, color in
-            let configuration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
-                .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
-            guard let trash = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)?
-                .withSymbolConfiguration(configuration) else { return }
-            let size = trash.size
-            trash.draw(in: NSRect(x: box.midX - size.width / 2, y: box.midY - size.height / 2, width: size.width, height: size.height))
-        }
-        chip.target = self
-        chip.action = #selector(deleteSelection)
-        return chip
-    }
-
-    @objc private func deleteSelection() {
-        onDelete?()
     }
 
     // MARK: Measure

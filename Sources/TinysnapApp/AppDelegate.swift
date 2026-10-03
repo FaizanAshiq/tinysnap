@@ -51,6 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotKeys = center
 
         Task { await ScreenReader.warmUp() }
+        // Off the main thread and at low priority: the first read can take many seconds.
+        Task.detached(priority: .utility) { TextReader.warmUp() }
 
         sweepLibrary()
         sweepTimer = Timer.scheduledTimer(withTimeInterval: 86_400, repeats: true) { [weak self] _ in
@@ -404,6 +406,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             )
         }
+        // A tab of the window that is up; on its own, it opens where it was last.
+        if let window = libraryWindow?.window, !window.isVisible { _ = joinTabs(window) }
         libraryWindow?.show()
     }
 
@@ -475,12 +479,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NotificationCenter.default.post(name: .libraryChanged, object: nil)
     }
 
-    /// Every capture gets its own window, named for the time it was taken, which is how
-    /// it is told apart in the Window menu, the Dock and Mission Control.
+    /// Every capture gets a tab of the one window captures and the library share, named
+    /// for the time it was taken, which is how it is told apart in the tab, the Window
+    /// menu and Mission Control. The first sizes the window to itself.
     private func openEditor(_ document: Document, entry: LibraryEntry?, on displayID: CGDirectDisplayID?,
                             title: String = AppDelegate.title(for: Date())) {
         let screen = NSScreen.screens.first { $0.displayID == displayID } ?? NSScreen.main
-        let previous = editors.last { $0.window?.isVisible == true }?.window
         let editor = EditorWindowController(
             document: document,
             entry: entry,
@@ -504,7 +508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             }
         )
-        if let previous, let window = editor.window { cascade(window, after: previous) }
+        if let window = editor.window, joinTabs(window) { editor.joinedTabs() }
         editors.append(editor)
         updateDockIcon()
         editor.showWindow(nil)
@@ -513,15 +517,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    /// Each new capture sits a step down and to the right of the last one on the same
-    /// display, so no window lands exactly on top of another and hides it.
-    private func cascade(_ window: NSWindow, after previous: NSWindow) {
-        guard let visible = previous.screen?.visibleFrame, previous.screen == window.screen else { return }
-        var origin = NSPoint(x: previous.frame.minX + 28, y: previous.frame.maxY - 28 - window.frame.height)
-        if origin.x + window.frame.width > visible.maxX || origin.y < visible.minY {
-            origin = NSPoint(x: visible.minX + 28, y: visible.maxY - 28 - window.frame.height)
-        }
-        window.setFrameOrigin(origin)
+    /// The window captures and the library share as tabs: the key one of them, else any
+    /// showing. Nil when none is.
+    private var tabHost: NSWindow? {
+        let showing = (editors.compactMap(\.window) + [libraryWindow?.window].compactMap { $0 }).filter(\.isVisible)
+        return showing.first(where: \.isKeyWindow) ?? showing.first
+    }
+
+    /// Adds `window` to the shared window as a tab. False when it is the first, which then
+    /// places itself.
+    private func joinTabs(_ window: NSWindow) -> Bool {
+        guard let host = tabHost, host !== window else { return false }
+        host.addTabbedWindow(window, ordered: .above)
+        return true
     }
 
     /// A Dock icon, and a place in Command Tab, only while a capture is open, so a
@@ -541,7 +549,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if editors.isEmpty {
             showSettings(nil)
         } else {
-            editors.forEach { $0.showWindow(nil) }
+            // One window, the tab that was showing.
+            (tabHost ?? editors.last?.window)?.makeKeyAndOrderFront(nil)
         }
         NSApp.activate(ignoringOtherApps: true)
         return false
