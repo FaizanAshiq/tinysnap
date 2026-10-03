@@ -9,7 +9,8 @@ editable; Settings changes the hotkeys and the rest, and the tray menu has every
 Repeat Last Area and Delayed Capture included. Copy Text reads text on the device, with
 Windows' own recogniser or, on Linux, the Tesseract bundled in the AppImage, and Scan QR Code
 reads codes with ZXing.Net. The editor also measures, frames a capture with a backdrop, and
-sets its export size. Neither build is released yet.
+sets its export size. Both ship in the same GitHub release as the Mac app: the Windows installer
+since 1.2.0, the Linux AppImage since 1.3.0.
 
 The Mac app in the rest of this repository is unchanged, and both read the same library
 files. `tests/fixtures` holds one library entry written by each app, and each app's tests
