@@ -9,7 +9,7 @@
     <!-- Tinysnap.exe, carrying the Mac app's version: every release ships both at once. -->
     <AssemblyName>Tinysnap</AssemblyName>
     <Product>Tinysnap</Product>
-    <Version>1.3.0</Version>
+    <Version>1.3.1</Version>
     <!-- The shipped build leaves out the .NET code it never calls. CI runs Tinysnap.exe with
          self-check on that build, as the tests run the full one. -->
     <PublishTrimmed>true</PublishTrimmed>
