@@ -10,7 +10,8 @@ using Thickness = Avalonia.Thickness;
 namespace Tinysnap.App.Editing;
 
 /// <summary>A text field sits over the annotation while it is typed, in the renderer's own font
-/// at its size on screen, and the renderer leaves that annotation out so it is not drawn twice.</summary>
+/// at its size on screen, and the renderer leaves its letters out, drawing only a filled text's
+/// box, so nothing is drawn twice.</summary>
 internal sealed partial class CanvasControl
 {
     private TextBox? textBox;
@@ -35,7 +36,7 @@ internal sealed partial class CanvasControl
         using (var font = TextLayout.Font(points)) box.FontFamily = new FontFamily(font.Typeface.FamilyName);
         box.FontSize = points * zoom;
         box.MinWidth = points * zoom;
-        var brush = new SolidColorBrush(Color.FromUInt32(ToArgb(Palette.Color(annotation.Style.ColorHex))));
+        var brush = new SolidColorBrush(Color.FromUInt32(ToArgb(TextLayout.LetterColor(annotation.Style))));
         box.Foreground = brush;
         box.CaretBrush = brush;
         // The box is as wide as its widest line, as the renderer's text box is, so its lines

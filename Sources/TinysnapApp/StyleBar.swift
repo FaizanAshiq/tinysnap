@@ -303,10 +303,12 @@ final class StyleBar: NSVisualEffectView {
     // MARK: Fill and corners
 
     private func fillChips() -> [NSView] {
-        let isOval = tool == .oval
+        let isOval = tool == .oval, isText = tool == .text
         return [false, true].map { filled in
-            let chip = ChipButton(label: filled ? "Filled" : "Outline") { box, color in
+            let label = isText ? (filled ? "Text on a box" : "Plain text") : (filled ? "Filled" : "Outline")
+            let chip = ChipButton(label: label) { box, color in
                 let frame = box.insetBy(dx: 7, dy: 6)
+                if isText { return Self.drawText(in: frame, onABox: filled, color: color) }
                 let path = isOval ? NSBezierPath(ovalIn: frame) : NSBezierPath(roundedRect: frame, xRadius: 3, yRadius: 3)
                 if filled {
                     color.setFill()
@@ -327,6 +329,19 @@ final class StyleBar: NSVisualEffectView {
 
     @objc private func pickFill(_ sender: NSButton) {
         change { $0.filled = sender.tag == 1 }
+    }
+
+    /// Two lines of text, alone or cut out of a box.
+    private static func drawText(in frame: NSRect, onABox: Bool, color: NSColor) {
+        let lines = onABox ? frame.insetBy(dx: 3, dy: 3) : frame.insetBy(dx: 1, dy: 3)
+        let path = onABox ? NSBezierPath(roundedRect: frame, xRadius: 3, yRadius: 3) : NSBezierPath()
+        for (row, share) in [1.0, 0.6].enumerated() {
+            path.append(NSBezierPath(rect: NSRect(x: lines.minX, y: lines.maxY - 1.6 - CGFloat(row) * (lines.height - 1.6),
+                                                  width: lines.width * share, height: 1.6)))
+        }
+        path.windingRule = .evenOdd
+        color.setFill()
+        path.fill()
     }
 
     /// Five corner radii, square to fully round, each drawn as the corner it gives.
