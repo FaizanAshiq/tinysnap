@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using SkiaSharp;
 using Tinysnap.Core;
 using AvaloniaPoint = Avalonia.Point;
@@ -26,6 +27,9 @@ internal sealed partial class CanvasControl : Control
     private bool renderedFramed;
     /// <summary>The backdrop's fill and shadow, kept while the frame's size and backdrop hold.</summary>
     private FrameGround? ground;
+    /// <summary>Past 100%, what is in view drawn at the screen's resolution, and what it was drawn for.</summary>
+    private (SharedImage Image, Rect Region)? closeUp;
+    private (Document Document, Guid? Hidden, Rect Visible, double OutputScale, bool Framed)? closeUpKey;
     private double zoom = 1;
 
     public CanvasControl(EditorSession session)
@@ -108,15 +112,17 @@ internal sealed partial class CanvasControl : Control
     {
         var size = Mapping.Size;
         var bounds = new AvaloniaRect(0, 0, size.Width, size.Height);
+        var perPixel = zoom * (TopLevel.GetTopLevel(this)?.RenderScaling ?? 1) / Session.Scale;
+        // Past one screen pixel per capture pixel, every pixel stays a sharp square.
+        var close = perPixel > 1.001;
         if (Rendered() is { } image)
         {
             var held = image.Acquire();
             var target = new SKRect(0, 0, (float)size.Width, (float)size.Height);
-            var scaling = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1;
-            // Past one screen pixel per capture pixel, every pixel stays a sharp square.
-            var sampling = zoom * scaling / Session.Scale > 1.001 ? Crisp : Smooth;
+            var sampling = close ? Crisp : Smooth;
             context.Custom(new SkiaDraw(bounds, canvas => canvas.DrawImage(held.Image, target, sampling), held.Release));
         }
+        if (close) DrawCloseUp(context, bounds, perPixel);
         DrawCrop(context, bounds);
         DrawBorders(context);
         DrawSelection(context);
@@ -141,6 +147,47 @@ internal sealed partial class CanvasControl : Control
         rendered = image is null ? null : new SharedImage(image);
         (renderedDocument, renderedHidden, renderedFramed) = (Session.Display, hidden, framed);
         return rendered;
+    }
+
+    /// <summary>Past 100%, what is in view drawn again at the screen's own resolution over the
+    /// enlarged render, so shapes stay smooth however far in while the capture's pixels stay
+    /// sharp squares. With a backdrop it is clipped to the output's rounded corners.</summary>
+    private void DrawCloseUp(DrawingContext context, AvaloniaRect bounds, double outputScale)
+    {
+        var view = bounds;
+        // Only the part the editor's scroll view shows; the whole canvas outside one.
+        if (this.FindAncestorOfType<ScrollViewer>() is { } scroll && scroll.TranslatePoint(default, this) is { } corner)
+            view = view.Intersect(new AvaloniaRect(corner, scroll.Viewport));
+        var origin = Mapping.ToPixels(new Point(view.X, view.Y));
+        var visible = new Rect(origin.X, origin.Y, view.Width / zoom * Session.Scale, view.Height / zoom * Session.Scale);
+        var key = (Session.Display, Session.TypingId, visible, outputScale, Framed);
+        if (closeUpKey != key)
+        {
+            closeUp?.Image.Release();
+            var hiding = key.TypingId is { } id ? new HashSet<Guid> { id } : null;
+            closeUp = Renderer.RenderCloseUp(key.Display, visible, outputScale, key.Framed, hiding) is { } made
+                ? (new SharedImage(made.Image), made.Region)
+                : null;
+            closeUpKey = key;
+        }
+        if (closeUp is not { } shown) return;
+        var held = shown.Image.Acquire();
+        var target = ToDips(shown.Region);
+        var output = ToDips(Session.Display.OutputPixelRect);
+        var clip = Session.Display.Backdrop is { } backdrop && key.Framed
+            ? Math.Min((backdrop.Corners.Points() ?? double.MaxValue) * zoom, Math.Min(output.Width, output.Height) / 2)
+            : (double?)null;
+        // ponytail: drawn over the enlarged render, so a half see-through pixel (a window
+        // capture's corner) comes out a little more solid; clip the render out first if it shows.
+        context.Custom(new SkiaDraw(bounds, canvas =>
+        {
+            canvas.Save();
+            if (clip is { } radius)
+                canvas.ClipRoundRect(new SKRoundRect(new SKRect((float)output.X, (float)output.Y, (float)output.Right, (float)output.Bottom),
+                                                     (float)radius), antialias: true);
+            canvas.DrawImage(held.Image, new SKRect((float)target.X, (float)target.Y, (float)target.Right, (float)target.Bottom), Crisp);
+            canvas.Restore();
+        }, held.Release));
     }
 
     private static IBrush AccentBrush => new SolidColorBrush(Accent.Color);

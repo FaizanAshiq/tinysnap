@@ -14,9 +14,10 @@ public enum Renderer {
 
     /// Draws `region` of the document, in capture pixels, at `outputScale` output pixels
     /// per capture pixel, the whole extent unless told otherwise. `hidden` leaves out
-    /// annotations, used for the text being typed.
+    /// annotations, used for the text being typed. `sharpPixels` enlarges the capture as
+    /// squares, as the canvas shows it past 100%, rather than smoothing it as an export does.
     public static func render(_ document: Document, region: CGRect? = nil, outputScale: CGFloat = 1,
-                              hiding hidden: Set<Annotation.ID> = []) -> CGImage? {
+                              hiding hidden: Set<Annotation.ID> = [], sharpPixels: Bool = false) -> CGImage? {
         let region = region ?? document.extent
         let size = pixelSize(of: region, outputScale: outputScale)
         let width = Int(size.width), height = Int(size.height)
@@ -31,13 +32,14 @@ public enum Renderer {
         context.translateBy(x: -region.minX, y: -region.minY)
 
         let canvas = Canvas(context: context, region: region, outputScale: outputScale,
-                            deviceSize: CGSize(width: width, height: height), scale: document.scale)
+                            deviceSize: CGSize(width: width, height: height), scale: document.scale,
+                            anchor: document.extent.origin)
         // Past the capture, the canvas carries on in the capture's edge colour.
         if !document.capture.bounds.contains(region) {
             context.setFillColor(document.capture.edgeColor)
             context.fill(region)
         }
-        canvas.draw(document.capture.image, in: document.capture.bounds)
+        canvas.draw(document.capture.image, in: document.capture.bounds, crisp: sharpPixels)
 
         let visible = document.annotations.filter { !$0.isHidden && !hidden.contains($0.id) }
         var spotlightDrawn = false
@@ -63,6 +65,9 @@ struct Canvas {
     let outputScale: CGFloat
     let deviceSize: CGSize
     let scale: CGFloat
+    /// Where the whole render starts, so a redaction's grain lies the same in a render of
+    /// part of the document as in the whole.
+    let anchor: CGPoint
 
     private static let imageContext = CIContext(options: [.useSoftwareRenderer: false])
 
@@ -205,6 +210,12 @@ struct Canvas {
         return device.isNull || device.width < 1 || device.height < 1 ? nil : device
     }
 
+    /// A box's corner in the output pixels of the whole render, which seeds its noise.
+    private func grain(_ device: CGRect) -> (x: Int, y: Int) {
+        (Int(device.minX + ((region.minX - anchor.x) * outputScale).rounded()),
+         Int(device.minY + ((region.minY - anchor.y) * outputScale).rounded()))
+    }
+
     private func captureRect(for device: CGRect) -> CGRect {
         CGRect(x: device.minX / outputScale + region.minX, y: device.minY / outputScale + region.minY,
                width: device.width / outputScale, height: device.height / outputScale)
@@ -219,7 +230,7 @@ struct Canvas {
             .cropped(to: flipped)
         guard let patch = Self.imageContext.createCGImage(blurred, from: flipped),
               var buffer = PixelBuffer(image: patch) else { return }
-        buffer.addNoise(amplitude: 12, origin: (Int(device.minX), Int(device.minY)))
+        buffer.addNoise(amplitude: 12, origin: grain(device))
         guard let noisy = buffer.makeImage() else { return }
         drawRounded(noisy, in: captureRect(for: device), crisp: false, corners: corners)
     }
@@ -240,7 +251,7 @@ struct Canvas {
         guard let device = deviceRect(for: rect), let snapshot = context.makeImage(),
               let patch = snapshot.cropping(to: device), var buffer = PixelBuffer(image: patch) else { return }
         buffer.pixelate(block: max(2, Int(block.rounded())))
-        buffer.addNoise(amplitude: 12, origin: (Int(device.minX), Int(device.minY)))
+        buffer.addNoise(amplitude: 12, origin: grain(device))
         guard let blocks = buffer.makeImage() else { return }
         drawRounded(blocks, in: captureRect(for: device), crisp: true, corners: corners)
     }

@@ -33,7 +33,7 @@ internal static class CanvasHost
         canvas.DrawRect(new SKRect(172, 60, 272, 140), black);
     });
 
-    private static Capture Capture(int width, int height, double scale, Action<SKCanvas> paint)
+    public static Capture Capture(int width, int height, double scale, Action<SKCanvas> paint)
     {
         var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul, SKColorSpace.CreateSrgb());
         using var surface = SKSurface.Create(info);

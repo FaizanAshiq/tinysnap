@@ -165,6 +165,9 @@ internal sealed class EditorWindow : Window
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
+        // Past 100% the canvas draws only what is in view at full resolution, so it draws again
+        // as more comes into view.
+        scroll.ScrollChanged += (_, _) => Canvas.InvalidateVisual();
         StyleBar = new StyleBar(Canvas)
         {
             HorizontalAlignment = HorizontalAlignment.Right,

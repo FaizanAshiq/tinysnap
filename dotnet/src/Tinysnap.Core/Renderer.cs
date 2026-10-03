@@ -18,9 +18,10 @@ public static partial class Renderer
     /// <summary>Draws <paramref name="region"/> of the document, in capture pixels, at
     /// <paramref name="outputScale"/> output pixels per capture pixel, the whole extent unless
     /// told otherwise. <paramref name="hidden"/> leaves out annotations, used for the text
-    /// being typed.</summary>
+    /// being typed. <paramref name="sharpPixels"/> enlarges the capture as squares, as the canvas
+    /// shows it past 100%, rather than smoothing it as an export does.</summary>
     public static SKImage? Render(Document document, Rect? region = null, double outputScale = 1,
-                                  IReadOnlySet<Guid>? hidden = null)
+                                  IReadOnlySet<Guid>? hidden = null, bool sharpPixels = false)
     {
         var area = region ?? document.Extent;
         var size = PixelSize(area, outputScale);
@@ -32,14 +33,14 @@ public static partial class Renderer
         canvas.Scale((float)outputScale);
         canvas.Translate((float)-area.MinX, (float)-area.MinY);
 
-        var painter = new Canvas(surface, area, outputScale, size, document.Scale);
+        var painter = new Canvas(surface, area, outputScale, size, document.Scale, document.Extent.Origin);
         // Past the capture, the canvas carries on in the capture's edge colour.
         if (!document.Capture.Bounds.Contains(area))
         {
             using var edge = new SKPaint { Color = document.Capture.EdgeColor };
             canvas.DrawRect(area.ToSK(), edge);
         }
-        painter.Draw(document.Capture.Image, document.Capture.Bounds);
+        painter.Draw(document.Capture.Image, document.Capture.Bounds, crisp: sharpPixels);
 
         var visible = document.Annotations.Where(a => !a.IsHidden && (hidden is null || !hidden.Contains(a.Id))).ToList();
         var spotlightDrawn = false;
@@ -64,7 +65,9 @@ public static partial class Renderer
 
 /// <summary>One render in progress. Redactions and the magnifier read back what has been
 /// drawn so far, which is why they affect everything beneath them and nothing above.</summary>
-internal sealed class Canvas(SKSurface surface, Rect region, double outputScale, Size deviceSize, double scale)
+/// <param name="anchor">Where the whole render starts, so a redaction's grain lies the same in a
+/// render of part of the document as in the whole.</param>
+internal sealed class Canvas(SKSurface surface, Rect region, double outputScale, Size deviceSize, double scale, Point anchor)
 {
     private SKCanvas Context => surface.Canvas;
     public Rect Region { get; } = region;
@@ -250,6 +253,11 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
         return device.IsNull || device.Width < 1 || device.Height < 1 ? null : device;
     }
 
+    /// <summary>A box's corner in the output pixels of the whole render, which seeds its noise.</summary>
+    private (int X, int Y) Grain(Rect device) =>
+        ((int)(device.MinX + Math.Round((Region.MinX - anchor.X) * OutputScale)),
+         (int)(device.MinY + Math.Round((Region.MinY - anchor.Y) * OutputScale)));
+
     private Rect CaptureRect(Rect device) =>
         new(device.MinX / OutputScale + Region.MinX, device.MinY / OutputScale + Region.MinY,
             device.Width / OutputScale, device.Height / OutputScale);
@@ -269,7 +277,7 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
         using var patch = patchSurface.Snapshot();
         var buffer = PixelBuffer.From(patch);
         if (buffer is null) return;
-        buffer.AddNoise(12, ((int)device.MinX, (int)device.MinY));
+        buffer.AddNoise(12, Grain(device));
         using var noisy = buffer.MakeImage();
         if (noisy is null) return;
         DrawRounded(noisy, CaptureRect(device), crisp: false, corners);
@@ -293,7 +301,7 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
         using var patch = snapshot.Subset(device.ToSKRectI());
         if (patch is null || PixelBuffer.From(patch) is not { } buffer) return;
         buffer.Pixelate(Math.Max(2, (int)Geometry.Round(block)));
-        buffer.AddNoise(12, ((int)device.MinX, (int)device.MinY));
+        buffer.AddNoise(12, Grain(device));
         using var blocks = buffer.MakeImage();
         if (blocks is null) return;
         DrawRounded(blocks, CaptureRect(device), crisp: true, corners);
