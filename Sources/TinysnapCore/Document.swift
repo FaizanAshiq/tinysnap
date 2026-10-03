@@ -115,7 +115,8 @@ public struct Document: Equatable, Sendable {
         return nil
     }
 
-    /// What the layers panel calls a shape: its tool, its text's first line, a step's number.
+    /// What the layers panel calls a shape: its tool, its text's first line, a step's number,
+    /// a measurement's length as its tag gives it.
     public func layerName(of id: Annotation.ID) -> String {
         guard let annotation = annotation(id) else { return "" }
         switch annotation.kind {
@@ -124,6 +125,7 @@ public struct Document: Equatable, Sendable {
                 .trimmingCharacters(in: .whitespaces) ?? ""
             return line.isEmpty ? "Text" : String(line.prefix(40))
         case .step: return stepNumber(of: id).map { "Step \($0)" } ?? "Step"
+        case let .measure(from, to): return "Measure " + MeasureReading.label(forPixels: from.distance(to: to), scale: scale)
         // Their tool titles carry a warning that has no place in a list of names.
         case .blur: return "Blur"
         case .pixelate: return "Pixelate"

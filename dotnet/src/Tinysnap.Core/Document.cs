@@ -158,22 +158,30 @@ public sealed record Document
     }
 
     /// <summary>What the layers panel calls a shape: its tool, its text's first line, a step's
-    /// number.</summary>
+    /// number, a measurement's length as its tag gives it.</summary>
     public string LayerName(Guid id)
     {
         if (Annotation(id) is not { } annotation) return "";
         return annotation.Kind switch
         {
-            AnnotationKind.Text(_, var text) => text.Split('\n', '\r').FirstOrDefault()?.Trim() is { Length: > 0 } line
-                ? line[..Math.Min(line.Length, 40)]
-                : "Text",
+            AnnotationKind.Text(_, var text) => FirstLine(text) is { Length: > 0 } line ? line : "Text",
             AnnotationKind.Step => StepNumber(id) is { } number ? $"Step {number}" : "Step",
+            AnnotationKind.Measure(var from, var to) => "Measure " + MeasureReading.Label(from.Distance(to), Scale),
             // Their tool titles carry a warning that has no place in a list of names.
             AnnotationKind.Blur => "Blur",
             AnnotationKind.Pixelate => "Pixelate",
             AnnotationKind.Erase => "Erase",
             _ => annotation.Tool.Title(),
         };
+    }
+
+    /// <summary>The first line with anything on it, trimmed, at most 40 characters as a person
+    /// counts them, so an emoji is never cut in half. As the Mac names text.</summary>
+    private static string FirstLine(string text)
+    {
+        var line = text.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? "";
+        var info = new System.Globalization.StringInfo(line);
+        return info.LengthInTextElements > 40 ? info.SubstringByTextElements(0, 40) : line;
     }
 
     /// <summary>The topmost shown annotation under <paramref name="point"/>. A locked one

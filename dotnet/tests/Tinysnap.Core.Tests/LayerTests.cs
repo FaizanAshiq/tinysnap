@@ -121,17 +121,37 @@ public class LayerTests
         Assert.Equal("Note", editor.Display.LayerName(editor.Display.Annotations[0].Id));
     }
 
-    [Fact]
-    public void AHiddenOrLockedMagnifierIsNotZoomed()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AHiddenOrLockedMagnifierIsNotZoomed(bool hide)
     {
         var editor = Session(Tool.Magnifier);
         editor.PointerDown(new Point(200, 150), reach: 8);
         editor.PointerUp();
         var lens = editor.Display.Annotations[0];
-        editor.SetLocked(lens.Id, true);
+        if (hide) editor.SetHidden(lens.Id, true);
+        else editor.SetLocked(lens.Id, true);
         Assert.Null(editor.Magnifier(new Point(200, 150)));
         editor.ZoomMagnifier(lens.Id, 2);
         Assert.Equal(lens.Kind, editor.Display.Annotations[0].Kind);
+    }
+
+    [Fact]
+    public void AMeasurementsRowGivesItsLengthAsItsTagDoes()
+    {
+        var measure = Fixture.Annotation(new AnnotationKind.Measure(new Point(0, 10), new Point(240, 10)));
+        Assert.Equal("Measure 120 pt", Doc(measure).LayerName(measure.Id));
+    }
+
+    [Fact]
+    public void TextNamesSkipBlankLinesAndNeverSplitACharacter()
+    {
+        var leading = Fixture.Annotation(new AnnotationKind.Text(Point.Zero, "\n\n  Hello  \nworld"));
+        var thumbs = Fixture.Annotation(new AnnotationKind.Text(Point.Zero, string.Concat(Enumerable.Repeat("👍🏽", 45))));
+        var doc = Doc(leading, thumbs);
+        Assert.Equal("Hello", doc.LayerName(leading.Id));
+        Assert.Equal(string.Concat(Enumerable.Repeat("👍🏽", 40)), doc.LayerName(thumbs.Id));
     }
 
     [Fact]
