@@ -30,6 +30,11 @@ public enum CornerSize: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// Where each line of a text sits in the box its widest line makes.
+public enum TextAlign: String, Codable, Sendable, CaseIterable {
+    case left, center, right
+}
+
 public struct Style: Equatable, Codable, Sendable {
     public var colorHex: String
     public var size: StyleSize
@@ -42,21 +47,24 @@ public struct Style: Equatable, Codable, Sendable {
     /// Pasted images only: drawn with the difference blend, so where the image matches
     /// what is under it the result is black and changes stand out.
     public var difference: Bool
+    /// Text only: each line set left, centred or right.
+    public var align: TextAlign
 
     public static let opacityRange: ClosedRange<CGFloat> = 0.1...1
 
     public init(colorHex: String, size: StyleSize = .medium, filled: Bool = false, corners: CornerSize = .medium,
-                opacity: CGFloat = 1, difference: Bool = false) {
+                opacity: CGFloat = 1, difference: Bool = false, align: TextAlign = .left) {
         self.colorHex = colorHex
         self.size = size
         self.filled = filled
         self.corners = corners
         self.opacity = min(max(opacity, Self.opacityRange.lowerBound), Self.opacityRange.upperBound)
         self.difference = difference
+        self.align = align
     }
 
     private enum CodingKeys: String, CodingKey {
-        case colorHex, size, filled, corners, opacity, difference
+        case colorHex, size, filled, corners, opacity, difference, align
         /// Read only: the square corner switch this replaced.
         case sharpCorners
     }
@@ -69,6 +77,7 @@ public struct Style: Equatable, Codable, Sendable {
         try container.encode(corners, forKey: .corners)
         try container.encode(opacity, forKey: .opacity)
         try container.encode(difference, forKey: .difference)
+        try container.encode(align, forKey: .align)
     }
 
     /// Every key is optional and a bad value falls back on its own, so one hand edited
@@ -85,6 +94,7 @@ public struct Style: Equatable, Codable, Sendable {
         // Out of range means a hand edit gone wrong, which is read as fully solid.
         self.opacity = opacity.flatMap { $0 > 1 ? nil : max($0, Self.opacityRange.lowerBound) } ?? 1
         difference = (try? container.decodeIfPresent(Bool.self, forKey: .difference)) ?? false
+        align = (try? container.decodeIfPresent(TextAlign.self, forKey: .align)) ?? .left
     }
 }
 

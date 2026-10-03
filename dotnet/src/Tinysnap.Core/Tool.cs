@@ -81,6 +81,9 @@ public static class ToolInfo
 
     public static bool HasFill(this Tool tool) => tool is Tool.Rectangle or Tool.Oval;
 
+    /// <summary>Text only: its lines set left, centred or right.</summary>
+    public static bool HasAlign(this Tool tool) => tool is Tool.Text;
+
     /// <summary>Pasted images: opacity and the difference blend, for comparing against the capture.</summary>
     public static bool HasOverlay(this Tool tool) => tool is Tool.Image;
 

@@ -108,13 +108,25 @@ public static class TextLayout
         return new Size(Math.Max(widest, points / 2) * scale, LineHeight(font) * lines.Length * scale);
     }
 
+    /// <summary>How far in from the box's left edge each line starts, in points: none when set
+    /// left, half the room the line leaves when centred, all of it when set right.</summary>
+    internal static double[] LineOffsets(string text, double points, TextAlign align)
+    {
+        using var font = Font(points);
+        var widths = text.Split('\n').Select(line => Width(line, font)).ToArray();
+        var box = Math.Max(widths.DefaultIfEmpty(0).Max(), points / 2);
+        var share = align switch { TextAlign.Center => 0.5, TextAlign.Right => 1.0, _ => 0.0 };
+        return [.. widths.Select(width => (box - width) * share)];
+    }
+
     // ponytail: runs are laid out left to right in string order; a line mixing right-to-left
     // and left-to-right words needs ICU bidi reordering to read in the right order.
     /// <summary>Draws into a canvas whose space is capture pixels with y growing downward,
     /// with <paramref name="origin"/> as the top left corner of the first line.</summary>
     internal static void Draw(SKCanvas canvas, string text, Point origin, double points, double scale, SKColor color,
-                              bool bold = false)
+                              bool bold = false, TextAlign align = TextAlign.Left)
     {
+        var offsets = align == TextAlign.Left ? [] : LineOffsets(text, points, align);
         using var font = Font(points, bold);
         using var paint = new SKPaint { Color = color, IsAntialias = true };
         var ascent = -font.Metrics.Ascent;
@@ -125,7 +137,7 @@ public static class TextLayout
         var lines = text.Split('\n');
         for (var index = 0; index < lines.Length; index++)
         {
-            double x = 0;
+            var x = index < offsets.Length ? offsets[index] : 0;
             var baseline = ascent + index * height;
             foreach (var (run, runFont) in Runs(lines[index], font))
             {
