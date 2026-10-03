@@ -60,6 +60,19 @@ struct DocumentTests {
         #expect(Capture.crop(display, points: CGRect(x: 500, y: 0, width: 10, height: 10), scale: 2) == nil)
     }
 
+    @Test func aWindowCutFromTheFrozenDisplayKeepsItsColoursAndTakesItsOwnShape() throws {
+        // The frozen display shows the window as it looked; the window's own capture, taken
+        // once it lost the focus, is paler but has the true rounded corners.
+        let frozen = Fixture.capture(width: 40, height: 40, fill: Fixture.blue).image
+        let alone = Fixture.capture(width: 40, height: 40, fill: Fixture.white) { context in
+            context.clear(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }.image
+        let shaped = try #require(Capture.shaped(frozen, like: alone))
+        let pixels = try #require(PixelBuffer(image: shaped))
+        #expect(pixels.pixel(x: 2, y: 2).a == 0)
+        #expect(Fixture.isClose(Fixture.pixel(shaped, 20, 20), (0, 0, 255)))
+    }
+
     @Test func cropsAStandardDisplayOnePixelPerPoint() throws {
         let display = Fixture.capture(width: 200, height: 100, scale: 1).image
         let capture = try #require(Capture.crop(display, points: CGRect(x: 10, y: 5, width: 20, height: 10), scale: 1))

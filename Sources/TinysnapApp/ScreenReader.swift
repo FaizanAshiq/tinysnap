@@ -28,6 +28,8 @@ struct PickableWindow {
     let window: SCWindow
     /// In AppKit's global coordinates.
     let frame: CGRect
+    /// Another window was partly in front of it when the screen froze.
+    let isCovered: Bool
 }
 
 /// Freezes displays and captures single windows.
@@ -76,6 +78,21 @@ enum ScreenReader {
         return (frozen, pickableWindows(in: content))
     }
 
+    /// The picked window as it looked when the screen froze: cut from the frozen display and
+    /// given the rounded corners of its own capture. Captured on its own, after the overlay
+    /// took the focus, a window came out as it looks inactive, grey buttons and a see-through
+    /// background gone flat grey. One partly behind another window, or across two displays,
+    /// is still captured on its own, as the frozen image can not show what was hidden.
+    static func capture(_ picked: PickableWindow, frozen displays: [FrozenDisplay]) async -> Capture? {
+        guard let alone = await capture(picked) else { return nil }
+        guard !picked.isCovered, let display = displays.first(where: { $0.frame.contains(picked.frame) }) else { return alone }
+        // The frozen display counts points from its top left corner.
+        let points = CGRect(x: picked.frame.minX - display.frame.minX, y: display.frame.maxY - picked.frame.maxY,
+                            width: picked.frame.width, height: picked.frame.height)
+        guard let cut = display.capture(of: points), let shaped = Capture.shaped(cut.image, like: alone.image) else { return alone }
+        return Capture(image: shaped, scale: cut.scale)
+    }
+
     /// One window on its own, rounded corners left transparent, no shadow.
     static func capture(_ picked: PickableWindow) async -> Capture? {
         let filter = SCContentFilter(desktopIndependentWindow: picked.window)
@@ -98,12 +115,21 @@ enum ScreenReader {
         let order = frontToBack()
         // ScreenCaptureKit frames count y down from the top of the primary display.
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        // Ordinary and floating windows can hide part of one behind them. The Dock and the
+        // menu bar sit higher, and the Dock keeps a see-through window over the whole screen.
+        let fronts = content.windows.filter { $0.isOnScreen && (0..<20).contains($0.windowLayer) }
         return content.windows
             .filter { $0.windowLayer == 0 && $0.isOnScreen && $0.frame.width >= 40 && $0.frame.height >= 40 }
             .sorted { (order[$0.windowID] ?? .max) < (order[$1.windowID] ?? .max) }
             .map { window in
-                PickableWindow(window: window, frame: CGRect(x: window.frame.minX, y: primaryHeight - window.frame.maxY,
-                                                             width: window.frame.width, height: window.frame.height))
+                let place = order[window.windowID] ?? .max
+                let covered = fronts.contains { other in
+                    other.windowID != window.windowID && (order[other.windowID] ?? .max) < place
+                        && !other.frame.intersection(window.frame).isEmpty
+                }
+                return PickableWindow(window: window, frame: CGRect(x: window.frame.minX, y: primaryHeight - window.frame.maxY,
+                                                                    width: window.frame.width, height: window.frame.height),
+                                      isCovered: covered)
             }
     }
 
