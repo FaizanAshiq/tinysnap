@@ -11,6 +11,7 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Tinysnap.Core;
 using Point = Avalonia.Point;
 
@@ -26,7 +27,7 @@ internal sealed class LayersPanel : Border
 
     /// <summary>One row, for the window and the tests.</summary>
     internal sealed record LayerRow(Guid Id, string Name, bool IsLocked, bool IsHidden, ListBoxItem Item,
-                                    Button DuplicateButton, Button HideButton, Button LockButton);
+                                    Button DuplicateButton, Button HideButton, Button LockButton, TextBlock Label);
 
     private readonly record struct Shape(Guid Id, Tool Tool, string Name, bool IsLocked, bool IsHidden);
 
@@ -49,6 +50,19 @@ internal sealed class LayersPanel : Border
     public event Action? CloseRequested;
 
     internal ListBox List { get; }
+    /// <summary>The row being dragged, lifted above the list under the pointer.</summary>
+    internal Border DragGhost { get; } = new()
+    {
+        IsVisible = false,
+        IsHitTestVisible = false,
+        Height = RowHeight,
+        Margin = new Thickness(4, 0),
+        Padding = new Thickness(8, 0),
+        CornerRadius = new CornerRadius(6),
+        VerticalAlignment = VerticalAlignment.Top,
+        BoxShadow = BoxShadows.Parse("0 4 12 0 #59000000"),
+        [!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumBrush"),
+    };
     internal TextBlock EmptyNote { get; }
     internal IReadOnlyList<LayerRow> Rows => rows;
 
@@ -101,7 +115,7 @@ internal sealed class LayersPanel : Border
 
         DockPanel.SetDock(header, Dock.Top);
         DockPanel.SetDock(EmptyNote, Dock.Top);
-        Child = new DockPanel { Children = { header, EmptyNote, new Panel { Children = { List, dropLine } } } };
+        Child = new DockPanel { Children = { header, EmptyNote, new Panel { Children = { List, dropLine, DragGhost } } } };
     }
 
     /// <summary>The chosen row filled with the accent colour, its words and icons white, as the
@@ -162,8 +176,12 @@ internal sealed class LayersPanel : Border
             .Select(a => new Shape(a.Id, a.Tool, document.LayerName(a.Id), a.IsLocked, a.IsHidden)).ToArray();
         if (!now.SequenceEqual(shown))
         {
+            // Only names changed, as on every key typed into a text: renamed where they stand.
+            if (now.Length == shown.Length && now.Zip(shown).All(p => p.First with { Name = "" } == p.Second with { Name = "" }))
+                Rename(now);
+            else
+                Rebuild(now);
             shown = now;
-            Rebuild();
         }
         var index = rows.FindIndex(row => row.Id == selection);
         if (List.SelectedIndex == index) return;
@@ -172,11 +190,32 @@ internal sealed class LayersPanel : Border
         syncing = false;
     }
 
-    private void Rebuild()
+    private void Rename(Shape[] now)
+    {
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            if (row.Name == now[i].Name) continue;
+            rows[i] = row with { Name = now[i].Name };
+            row.Label.Text = now[i].Name;
+            Describe(rows[i]);
+        }
+    }
+
+    /// <summary>The row and its buttons as a screen reader names them.</summary>
+    private static void Describe(LayerRow row)
+    {
+        AutomationProperties.SetName(row.Item, row.Name + (row.IsLocked ? ", locked" : "") + (row.IsHidden ? ", hidden" : ""));
+        AutomationProperties.SetName(row.DuplicateButton, $"Duplicate {row.Name}");
+        AutomationProperties.SetName(row.HideButton, $"{(row.IsHidden ? "Show" : "Hide")} {row.Name}");
+        AutomationProperties.SetName(row.LockButton, $"{(row.IsLocked ? "Unlock" : "Lock")} {row.Name}");
+    }
+
+    private void Rebuild(Shape[] now)
     {
         syncing = true;
         List.Items.Clear();
-        rows = [.. shown.Select(MakeRow)];
+        rows = [.. now.Select(MakeRow)];
         foreach (var row in rows) List.Items.Add(row.Item);
         syncing = false;
         count.Text = rows.Count.ToString(CultureInfo.InvariantCulture);
@@ -213,7 +252,6 @@ internal sealed class LayersPanel : Border
             grid.Children.Add(control);
         }
         var item = new ListBoxItem { Content = grid, Padding = new Thickness(8, 0, 4, 0), MinHeight = RowHeight };
-        AutomationProperties.SetName(item, name + (shape.IsLocked ? ", locked" : "") + (shape.IsHidden ? ", hidden" : ""));
         // Duplicate shows under the pointer and on the chosen row; the canvas borders the shape.
         item.PointerEntered += (_, _) =>
         {
@@ -229,7 +267,9 @@ internal sealed class LayersPanel : Border
         {
             if (e.Property == ListBoxItem.IsSelectedProperty) duplicate.IsVisible = item.IsSelected || item.IsPointerOver;
         };
-        return new LayerRow(id, name, shape.IsLocked, shape.IsHidden, item, duplicate, hide, lockButton);
+        var row = new LayerRow(id, name, shape.IsLocked, shape.IsHidden, item, duplicate, hide, lockButton, label);
+        Describe(row);
+        return row;
     }
 
     private static Button RowButton(string icon, string name, string tip, Action action)
@@ -288,19 +328,32 @@ internal sealed class LayersPanel : Border
         Moved?.Invoke(id, rows.Count - 1 - to);
     }
 
+    /// <summary>A drag starts only on a row's body: not on its buttons, nor on the list's
+    /// scroll bar, which a long list shows over the rows.</summary>
     private void OnPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(List).Properties.IsLeftButtonPressed || RowAt(e) is not { } index) return;
+        var source = e.Source as Visual;
+        if (source?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is null
+            || source.FindAncestorOfType<Button>(includeSelf: true) is not null) return;
         press = (rows[index].Id, e.GetPosition(List));
     }
 
     private void OnDragged(object? sender, PointerEventArgs e)
     {
         if (press is not { } held) return;
+        // A release the list never heard about leaves nothing armed.
+        if (!e.GetCurrentPoint(List).Properties.IsLeftButtonPressed)
+        {
+            EndDrag();
+            return;
+        }
         var at = e.GetPosition(List);
         // A few pixels of travel before it counts as a drag, so a click never moves anything.
         if (dropRow is null && Math.Abs(at.Y - held.Start.Y) < 4) return;
+        if (dropRow is null) Lift(rows.First(row => row.Id == held.Id));
         e.Pointer.Capture(List);
+        DragGhost.Margin = new Thickness(4, at.Y - RowHeight / 2, 4, 0);
         // Over a row, its upper half lands the shape above it and its lower half below.
         dropRow = Math.Clamp((int)Math.Round(FromFirstRow(e) / RowHeight), 0, rows.Count);
         var top = rows[0].Item.TranslatePoint(default, List)?.Y ?? 0;
@@ -309,12 +362,33 @@ internal sealed class LayersPanel : Border
         e.Handled = true;
     }
 
-    private void OnReleased(object? sender, PointerReleasedEventArgs e)
+    /// <summary>The dragged row's icon and name on a raised card that follows the pointer.</summary>
+    private void Lift(LayerRow row)
     {
-        var (held, landing) = (press, dropRow);
+        var shape = shown.First(s => s.Id == row.Id);
+        var icon = Glyphs.Icon(ToolIcons.For(shape.Tool), 16);
+        icon.VerticalAlignment = VerticalAlignment.Center;
+        DragGhost.Child = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Children = { icon, new TextBlock { Text = row.Name, FontSize = 13, VerticalAlignment = VerticalAlignment.Center } },
+        };
+        DragGhost.IsVisible = true;
+    }
+
+    private void EndDrag()
+    {
         press = null;
         dropRow = null;
         dropLine.IsVisible = false;
+        DragGhost.IsVisible = false;
+    }
+
+    private void OnReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        var (held, landing) = (press, dropRow);
+        EndDrag();
         if (held is null) return;
         if (landing is { } row)
         {

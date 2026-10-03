@@ -108,14 +108,29 @@ struct LayerTests {
     }
 
     @Test func aHiddenOrLockedMagnifierIsNotZoomed() {
-        var editor = session(.magnifier)
-        editor.pointerDown(at: CGPoint(x: 200, y: 150), reach: 8)
-        editor.pointerUp()
-        let lens = editor.display.annotations[0]
-        editor.setLocked(lens.id, true)
-        #expect(editor.magnifier(at: CGPoint(x: 200, y: 150)) == nil)
-        editor.zoomMagnifier(lens.id, steps: 2)
-        #expect(editor.display.annotations[0].kind == lens.kind)
+        for hide in [false, true] {
+            var editor = session(.magnifier)
+            editor.pointerDown(at: CGPoint(x: 200, y: 150), reach: 8)
+            editor.pointerUp()
+            let lens = editor.display.annotations[0]
+            if hide { editor.setHidden(lens.id, true) } else { editor.setLocked(lens.id, true) }
+            #expect(editor.magnifier(at: CGPoint(x: 200, y: 150)) == nil, hide ? "hidden" : "locked")
+            editor.zoomMagnifier(lens.id, steps: 2)
+            #expect(editor.display.annotations[0].kind == lens.kind, hide ? "hidden" : "locked")
+        }
+    }
+
+    @Test func aMeasurementsRowGivesItsLengthAsItsTagDoes() {
+        let measure = Fixture.annotation(.measure(from: CGPoint(x: 0, y: 10), to: CGPoint(x: 240, y: 10)))
+        #expect(document([measure]).layerName(of: measure.id) == "Measure 120 pt")
+    }
+
+    @Test func textNamesSkipBlankLinesAndNeverSplitACharacter() {
+        let leading = Fixture.annotation(.text(origin: .zero, string: "\n\n  Hello  \nworld"))
+        let thumbs = Fixture.annotation(.text(origin: .zero, string: String(repeating: "👍🏽", count: 45)))
+        let doc = document([leading, thumbs])
+        #expect(doc.layerName(of: leading.id) == "Hello")
+        #expect(doc.layerName(of: thumbs.id) == String(repeating: "👍🏽", count: 40))
     }
 
     @Test func aHiddenShapeIsNotDrawnClickedOrBordered() {

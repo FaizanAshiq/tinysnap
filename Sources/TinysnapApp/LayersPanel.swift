@@ -163,7 +163,10 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
             self.rows = rows
             count.stringValue = "\(rows.count)"
             empty.isHidden = !rows.isEmpty
+            // A reload can trim the table's selection; that is not the person choosing nothing.
+            isSyncing = true
             table.reloadData()
+            isSyncing = false
         }
         guard selection != self.selection || table.selectedRow != (rows.firstIndex { $0.id == selection } ?? -1) else { return }
         self.selection = selection

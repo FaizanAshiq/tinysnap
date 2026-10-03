@@ -40,12 +40,12 @@ internal static class EditorFit
     /// not, never zoomed in. <paramref name="canvas"/> is the canvas at 100%, in DIPs; the
     /// client size returned includes the toolbar. Never larger than the work area, even when the
     /// minimum is: on a small screen the window fits and its toolbar scrolls.</summary>
-    public static (Size Client, double Zoom) Initial(Size canvas, Size workArea, double toolbar, Size minimum)
+    public static (Size Client, double Zoom) Initial(Size canvas, Size workArea, double toolbar, Size minimum, double rail = 0)
     {
         var margins = Margin * 2;
-        var available = new Size(workArea.Width * 0.9 - margins, workArea.Height * 0.9 - toolbar - margins);
+        var available = new Size(workArea.Width * 0.9 - margins - rail, workArea.Height * 0.9 - toolbar - margins);
         var zoom = Math.Min(1, Math.Min(available.Width / canvas.Width, available.Height / canvas.Height));
-        var client = new Size(Math.Min(Math.Max(canvas.Width * zoom + margins, minimum.Width), workArea.Width),
+        var client = new Size(Math.Min(Math.Max(canvas.Width * zoom + margins + rail, minimum.Width), workArea.Width),
                               Math.Min(Math.Max(canvas.Height * zoom + margins + toolbar, minimum.Height), workArea.Height));
         return (client, zoom);
     }

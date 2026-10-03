@@ -46,6 +46,16 @@ public class CanvasMappingTests
     }
 
     [Fact]
+    public void AWideCaptureKeepsItsMarginBesideTheRail()
+    {
+        // 90% of the width, less a 24 point margin each side and the 40 point rail, over 4000.
+        var (client, zoom) = EditorFit.Initial(new Size(4000, 500), new Size(1920, 1040), toolbar: 40, minimum: new Size(900, 280),
+                                               rail: 40);
+        Assert.Equal(1640.0 / 4000, zoom, 9);
+        Assert.Equal(4000 * zoom + 48 + 40, client.Width, 9);
+    }
+
+    [Fact]
     public void TheEditorNeverOutgrowsAScreenNarrowerThanItsToolbar()
     {
         // A 1024 by 768 screen at 100%, less its taskbar, and a toolbar that wants 1090.

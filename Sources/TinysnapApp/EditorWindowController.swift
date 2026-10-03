@@ -255,10 +255,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         guard let window, let visible = screen?.visibleFrame else { return }
         let toolbarHeight: CGFloat = 40
         let margins = Self.fitMargin * 2
-        let available = NSSize(width: visible.width * 0.9 - margins, height: visible.height * 0.9 - toolbarHeight - margins)
+        let available = NSSize(width: visible.width * 0.9 - margins - Self.railWidth,
+                               height: visible.height * 0.9 - toolbarHeight - margins)
         let size = canvas.frame.size
         let fit = min(1, available.width / size.width, available.height / size.height)
-        let content = NSSize(width: max(size.width * fit + margins, window.minSize.width),
+        let content = NSSize(width: max(size.width * fit + margins + Self.railWidth, window.minSize.width),
                              height: max(size.height * fit + margins, window.minSize.height - toolbarHeight))
         window.setContentSize(content)
         let middle = centre ?? NSPoint(x: visible.midX, y: visible.midY)
@@ -527,12 +528,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             button.autoresizingMask = [.minYMargin]
             rail.addSubview(button)
         }
-        rail.postsFrameChangedNotifications = true
-        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: rail, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.placeRailButtons() }
-        }
     }
 
+    /// Once, as the window is built; the buttons keep to the rail's top as it resizes.
     private func placeRailButtons() {
         let height = rail.bounds.height
         rail.subviews.first?.frame = NSRect(x: 0, y: 0, width: 1, height: height)
@@ -820,7 +818,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private func showTextHint(_ shown: Bool) {
         textHint.isHidden = !shown
         guard shown, let bounds = window?.contentView?.bounds else { return }
-        textHint.setFrameOrigin(NSPoint(x: (bounds.width - textHint.frame.width) / 2, y: 16))
+        // Centred on the canvas, not across the rail.
+        textHint.setFrameOrigin(NSPoint(x: (bounds.width - Self.railWidth - textHint.frame.width) / 2, y: 16))
     }
 
     @objc func paste(_ sender: Any?) {

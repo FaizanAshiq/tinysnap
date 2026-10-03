@@ -26,6 +26,8 @@ internal sealed class EditorWindow : Window
     /// <summary>The style bar's height, kept clear above the layers panel whether the bar shows
     /// or not: following it made the panel jump under the pointer as a row click brought it up.</summary>
     private const double StyleBarSlot = 46;
+    /// <summary>The rail's width, which the window adds to the canvas's when it opens.</summary>
+    private const double RailWidth = 40;
 
     /// <summary>The toolbar's groups, by what the tools do: pick and frame, draw, label, focus,
     /// redact. Each group is set apart by a divider.</summary>
@@ -248,7 +250,7 @@ internal sealed class EditorWindow : Window
         LayersButton.Click += (_, _) => ToggleLayers();
         Rail = new Border
         {
-            Width = 40,
+            Width = RailWidth,
             BorderThickness = new Thickness(1, 0, 0, 0),
             Child = new StackPanel
             {
@@ -481,7 +483,7 @@ internal sealed class EditorWindow : Window
             : new CoreSize(1920, 1040);
         // A screen narrower than the toolbar gets a window that fits it, and the toolbar scrolls.
         MinWidth = Math.Min(MinWidth, workDips.Width);
-        var (client, zoom) = EditorFit.Initial(CanvasAtFullSize, workDips, ToolbarHeight, new CoreSize(MinWidth, MinHeight));
+        var (client, zoom) = EditorFit.Initial(CanvasAtFullSize, workDips, ToolbarHeight, new CoreSize(MinWidth, MinHeight), RailWidth);
         Canvas.Zoom = zoom;
         Width = client.Width;
         Height = client.Height;

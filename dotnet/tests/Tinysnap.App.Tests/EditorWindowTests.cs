@@ -105,14 +105,15 @@ public class EditorWindowTests
         editor.UpdateLayout();
         double Left(Control control) => control.TranslatePoint(default, editor)!.Value.X;
         double Right(Control control) => Left(control) + control.Bounds.Width;
-        var last = editor.Toolbar.GetVisualDescendants().OfType<Button>()
-            .Where(button => button != editor.LibraryButton).MaxBy(Left)!;
-        Assert.True(Right(editor.LibraryButton) <= 600, $"library ends at {Right(editor.LibraryButton)}, window {editor.ClientSize.Width}");
-        Assert.True(Right(last) > Left(editor.LibraryButton));
+        // The toolbar runs the window's width; its last tool starts past the window's edge.
+        var last = editor.Toolbar.GetVisualDescendants().OfType<Button>().MaxBy(Left)!;
+        var edge = Right(editor.Toolbar);
+        Assert.True(edge <= 600, $"toolbar ends at {edge}, window {editor.ClientSize.Width}");
+        Assert.True(Right(last) > edge);
 
         for (var notch = 0; notch < 20; notch++) editor.MouseWheel(new Point(300, 20), new Avalonia.Vector(0, -1));
         editor.UpdateLayout();
-        Assert.True(Right(last) <= Left(editor.LibraryButton));
+        Assert.True(Right(last) <= edge);
     }
 
     [Fact]
