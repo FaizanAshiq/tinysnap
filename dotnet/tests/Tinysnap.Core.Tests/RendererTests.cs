@@ -259,6 +259,22 @@ public class RendererTests
         Assert.True(Fixture.IsClose(Fixture.Pixel(image, 50 - 20, 50), White));
     }
 
+    /// <summary>A white or yellow step drew its number in white too, which left a blank disc.</summary>
+    [Fact]
+    public void AStepNumberIsDarkOnALightColourAndWhiteOnADarkOne()
+    {
+        (int Dark, int Light) Digit(string hex)
+        {
+            var step = Fixture.Annotation(new AnnotationKind.Step(new Point(50, 50)), new Style(hex, StyleSize.ExtraLarge));
+            var image = Render(Fixture.Capture(100, 100, fill: Fixture.Blue), [step]);
+            var pixels = Enumerable.Range(40, 21).SelectMany(x => Enumerable.Range(40, 21).Select(y => Fixture.Pixel(image, x, y))).ToList();
+            return (pixels.Count(p => p.R + p.G + p.B < 150), pixels.Count(p => p.R + p.G + p.B > 700));
+        }
+        Assert.True(Digit("#FFFFFF").Dark > 20);
+        Assert.True(Digit("#FFCC00").Dark > 20);
+        Assert.True(Digit(Palette.Red).Light > 20);
+    }
+
     [Fact]
     public void HiddenAnnotationsAreLeftOut()
     {
