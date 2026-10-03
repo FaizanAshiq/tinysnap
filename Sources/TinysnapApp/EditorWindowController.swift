@@ -538,7 +538,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private func wireLayers() {
         placeRailButtons()
         layers.onSelect = { [weak self] id in self?.canvas.session.select(id) }
-        layers.onMove = { [weak self] id, index in self?.canvas.session.moveLayer(id, to: index) }
+        layers.onDragTo = { [weak self] id, index in self?.canvas.session.dragLayer(id, to: index) }
+        layers.onDrop = { [weak self] in self?.canvas.session.dropLayer() }
+        layers.onDragCancel = { [weak self] in self?.canvas.session.cancelLayerDrag() }
         // Space in the list keeps the keys there; a click on a row button hands them back.
         layers.onHide = { [weak self] id, hidden in self?.canvas.session.setHidden(id, hidden) }
         layers.onLock = { [weak self] id, locked in self?.canvas.session.setLocked(id, locked) }

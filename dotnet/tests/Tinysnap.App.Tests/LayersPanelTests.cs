@@ -1,10 +1,12 @@
 using Avalonia;
+using Avalonia.Animation;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media.Transformation;
 using Avalonia.VisualTree;
 using Tinysnap.App.Editing;
 using Tinysnap.Core;
@@ -79,16 +81,113 @@ public class LayersPanelTests
         Assert.Equal("Rectangle, locked", AutomationProperties.GetName(editor.Layers.Rows[1].Item));
     }
 
+    /// <summary>Presses the top row and drags it to the lower half of the second, without
+    /// letting go.</summary>
+    private static Point DragTopRowDown(EditorWindow editor)
+    {
+        var top = editor.Layers.Rows[0].Item;
+        var start = top.TranslatePoint(new Point(40, 16), editor)!.Value;
+        var end = top.TranslatePoint(new Point(40, 16 + 32 + 10), editor)!.Value;
+        editor.MouseDown(start, MouseButton.Left);
+        editor.MouseMove(new Point(start.X, start.Y + 6), RawInputModifiers.LeftMouseButton);
+        editor.MouseMove(end, RawInputModifiers.LeftMouseButton);
+        return end;
+    }
+
     [AvaloniaFact]
-    public void DroppingARowReordersAsOneUndoStep()
+    public void ADraggedRowMovesItsShapeBeforeItIsLetGoAndLandsAsOneUndoStep()
     {
         var editor = WithTwoShapes();
         Open(editor);
+        editor.UpdateLayout();
         var ids = Order(editor);
-        editor.Layers.Drop(ids[1], 2);
+        var end = DragTopRowDown(editor);
+        // Already moved, list and canvas, while the button is still down; the row stays faded.
         Assert.Equal([ids[1], ids[0]], Order(editor));
+        Assert.Equal(ids[1], editor.Layers.Rows[1].Id);
+        Assert.Equal(0.4, editor.Layers.Rows[1].Item.Opacity);
+        editor.MouseUp(end, MouseButton.Left);
+        Assert.Equal([ids[1], ids[0]], Order(editor));
+        Assert.Equal(1, editor.Layers.Rows[1].Item.Opacity);
         Press(editor, Key.Z, RawInputModifiers.Control, "z");
         Assert.Equal(ids, Order(editor));
+    }
+
+    [AvaloniaFact]
+    public void ARowLetGoOutsideTheListGoesBack()
+    {
+        var editor = WithTwoShapes();
+        Open(editor);
+        editor.UpdateLayout();
+        var ids = Order(editor);
+        var end = DragTopRowDown(editor);
+        var outside = new Point(end.X - 300, end.Y);
+        editor.MouseMove(outside, RawInputModifiers.LeftMouseButton);
+        editor.MouseUp(outside, MouseButton.Left);
+        Assert.Equal(ids, Order(editor));
+        // Nothing was kept: an undo takes back the second shape drawn.
+        Press(editor, Key.Z, RawInputModifiers.Control, "z");
+        Assert.Equal([ids[0]], Order(editor));
+    }
+
+    [AvaloniaFact]
+    public void APointerAboveTheListMovesNothingAsOnTheMac()
+    {
+        var editor = WithTwoShapes();
+        Open(editor);
+        editor.UpdateLayout();
+        var ids = Order(editor);
+        var end = DragTopRowDown(editor);
+        editor.UpdateLayout();
+        // Above the list the row would have jumped back to the top.
+        editor.MouseMove(new Point(end.X, end.Y - 400), RawInputModifiers.LeftMouseButton);
+        Assert.Equal([ids[1], ids[0]], Order(editor));
+    }
+
+    [AvaloniaFact]
+    public void TheRowsSlideToTheirNewPlacesAndTheDraggedOneKeepsTheKeys()
+    {
+        var editor = WithTwoShapes();
+        Open(editor);
+        editor.UpdateLayout();
+        var dragged = editor.Layers.Rows[0].Item;
+        DragTopRowDown(editor);
+        Assert.Same(dragged, editor.Layers.Rows[1].Item);
+        Assert.True(dragged.IsKeyboardFocusWithin);
+        // The row passed over is back in the list at the next layout, then slides up from where it was.
+        editor.UpdateLayout();
+        var passed = editor.Layers.Rows[0].Item;
+        Assert.Contains(passed.Transitions!, t => t is TransformOperationsTransition);
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        // Somewhere between where it was and its new place: how far depends on the machine's clock.
+        Assert.InRange(((TransformOperations)passed.RenderTransform!).Value.M32, 0.5, 32);
+    }
+
+    [AvaloniaFact]
+    public void WithReduceMotionTheRowsMoveWithoutSliding()
+    {
+        var editor = WithTwoShapes();
+        editor.Layers.ReduceMotion = true;
+        Open(editor);
+        editor.UpdateLayout();
+        DragTopRowDown(editor);
+        editor.UpdateLayout();
+        Assert.Null(editor.Layers.Rows[0].Item.Transitions);
+        Assert.Null(editor.Layers.Rows[1].Item.Transitions);
+    }
+
+    [AvaloniaFact]
+    public void EscWhileDraggingPutsTheRowBackAndKeepsThePanel()
+    {
+        var editor = WithTwoShapes();
+        Open(editor);
+        editor.UpdateLayout();
+        var ids = Order(editor);
+        DragTopRowDown(editor);
+        Press(editor, Key.Escape);
+        Assert.Equal(ids, Order(editor));
+        Assert.True(editor.Layers.IsVisible);
+        Assert.False(editor.Layers.DragGhost.IsVisible);
     }
 
     [AvaloniaFact]

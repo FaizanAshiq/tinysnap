@@ -57,8 +57,13 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
     }
 
     var onSelect: ((Annotation.ID?) -> Void)?
-    /// A shape dragged to `index` in the document's list, bottom first.
-    var onMove: ((Annotation.ID, Int) -> Void)?
+    /// A row dragged to `index` in the document's list, bottom first: its shape moves there
+    /// at once, before it is let go.
+    var onDragTo: ((Annotation.ID, Int) -> Void)?
+    /// The dragged row let go on the list, where it now stands.
+    var onDrop: (() -> Void)?
+    /// The dragged row let go anywhere else, or Esc: its shape goes back.
+    var onDragCancel: (() -> Void)?
     var onHide: ((Annotation.ID, Bool) -> Void)?
     var onLock: ((Annotation.ID, Bool) -> Void)?
     var onDuplicate: ((Annotation.ID) -> Void)?
@@ -83,6 +88,8 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
     private let scroll = NSScrollView()
     /// Set while the table is told the selection, so that is not sent back as a choice.
     private var isSyncing = false
+    /// The row being dragged, faded where it stands while its copy follows the pointer.
+    private var lifted: Annotation.ID?
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: Self.width, height: 120))
@@ -113,9 +120,9 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
         table.dataSource = self
         table.delegate = self
         table.registerForDraggedTypes([Self.rowType])
-        // A line where the row will land. Opening a gap slid the rows out of a panel sized
-        // to fit them, so the list scrolled under the pointer mid drag.
-        table.draggingDestinationFeedbackStyle = .regular
+        // No line or gap: the dragged row itself moves as the pointer does. A gap slid the
+        // rows out of a panel sized to fit them, so the list scrolled under the pointer.
+        table.draggingDestinationFeedbackStyle = .none
         table.setAccessibilityLabel("Layers")
         table.onSpace = { [weak self] in self?.toggleHidden() }
         table.onEscape = { [weak self] in self?.onClose?() }
@@ -201,6 +208,7 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let cell = tableView.makeView(withIdentifier: LayerCell.identifier, owner: self) as? LayerCell ?? LayerCell()
         cell.show(rows[row])
+        cell.alphaValue = rows[row].id == lifted ? 0.4 : 1
         cell.onHide = { [weak self] id, hidden in self?.onHide?(id, hidden) }
         cell.onLock = { [weak self] id, locked in self?.onLock?(id, locked) }
         cell.onDuplicate = { [weak self] id in self?.onDuplicate?(id) }
@@ -226,28 +234,55 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
         return item
     }
 
+    func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint,
+                   forRowIndexes rowIndexes: IndexSet) {
+        guard let row = rowIndexes.first else { return }
+        lifted = rows[row].id
+        tableView.view(atColumn: 0, row: row, makeIfNecessary: false)?.alphaValue = 0.4
+    }
+
+    /// The dragged row moves to where it would land as soon as the pointer crosses the middle
+    /// of the next row, and its shape with it, so the canvas shows the new order before the drop.
     func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int,
                    proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
-        guard info.draggingSource as? NSTableView === table else { return [] }
+        guard info.draggingSource as? NSTableView === table, let id = lifted,
+              let from = rows.firstIndex(where: { $0.id == id }) else { return [] }
         // Over a row, its upper half lands the shape above it and its lower half below,
         // so the ends of the list are as easy to reach as the middle.
+        var above = row
         if dropOperation == .on {
             let point = tableView.convert(info.draggingLocation, from: nil)
-            let below = point.y > tableView.rect(ofRow: row).midY
-            tableView.setDropRow(below ? row + 1 : row, dropOperation: .above)
+            above = point.y > tableView.rect(ofRow: row).midY ? row + 1 : row
         }
+        let to = from < above ? above - 1 : above
+        if to != from {
+            rows.insert(rows.remove(at: from), at: to)
+            // The rows slide into place, unless the system asks for less motion.
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                tableView.reloadData()
+            } else {
+                tableView.moveRow(at: from, to: to)
+            }
+            onDragTo?(id, rows.count - 1 - to)
+        }
+        tableView.setDropRow(to, dropOperation: .above)
         return .move
     }
 
-    /// Rows are top first and the drop lands above `row`; the document wants a place in its
-    /// list, bottom first, once the dragged shape has left its old one.
     func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int,
                    dropOperation: NSTableView.DropOperation) -> Bool {
-        guard let string = info.draggingPasteboard.string(forType: Self.rowType), let id = UUID(uuidString: string),
-              let from = rows.firstIndex(where: { $0.id == id }) else { return false }
-        let to = from < row ? row - 1 : row
-        onMove?(id, rows.count - 1 - to)
+        guard lifted != nil else { return false }
+        onDrop?()
         return true
+    }
+
+    /// Let go anywhere but the list, or Esc pressed: the shape goes back where it was.
+    func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, endedAt screenPoint: NSPoint,
+                   operation: NSDragOperation) {
+        let dropped = operation.contains(.move)
+        lifted = nil
+        if !dropped { onDragCancel?() }
+        for row in 0..<rows.count { tableView.view(atColumn: 0, row: row, makeIfNecessary: false)?.alphaValue = 1 }
     }
 }
 

@@ -48,7 +48,8 @@ public sealed class CaptureController
                                       () => ShowLibrary(), ReadAndCopy,
                                       measure => preferences.Update(p => p with { Measure = measure }),
                                       backdrop => preferences.Update(p => p with { Backdrop = backdrop }), ReadWallpaper,
-                                      shows => preferences.Update(p => p with { ShowsLayers = shows }), Tabs);
+                                      shows => preferences.Update(p => p with { ShowsLayers = shows }), Tabs,
+                                      platform.ReduceMotion);
         // A Measure setting changed in one editor reaches every other.
         preferences.Changed += changed =>
         {

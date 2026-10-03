@@ -386,8 +386,11 @@ internal sealed class EditorWindow : Window
     private void WireLayers()
     {
         showsLayers = services.Preferences().ShowsLayers;
+        Layers.ReduceMotion = services.ReduceMotion;
         Layers.Selected += id => Canvas.Apply(s => s.Select(id));
-        Layers.Moved += (id, index) => Canvas.Apply(s => s.MoveLayer(id, index));
+        Layers.DraggedTo += (id, index) => Canvas.Apply(s => s.DragLayer(id, index));
+        Layers.Dropped += () => Canvas.Apply(s => s.DropLayer());
+        Layers.DragCancelled += () => Canvas.Apply(s => s.CancelLayerDrag());
         Layers.HideChanged += (id, hidden) => Canvas.Apply(s => s.SetHidden(id, hidden));
         Layers.LockChanged += (id, locked) => Canvas.Apply(s => s.SetLocked(id, locked));
         Layers.DuplicateRequested += id => Canvas.Apply(s =>
@@ -403,6 +406,8 @@ internal sealed class EditorWindow : Window
         Layers.HoverChanged += Canvas.Highlight;
         Layers.Clicked += () => Canvas.Focus();
         Layers.CloseRequested += () => ToggleLayers();
+        Layers.UndoRequested += () => Canvas.Apply(s => s.Undo());
+        Layers.RedoRequested += () => Canvas.Apply(s => s.Redo());
     }
 
     /// <summary>Opens or closes the layers panel, and remembers which for the next editor.

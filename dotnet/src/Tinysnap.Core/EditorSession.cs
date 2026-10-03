@@ -519,9 +519,17 @@ public sealed class EditorSession
         });
     }
 
-    /// <summary>Puts a shape at <paramref name="index"/> in the list, bottom first, as a drag in the
-    /// layers panel does. One undo step, and none when it lands where it was.</summary>
+    /// <summary>Puts a shape at <paramref name="index"/> in the list, bottom first, in one go, as
+    /// Arrange does. One undo step, and none when it lands where it was.</summary>
     public void MoveLayer(Guid id, int index)
+    {
+        DragLayer(id, index);
+        DropLayer();
+    }
+
+    /// <summary>A row being dragged in the layers list: its shape moves as the pointer goes, kept
+    /// by <see cref="DropLayer"/> as one step, or put back by <see cref="CancelLayerDrag"/>.</summary>
+    public void DragLayer(Guid id, int index)
     {
         FinishTyping();
         var from = Display.Annotations.FindIndex(a => a.Id == id);
@@ -530,8 +538,14 @@ public sealed class EditorSession
         if (target == from) return;
         var moving = Display.Annotations[from];
         Display = Display with { Annotations = Display.Annotations.RemoveAt(from).Insert(target, moving) };
-        History.Commit(Display);
     }
+
+    public void DropLayer()
+    {
+        if (IsIdle) History.Commit(Display);
+    }
+
+    public void CancelLayerDrag() => Display = History.Document;
 
     public void SetLocked(Guid id, bool locked) => Edit(id, a => a with { IsLocked = locked });
 
