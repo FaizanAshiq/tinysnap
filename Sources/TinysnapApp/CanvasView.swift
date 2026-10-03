@@ -778,9 +778,23 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         field.insertionPointColor = field.textColor ?? .labelColor
         if field.string != string { field.string = string }
         field.setFrameOrigin(CGPoint(x: (origin.x - shown.minX) / scale, y: (origin.y - shown.minY) / scale))
+        align(field, annotation.style.align)
         field.sizeToFit()
         if field.frame.width < fontSize { field.setFrameSize(NSSize(width: fontSize, height: field.frame.height)) }
         if window?.firstResponder !== field { window?.makeFirstResponder(field) }
+    }
+
+    /// Lines set centred or right sit inside a container as wide as the widest line, as the
+    /// renderer sets them inside the text's box; in the endless one typing uses they would
+    /// line up on its far edge. The widest line is measured set left first.
+    private func align(_ field: NSTextView, _ align: TextAlign) {
+        guard let container = field.textContainer, let layout = field.layoutManager else { return }
+        field.alignment = .left
+        container.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        guard align != .left else { return }
+        layout.ensureLayout(for: container)
+        container.containerSize = NSSize(width: max(layout.usedRect(for: container).width, 1), height: CGFloat.greatestFiniteMagnitude)
+        field.alignment = align == .center ? .center : .right
     }
 
     private func makeTextView() -> NSTextView {

@@ -4,6 +4,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using Tinysnap.App.Editing;
 using Tinysnap.Core;
 using Point = Avalonia.Point;
@@ -47,6 +48,10 @@ public class StyleBarTests
         Assert.Equal(5, bar.SizeChips.Count);
         Assert.Empty(bar.FillChips);
         Assert.Empty(bar.CornerChips);
+        Assert.Empty(bar.AlignChips);
+
+        editor.Canvas.Choose(Tool.Text);
+        Assert.Equal(3, bar.AlignChips.Count);
 
         editor.Canvas.Choose(Tool.Rectangle);
         Assert.Equal(2, bar.FillChips.Count);
@@ -78,6 +83,25 @@ public class StyleBarTests
         Assert.Equal("#123ABC", Selected(editor).ColorHex);
         Assert.False(editor.StyleBar.TryHex("green"));
         Assert.Equal("#123ABC", Selected(editor).ColorHex);
+    }
+
+    [AvaloniaFact]
+    public void AnAlignChipSetsTheTextAndTheBoxItIsTypedIn()
+    {
+        var session = new EditorSession(new Document(CanvasHost.Blank(400, 300)), Tool.Text);
+        var editor = new EditorWindow(session, DateTimeOffset.Now, TestServices.Make());
+        editor.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        editor.UpdateLayout();
+        var at = editor.Canvas.TranslatePoint(new Point(40, 40), editor)!.Value;
+        editor.MouseDown(at, MouseButton.Left);
+        editor.MouseUp(at, MouseButton.Left);
+        editor.KeyTextInput("Hi");
+        Click(editor.StyleBar.AlignChips[1]);
+        Assert.Equal(TextAlign.Center, Assert.Single(session.Display.Annotations).Style.Align);
+        Assert.True(editor.StyleBar.AlignChips[1].IsChecked);
+        var box = editor.Canvas.GetVisualDescendants().OfType<TextBox>().Single();
+        Assert.Equal(Avalonia.Media.TextAlignment.Center, box.TextAlignment);
     }
 
     [AvaloniaFact]

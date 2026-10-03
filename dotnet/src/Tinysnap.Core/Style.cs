@@ -31,6 +31,9 @@ public static class StyleSizes
     };
 }
 
+/// <summary>Where each line of a text sits in the box its widest line makes.</summary>
+public enum TextAlign { Left, Center, Right }
+
 public sealed record Style
 {
     public const double OpacityMin = 0.1;
@@ -59,8 +62,12 @@ public sealed record Style
     /// matches what is under it the result is black and changes stand out.</summary>
     public bool Difference { get; init; }
 
+    /// <summary>Text only: each line set left, centred or right.</summary>
+    public TextAlign Align { get; init; }
+
     public Style(string colorHex, StyleSize size = StyleSize.Medium, bool filled = false,
-                 CornerSize corners = CornerSize.Medium, double opacity = 1, bool difference = false)
+                 CornerSize corners = CornerSize.Medium, double opacity = 1, bool difference = false,
+                 TextAlign align = TextAlign.Left)
     {
         ColorHex = colorHex;
         Size = size;
@@ -68,6 +75,7 @@ public sealed record Style
         Corners = corners;
         Opacity = opacity;
         Difference = difference;
+        Align = align;
     }
 
     public JsonObject ToJson() => new()
@@ -78,6 +86,7 @@ public sealed record Style
         ["corners"] = Json.Wire(Corners),
         ["opacity"] = Opacity,
         ["difference"] = Difference,
+        ["align"] = Json.Wire(Align),
     };
 
     /// <summary>Every key is optional and a bad value falls back on its own, so one hand
@@ -95,7 +104,8 @@ public sealed record Style
         var read = Json.Number(o, "opacity");
         var opacity = read is { } value && value <= 1 ? Math.Max(value, OpacityMin) : 1;
         var difference = Json.Bool(o, "difference") ?? false;
-        return new Style(colorHex, size, filled, corners, opacity, difference);
+        var align = Json.Enum<TextAlign>(o, "align") ?? TextAlign.Left;
+        return new Style(colorHex, size, filled, corners, opacity, difference, align);
     }
 }
 

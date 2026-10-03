@@ -38,6 +38,14 @@ internal sealed partial class CanvasControl
         var brush = new SolidColorBrush(Color.FromUInt32(ToArgb(Palette.Color(annotation.Style.ColorHex))));
         box.Foreground = brush;
         box.CaretBrush = brush;
+        // The box is as wide as its widest line, as the renderer's text box is, so its lines
+        // line up the same way inside it.
+        box.TextAlignment = annotation.Style.Align switch
+        {
+            TextAlign.Center => TextAlignment.Center,
+            TextAlign.Right => TextAlignment.Right,
+            _ => TextAlignment.Left,
+        };
         if (box.Text != text) box.Text = text;
         var at = Mapping.ToDips(origin);
         TextOrigin = new AvaloniaPoint(at.X, at.Y);

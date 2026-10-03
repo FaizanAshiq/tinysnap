@@ -83,6 +83,9 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
 
     public var hasFill: Bool { self == .rectangle || self == .oval }
 
+    /// Text only: its lines set left, centred or right.
+    public var hasAlign: Bool { self == .text }
+
     /// Pasted images: opacity and the difference blend, for comparing against the capture.
     public var hasOverlay: Bool { self == .image }
 

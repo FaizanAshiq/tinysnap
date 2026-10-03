@@ -144,7 +144,7 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
                     break;
                 }
                 case AnnotationKind.Text(var origin, var text):
-                    TextLayout.Draw(Context, text, origin, size / Scale, Scale, color);
+                    TextLayout.Draw(Context, text, origin, size / Scale, Scale, color, align: annotation.Style.Align);
                     break;
                 case AnnotationKind.Highlighter(var from, var to):
                 {

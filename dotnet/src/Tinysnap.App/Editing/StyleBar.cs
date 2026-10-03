@@ -61,6 +61,16 @@ internal sealed partial class StyleBar : Border
     private static readonly string[] CornerNames =
         ["Square corners", "Slightly rounded", "Rounded", "Very rounded", "Fully round"];
 
+    private static readonly string[] AlignNames = ["Align left", "Centre", "Align right"];
+
+    /// <summary>Three lines set left, centred and right, as the Mac's chips draw them.</summary>
+    private static readonly string[] AlignGlyphs =
+    [
+        "M4 5H16V6.6H4ZM4 9.2H11V10.8H4ZM4 13.4H14V15H4Z",
+        "M4 5H16V6.6H4ZM6.5 9.2H13.5V10.8H6.5ZM5 13.4H15V15H5Z",
+        "M4 5H16V6.6H4ZM9 9.2H16V10.8H9ZM6 13.4H16V15H6Z",
+    ];
+
     private readonly CanvasControl canvas;
     private readonly StackPanel row = new() { Orientation = Orientation.Horizontal, Spacing = 14 };
     private (Tool Tool, Style Style, MeasureSettings Measure, bool Locked)? shown;
@@ -74,6 +84,7 @@ internal sealed partial class StyleBar : Border
     public IReadOnlyList<ToggleButton> SizeChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> FillChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> CornerChips { get; private set; } = [];
+    public IReadOnlyList<ToggleButton> AlignChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> OpacityChips { get; private set; } = [];
     public ToggleButton? DifferenceChip { get; private set; }
     public ToggleButton? AcrossChip { get; private set; }
@@ -176,7 +187,7 @@ internal sealed partial class StyleBar : Border
         colorSwatch = null;
         DifferenceChip = null;
         (AcrossChip, DownChip, LowerContrast, RaiseContrast, ContrastLabel, HelpChip) = (null, null, null, null, null, null);
-        (SizeChips, FillChips, CornerChips, OpacityChips) = ([], [], [], []);
+        (SizeChips, FillChips, CornerChips, AlignChips, OpacityChips) = ([], [], [], [], []);
         (BackdropFillChips, PaddingChips, BackdropCornerChips, ShadowChips) = ([], [], [], []);
         WallpaperNote = null;
         ClearSize();
@@ -191,6 +202,7 @@ internal sealed partial class StyleBar : Border
         SizeChips = tool.HasSize() ? Group(MakeSizeChips(tool, style)) : [];
         FillChips = tool.HasFill() ? Group(MakeFillChips(tool, style)) : [];
         CornerChips = tool.HasCorners() ? Group(MakeCornerChips(style)) : [];
+        AlignChips = tool.HasAlign() ? Group(MakeAlignChips(style)) : [];
         OpacityChips = tool.HasOverlay() ? Group(MakeOpacityChips(style)) : [];
         if (tool.HasOverlay())
         {
@@ -522,6 +534,11 @@ internal sealed partial class StyleBar : Border
         [.. new[] { false, true }.Select(filled =>
             Chip(Glyphs.Box(oval: tool == Tool.Oval, filled), filled ? "Filled" : "Outline", style.Filled == filled,
                  () => canvas.Restyle(s => s with { Filled = filled })))];
+
+    private List<ToggleButton> MakeAlignChips(Style style) =>
+        [.. Enum.GetValues<TextAlign>().Select((align, index) =>
+            Chip(Glyphs.Icon(AlignGlyphs[index], 16), AlignNames[index], style.Align == align,
+                 () => canvas.Restyle(s => s with { Align = align })))];
 
     private List<ToggleButton> MakeCornerChips(Style style) =>
         [.. Enum.GetValues<CornerSize>().Select((corners, index) =>

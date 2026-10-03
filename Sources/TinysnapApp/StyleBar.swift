@@ -155,6 +155,7 @@ final class StyleBar: NSVisualEffectView {
         if tool.hasSize { row.addArrangedSubview(group(sizeChips())) }
         if tool.hasFill { row.addArrangedSubview(group(fillChips())) }
         if tool.hasCorners { row.addArrangedSubview(group(cornerChips())) }
+        if tool.hasAlign { row.addArrangedSubview(group(alignChips())) }
         if tool.hasOverlay {
             row.addArrangedSubview(group(opacityChips()))
             row.addArrangedSubview(group([differenceChip()]))
@@ -353,6 +354,40 @@ final class StyleBar: NSVisualEffectView {
         let corners = CornerSize.allCases
         guard corners.indices.contains(sender.tag) else { return }
         change { $0.corners = corners[sender.tag] }
+    }
+
+    // MARK: Text alignment
+
+    /// Left, centre and right, each drawn as three lines set that way.
+    private func alignChips() -> [NSView] {
+        TextAlign.allCases.enumerated().map { index, align in
+            let label = ["Align left", "Centre", "Align right"][index]
+            let chip = ChipButton(label: label) { box, color in
+                let frame = box.insetBy(dx: 8, dy: 8)
+                color.setFill()
+                for (row, share) in [1.0, 0.6, 0.85].enumerated() {
+                    let width = frame.width * share
+                    let x: CGFloat = switch align {
+                    case .left: frame.minX
+                    case .center: frame.midX - width / 2
+                    case .right: frame.maxX - width
+                    }
+                    NSBezierPath(roundedRect: NSRect(x: x, y: frame.maxY - 1.6 - CGFloat(row) * (frame.height - 1.6) / 2,
+                                                     width: width, height: 1.6), xRadius: 0.8, yRadius: 0.8).fill()
+                }
+            }
+            chip.isChosen = style.align == align
+            chip.target = self
+            chip.action = #selector(pickAlign(_:))
+            chip.tag = index
+            return chip
+        }
+    }
+
+    @objc private func pickAlign(_ sender: NSButton) {
+        let aligns = TextAlign.allCases
+        guard aligns.indices.contains(sender.tag) else { return }
+        change { $0.align = aligns[sender.tag] }
     }
 
     // MARK: Backdrop

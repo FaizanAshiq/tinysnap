@@ -127,7 +127,8 @@ struct Canvas {
                 context.strokeEllipse(in: rect)
             }
         case let .text(origin, string):
-            TextLayout.draw(string, at: origin, points: size / scale, scale: scale, color: color, in: context)
+            TextLayout.draw(string, at: origin, points: size / scale, scale: scale, color: color,
+                            align: annotation.style.align, in: context)
         case let .highlighter(from, to):
             context.setBlendMode(.multiply)
             context.setLineCap(.round)
