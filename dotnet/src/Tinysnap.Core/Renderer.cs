@@ -205,7 +205,7 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
         var points = diameter / Scale * 0.55;
         var metrics = TextLayout.Metrics(label, points, Scale, bold: true);
         var origin = new Point(center.X - metrics.Width / 2, center.Y - (metrics.Ascent + metrics.Descent) / 2);
-        TextLayout.Draw(Context, label, origin, points, Scale, SKColors.White, bold: true);
+        TextLayout.Draw(Context, label, origin, points, Scale, MeasureShape.TextColor(color), bold: true);
     }
 
     /// <summary>A box's corner radius in capture pixels, never more than half its shorter side.</summary>

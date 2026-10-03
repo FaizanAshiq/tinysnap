@@ -248,6 +248,19 @@ struct RendererTests {
         #expect(Fixture.isClose(Fixture.pixel(image, 50 - 20, 50), white))
     }
 
+    /// A white or yellow step drew its number in white too, which left a blank disc.
+    @Test func aStepNumberIsDarkOnALightColourAndWhiteOnADarkOne() {
+        func digit(_ hex: String) -> (dark: Int, light: Int) {
+            let step = Fixture.annotation(.step(center: CGPoint(x: 50, y: 50)), style: Style(colorHex: hex, size: .extraLarge))
+            let image = render(Fixture.capture(width: 100, height: 100, fill: Fixture.blue), [step])
+            let pixels = (40...60).flatMap { x in (40...60).map { y in Fixture.pixel(image, x, y) } }
+            return (pixels.filter { $0.r + $0.g + $0.b < 150 }.count, pixels.filter { $0.r + $0.g + $0.b > 700 }.count)
+        }
+        #expect(digit("#FFFFFF").dark > 20)
+        #expect(digit("#FFCC00").dark > 20)
+        #expect(digit(Palette.red).light > 20)
+    }
+
     @Test func hiddenAnnotationsAreLeftOut() {
         let box = Fixture.annotation(.rectangle(CGRect(x: 0, y: 0, width: 50, height: 50)),
                                      style: Style(colorHex: "#000000", filled: true))
