@@ -54,6 +54,10 @@ public sealed record Annotation(Guid Id, AnnotationKind Kind, Style Style, doubl
     /// <summary>Hidden: kept, but not drawn, clicked, copied or saved into an image.</summary>
     public bool IsHidden { get; init; }
 
+    /// <summary>Its place in the order the shapes were drawn, from 1, which numbers its name in
+    /// the layers list: Rectangle 1, Rectangle 2. 0 until a document gives it one.</summary>
+    public int Serial { get; init; }
+
     public static Annotation New(AnnotationKind kind, Style style, double labelAt = 0.5) =>
         new(Guid.NewGuid(), kind, style, labelAt);
 

@@ -35,6 +35,7 @@ public static class DocumentArchive
             // Written only when on, so an older Tinysnap reads the file as before.
             if (annotation.IsLocked) item["locked"] = true;
             if (annotation.IsHidden) item["hidden"] = true;
+            item["serial"] = annotation.Serial;
             void Ends(string kind, Point from, Point to)
             {
                 item["kind"] = kind;
@@ -205,6 +206,8 @@ public static class DocumentArchive
         {
             IsLocked = Json.Bool(item, "locked") ?? false,
             IsHidden = Json.Bool(item, "hidden") ?? false,
+            // The draw order that numbers a layer name; files from before have none.
+            Serial = Math.Max(0, Json.Integer(item, "serial") ?? 0),
         };
     }
 

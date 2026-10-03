@@ -24,15 +24,19 @@ public struct Annotation: Equatable, Identifiable, Sendable {
     public var isLocked: Bool
     /// Hidden: kept, but not drawn, clicked, copied or saved into an image.
     public var isHidden: Bool
+    /// Its place in the order the shapes were drawn, from 1, which numbers its name in the
+    /// layers list: Rectangle 1, Rectangle 2. 0 until a document gives it one.
+    public var serial: Int
 
     public init(id: UUID = UUID(), kind: Kind, style: Style, labelAt: CGFloat = 0.5,
-                isLocked: Bool = false, isHidden: Bool = false) {
+                isLocked: Bool = false, isHidden: Bool = false, serial: Int = 0) {
         self.id = id
         self.kind = kind
         self.style = style
         self.labelAt = labelAt
         self.isLocked = isLocked
         self.isHidden = isHidden
+        self.serial = serial
     }
 
     public enum Kind: Equatable, Sendable {

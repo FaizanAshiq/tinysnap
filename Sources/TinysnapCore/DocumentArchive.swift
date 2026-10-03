@@ -35,6 +35,7 @@ public enum DocumentArchive {
             // Written only when on, so an older Tinysnap reads the file as before.
             if annotation.isLocked { item.locked = true }
             if annotation.isHidden { item.hidden = true }
+            item.serial = annotation.serial
             switch annotation.kind {
             case let .arrow(from, to): item.kind = "arrow"; item.from = pair(from); item.to = pair(to)
             case let .line(from, to): item.kind = "line"; item.from = pair(from); item.to = pair(to)
@@ -86,7 +87,7 @@ public enum DocumentArchive {
         let annotations = try file.annotations.map { item in
             Annotation(id: item.id, kind: try kind(of: item, image: image), style: item.style,
                        labelAt: item.labelAt.flatMap { (0...1).contains($0) ? $0 : nil } ?? 0.5,
-                       isLocked: item.locked ?? false, isHidden: item.hidden ?? false)
+                       isLocked: item.locked ?? false, isHidden: item.hidden ?? false, serial: max(0, item.serial ?? 0))
         }
         return ArchivedEdits(captured: file.captured, scale: file.scale, crop: file.crop?.rect, annotations: annotations,
                              backdrop: file.backdrop.map { backdrop(from: $0, image: image) }, resize: file.resize)
@@ -234,6 +235,8 @@ public enum DocumentArchive {
         var file: String?
         var labelAt: CGFloat?
         var locked, hidden: Bool?
+        /// The draw order that numbers a layer name; files from before have none.
+        var serial: Int?
 
         init(id: UUID, kind: String, style: Style) {
             self.id = id

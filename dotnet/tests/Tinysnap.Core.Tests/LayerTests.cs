@@ -228,7 +228,51 @@ public class LayerTests
         Assert.Equal("Step 1", doc.LayerName(first.Id));
         Assert.Equal("Step 2", doc.LayerName(second.Id));
         Assert.Equal("Step", doc.LayerName(hiddenStep.Id));
-        Assert.Equal("Blur", doc.LayerName(blur.Id));
-        Assert.Equal("Arrow", doc.LayerName(arrow.Id));
+        Assert.Equal("Blur 1", doc.LayerName(blur.Id));
+        Assert.Equal("Arrow 1", doc.LayerName(arrow.Id));
+    }
+
+    private static string[] Names(Document document) => [.. document.Annotations.Select(a => document.LayerName(a.Id))];
+
+    [Fact]
+    public void EachShapeIsCountedAmongItsKindInTheOrderItWasDrawn()
+    {
+        var first = Fixture.Annotation(new AnnotationKind.Rectangle(new Rect(10, 10, 40, 30)));
+        var line = Fixture.Annotation(new AnnotationKind.Line(new Point(5, 5), new Point(90, 90)));
+        var second = Fixture.Annotation(new AnnotationKind.Rectangle(new Rect(60, 10, 40, 30)));
+        Assert.Equal(["Rectangle 1", "Line 1", "Rectangle 2"], Names(Doc(first, line, second)));
+    }
+
+    [Fact]
+    public void ANumberStaysWithItsShapeThroughReorderAndSaveAndClosesUpOnDelete()
+    {
+        var first = Fixture.Annotation(new AnnotationKind.Rectangle(new Rect(10, 10, 40, 30)));
+        var second = Fixture.Annotation(new AnnotationKind.Rectangle(new Rect(60, 10, 40, 30)));
+        var editor = new EditorSession(Doc(first, second), Tool.Select);
+        editor.MoveLayer(second.Id, 0);
+        Assert.Equal(["Rectangle 2", "Rectangle 1"], Names(editor.Display));
+        var (json, _) = DocumentArchive.Encode(editor.Display, DateTimeOffset.UnixEpoch);
+        Assert.Equal(["Rectangle 2", "Rectangle 1"], Names(Doc([.. DocumentArchive.Decode(json, _ => null).Annotations])));
+        editor.Select(first.Id);
+        editor.DeleteSelection();
+        Assert.Equal(["Rectangle 1"], Names(editor.Display));
+    }
+
+    [Fact]
+    public void ADuplicateTakesTheNextNumber()
+    {
+        var first = Fixture.Annotation(new AnnotationKind.Rectangle(new Rect(10, 10, 40, 30)));
+        var second = Fixture.Annotation(new AnnotationKind.Rectangle(new Rect(60, 10, 40, 30)));
+        var editor = new EditorSession(Doc(first, second), Tool.Select);
+        editor.Select(first.Id);
+        editor.DuplicateSelection();
+        Assert.Equal(["Rectangle 1", "Rectangle 3", "Rectangle 2"], Names(editor.Display));
+    }
+
+    [Fact]
+    public void AFileFromBeforeNumbersCountsBottomUp()
+    {
+        var json = System.Text.Encoding.UTF8.GetBytes("""{"version":1,"captured":"2026-10-02T16:34:05Z","scale":2,"annotations":[{"id":"F86ED62D-E65F-492A-9835-C9A1EF940F71","kind":"oval","rect":{"x":34,"y":40,"width":30,"height":20},"style":{"colorHex":"#FF3B30","size":"large"}},{"id":"0A6ED62D-E65F-492A-9835-C9A1EF940F72","kind":"oval","rect":{"x":84,"y":40,"width":30,"height":20},"style":{"colorHex":"#FF3B30","size":"large"}}]}""");
+        Assert.Equal(["Oval 1", "Oval 2"], Names(Doc([.. DocumentArchive.Decode(json, _ => null).Annotations])));
     }
 }

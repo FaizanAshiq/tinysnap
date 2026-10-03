@@ -61,7 +61,7 @@ public sealed record Document
     public ImmutableArray<Annotation> Annotations
     {
         get => annotations;
-        init => annotations = value.IsDefault ? [] : value;
+        init => annotations = NumberNewShapes(value.IsDefault ? [] : value);
     }
 
     /// <summary>Null while there is no backdrop.</summary>
@@ -157,22 +157,50 @@ public sealed record Document
         return null;
     }
 
-    /// <summary>What the layers panel calls a shape: its tool, its text's first line, a step's
-    /// number, a measurement's length as its tag gives it.</summary>
+    /// <summary>What the layers panel calls a shape: its tool and its count among that tool's
+    /// shapes, its text's first line, a step's number, a measurement's length as its tag gives it.</summary>
     public string LayerName(Guid id)
     {
         if (Annotation(id) is not { } annotation) return "";
+        if (KindName(annotation) is { } kind)
+        {
+            // Counted among the shapes of its kind in the order they were drawn, so no two rows
+            // share a name and reordering renames nothing.
+            var same = Annotations.Select((a, index) => (a, index)).Where(p => KindName(p.a) == kind)
+                .OrderBy(p => p.a.Serial).ThenBy(p => p.index).ToList();
+            return $"{kind} {same.FindIndex(p => p.a.Id == id) + 1}";
+        }
         return annotation.Kind switch
         {
             AnnotationKind.Text(_, var text) => FirstLine(text) is { Length: > 0 } line ? line : "Text",
             AnnotationKind.Step => StepNumber(id) is { } number ? $"Step {number}" : "Step",
             AnnotationKind.Measure(var from, var to) => "Measure " + MeasureReading.Label(from.Distance(to), Scale),
-            // Their tool titles carry a warning that has no place in a list of names.
-            AnnotationKind.Blur => "Blur",
-            AnnotationKind.Pixelate => "Pixelate",
-            AnnotationKind.Erase => "Erase",
-            _ => annotation.Tool.Title(),
+            _ => "",
         };
+    }
+
+    /// <summary>The name a shape shares with every other of its kind, before its number; null for
+    /// text, steps and measurements, which are named by what they say.</summary>
+    private static string? KindName(Annotation annotation) => annotation.Kind switch
+    {
+        AnnotationKind.Text or AnnotationKind.Step or AnnotationKind.Measure => null,
+        // Their tool titles carry a warning that has no place in a list of names.
+        AnnotationKind.Blur => "Blur",
+        AnnotationKind.Pixelate => "Pixelate",
+        AnnotationKind.Erase => "Erase",
+        _ => annotation.Tool.Title(),
+    };
+
+    /// <summary>Each shape without a number takes the next one, in list order: a new shape, a
+    /// duplicate, or every shape of a file from before numbers, counted bottom up.</summary>
+    private static ImmutableArray<Annotation> NumberNewShapes(ImmutableArray<Annotation> list)
+    {
+        if (!list.Any(a => a.Serial == 0)) return list;
+        var next = list.Max(a => a.Serial) + 1;
+        var numbered = list.ToBuilder();
+        for (var i = 0; i < numbered.Count; i++)
+            if (numbered[i].Serial == 0) numbered[i] = numbered[i] with { Serial = next++ };
+        return numbered.ToImmutable();
     }
 
     /// <summary>The first line with anything on it, trimmed, at most 40 characters as a person

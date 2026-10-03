@@ -150,7 +150,7 @@ struct LibraryStoreTests {
         #expect(exists(pastedURL))
         let reopened = try #require(library.open(entry)).document
         #expect(reopened.crop == document.crop)
-        #expect(reopened.annotations.first == arrow)
+        #expect(reopened.annotations.first == document.annotations.first)
         guard case let .image(rect, pixels) = reopened.annotations.last?.kind else {
             Issue.record("the pasted image did not come back")
             return

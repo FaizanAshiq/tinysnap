@@ -475,7 +475,7 @@ if ($editor)
         $items = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,
                                                                           [System.Windows.Automation.ControlType]::ListItem)
         $names = @($list.FindAll('Descendants', $items) | ForEach-Object { $_.Current.Name })
-        if (($names -join ',') -ne 'Rectangle,Oval') { "rows read $($names -join ', ')" }
+        if (($names -join ',') -ne 'Rectangle 1,Oval 1') { "rows read $($names -join ', ')" }
     }
     Press $Ctrl $Shift 0x4C
     [System.Windows.Forms.Clipboard]::Clear()
