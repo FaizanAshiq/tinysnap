@@ -1,5 +1,6 @@
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
+using Tinysnap.Dev;
 using static Tinysnap.App.Tests.TestServices;
 
 namespace Tinysnap.App.Tests;
@@ -48,5 +49,18 @@ public class WarmUpTests
         Assert.True(setup.Controller.EditorIsWarm);
         Assert.Empty(setup.Controller.Editors);
         Assert.Empty(setup.Library.Entries());
+    }
+
+    [AvaloniaFact]
+    public async Task TheTextReaderWarmsUpOnceOnASampleOfWords()
+    {
+        // Cold, the first Copy Text loads the recogniser and its language data; on the Mac that
+        // took 26 seconds. Reading a few words at launch pays it before anyone is waiting.
+        var setup = Launch();
+        var reader = (FakeTextReader)setup.Platform.Text;
+        setup.Controller.WarmUp();
+        await setup.Controller.TextWarming!;
+        setup.Controller.WarmUp();
+        Assert.Equal([(480, 80, false)], reader.Asked);
     }
 }

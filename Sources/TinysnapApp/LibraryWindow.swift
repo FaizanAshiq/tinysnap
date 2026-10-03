@@ -39,7 +39,9 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 600),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Library"
-        window.tabbingMode = .disallowed
+        // A tab of the window the captures share.
+        window.tabbingMode = .preferred
+        window.tabbingIdentifier = EditorWindowController.tabbingIdentifier
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 480, height: 320)
         super.init(window: window)
@@ -108,7 +110,8 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
 
     func show() {
         reload()
-        if window?.isVisible != true { window?.center() }
+        // Centred only on its own: as a tab it keeps the shared window where it is.
+        if window?.isVisible != true, (window?.tabbedWindows?.count ?? 0) <= 1 { window?.center() }
         showWindow(nil)
         window?.makeFirstResponder(grid)
         NSApp.activate(ignoringOtherApps: true)

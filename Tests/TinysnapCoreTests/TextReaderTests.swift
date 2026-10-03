@@ -23,6 +23,12 @@ struct TextReaderTests {
         return CIContext().createCGImage(code, from: code.extent)!
     }
 
+    @Test func theWarmUpSampleHasWordsToRead() throws {
+        // A blank image would never wake the text model; the sample must be read as words.
+        let sample = try #require(TextReader.warmUpSample())
+        #expect(try TextReader.read(sample, for: .text).lines == ["Tinysnap reads text"])
+    }
+
     @Test func readsLinesTopToBottom() throws {
         let capture = page([("Order shipped today", CGPoint(x: 40, y: 60)), ("Tracking arrives soon", CGPoint(x: 40, y: 200))])
         let reading = try TextReader.read(capture.image, for: .text)

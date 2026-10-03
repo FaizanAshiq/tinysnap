@@ -63,7 +63,7 @@ internal sealed partial class StyleBar : Border
 
     private readonly CanvasControl canvas;
     private readonly StackPanel row = new() { Orientation = Orientation.Horizontal, Spacing = 14 };
-    private (Tool Tool, Style Style, bool Selected, MeasureSettings Measure, bool Locked)? shown;
+    private (Tool Tool, Style Style, MeasureSettings Measure, bool Locked)? shown;
 
     /// <summary>The chips, for the tests: switched off as a whole while a locked shape is chosen.</summary>
     internal StackPanel Row => row;
@@ -76,7 +76,6 @@ internal sealed partial class StyleBar : Border
     public IReadOnlyList<ToggleButton> CornerChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> OpacityChips { get; private set; } = [];
     public ToggleButton? DifferenceChip { get; private set; }
-    public Button? DeleteChip { get; private set; }
     public ToggleButton? AcrossChip { get; private set; }
     public ToggleButton? DownChip { get; private set; }
     public Button? LowerContrast { get; private set; }
@@ -141,11 +140,11 @@ internal sealed partial class StyleBar : Border
         IsVisible = Shows(tool);
         var measure = canvas.MeasureSettings;
         var locked = selected?.IsLocked == true;
-        var now = (tool, style, selected is not null, measure, locked);
+        var now = (tool, style, measure, locked);
         if (shown == now) return;
         // Only the colour changed: redrawn where it stands. Rebuilding replaced the button the
         // palette hangs from, which closed the palette in the middle of a drag on the spectrum.
-        if (shown is { } before && before.Tool == tool && before.Selected == now.Item3 && before.Measure == measure
+        if (shown is { } before && before.Tool == tool && before.Measure == measure
             && before.Locked == locked
             && before.Style with { ColorHex = style.ColorHex } == style)
         {
@@ -155,7 +154,7 @@ internal sealed partial class StyleBar : Border
         }
         var picked = shown?.Tool != Tool.Measure && session.Tool == Tool.Measure;
         shown = now;
-        Rebuild(tool, style, selected is not null, locked);
+        Rebuild(tool, style, locked);
         // The guide shows by itself the first time Measure is picked, once the ? it hangs from is in place.
         if (picked && !measure.GuideSeen)
         {
@@ -176,7 +175,6 @@ internal sealed partial class StyleBar : Border
         CustomColor = null;
         colorSwatch = null;
         DifferenceChip = null;
-        DeleteChip = null;
         (AcrossChip, DownChip, LowerContrast, RaiseContrast, ContrastLabel, HelpChip) = (null, null, null, null, null, null);
         (SizeChips, FillChips, CornerChips, OpacityChips) = ([], [], [], []);
         (BackdropFillChips, PaddingChips, BackdropCornerChips, ShadowChips) = ([], [], [], []);
@@ -185,8 +183,8 @@ internal sealed partial class StyleBar : Border
     }
 
     /// <summary><paramref name="locked"/>: a locked shape shows its style dimmed, with nothing to
-    /// press and no delete.</summary>
-    private void Rebuild(Tool tool, Style style, bool selected, bool locked = false)
+    /// press. Deleting is the layers panel's bin, or the Delete key.</summary>
+    private void Rebuild(Tool tool, Style style, bool locked = false)
     {
         Clear();
         if (tool.HasColor()) row.Children.Add(ColorButton = MakeColorButton(style.ColorHex));
@@ -204,21 +202,6 @@ internal sealed partial class StyleBar : Border
         if (tool == Tool.Measure) AddMeasureChips();
         row.IsEnabled = !locked;
         row.Opacity = locked ? 0.45 : 1;
-        if (selected && !locked)
-        {
-            var delete = new Button
-            {
-                Content = Glyphs.Icon(ToolIcons.Delete, 16),
-                Padding = new Thickness(6, 4),
-                Background = Brushes.Transparent,
-                BorderThickness = new Thickness(0),
-            };
-            ToolTip.SetTip(delete, "Delete, or the Delete key");
-            AutomationProperties.SetName(delete, "Delete");
-            delete.Click += (_, _) => canvas.DeleteSelection();
-            row.Children.Add(delete);
-            DeleteChip = delete;
-        }
     }
 
     // Measure

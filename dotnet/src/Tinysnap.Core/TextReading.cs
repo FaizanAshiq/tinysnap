@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using SkiaSharp;
 
 namespace Tinysnap.Core;
 
@@ -54,6 +55,17 @@ public static class TextReader
     public static ImmutableArray<string> InReadingOrder(IReadOnlyList<(string Text, Rect Box)> lines) =>
         [.. ReadingOrder([.. lines.Select(line => new Rect(line.Box.X, -line.Box.Y - line.Box.Height, line.Box.Width, line.Box.Height))])
             .Select(index => lines[index].Text)];
+
+    /// <summary>Black words on white, as a capture would have them, read once at launch so the
+    /// first Copy Text finds the recogniser loaded. A blank image would not do: with nothing in
+    /// it to read, the recogniser never loads its language data.</summary>
+    public static SKImage WarmUpSample()
+    {
+        using var surface = SKSurface.Create(new SKImageInfo(480, 80));
+        surface.Canvas.Clear(SKColors.White);
+        TextLayout.Draw(surface.Canvas, "Tinysnap reads text", new Point(20, 20), 18, 2, SKColors.Black);
+        return surface.Snapshot();
+    }
 
     /// <summary>Join Lines: every run of spaces and line breaks becomes one space.</summary>
     public static string Join(string text) =>

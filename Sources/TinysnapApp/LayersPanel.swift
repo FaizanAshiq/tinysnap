@@ -42,7 +42,8 @@ final class RailButton: NSButton {
 /// canvas under the style bar, in the same material, and is a native table, so the arrows,
 /// VoiceOver and dragging a row all work as they do anywhere on the Mac.
 final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewDelegate {
-    static let width: CGFloat = 220
+    /// Room for a name beside four row buttons: duplicate, delete, eye and lock.
+    static let width: CGFloat = 244
     static let rowHeight: CGFloat = 32
     private static let headerHeight: CGFloat = 36
     private static let rowType = NSPasteboard.PasteboardType("com.faizanashiq.tinysnap.layer")
@@ -61,6 +62,8 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
     var onHide: ((Annotation.ID, Bool) -> Void)?
     var onLock: ((Annotation.ID, Bool) -> Void)?
     var onDuplicate: ((Annotation.ID) -> Void)?
+    /// A row's bin: its shape deleted.
+    var onDeleteRow: ((Annotation.ID) -> Void)?
     /// The row under the pointer, so the canvas can border its shape.
     var onHover: ((Annotation.ID?) -> Void)?
     /// A click in the list: the keys go back to the canvas.
@@ -201,6 +204,7 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
         cell.onHide = { [weak self] id, hidden in self?.onHide?(id, hidden) }
         cell.onLock = { [weak self] id, locked in self?.onLock?(id, locked) }
         cell.onDuplicate = { [weak self] id in self?.onDuplicate?(id) }
+        cell.onDelete = { [weak self] id in self?.onDeleteRow?(id) }
         cell.onHover = { [weak self] id in self?.onHover?(id) }
         cell.onClicked = { [weak self] in self?.onClicked?() }
         return cell
@@ -287,14 +291,15 @@ private final class LayerRowView: NSTableRowView {
     }
 }
 
-/// One shape: its tool's symbol and name, then duplicate (on hover and when chosen), the eye
-/// and the lock.
+/// One shape: its tool's symbol and name, then duplicate and delete (on hover and when
+/// chosen), the eye and the lock.
 private final class LayerCell: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("LayerCell")
 
     var onHide: ((Annotation.ID, Bool) -> Void)?
     var onLock: ((Annotation.ID, Bool) -> Void)?
     var onDuplicate: ((Annotation.ID) -> Void)?
+    var onDelete: ((Annotation.ID) -> Void)?
     var onHover: ((Annotation.ID?) -> Void)?
     /// A button clicked: the keys go back to the canvas.
     var onClicked: (() -> Void)?
@@ -302,6 +307,7 @@ private final class LayerCell: NSTableCellView {
     private let icon = NSImageView()
     private let name = NSTextField(labelWithString: "")
     private let duplicate = NSButton()
+    private let delete = NSButton()
     private let eye = NSButton()
     private let lock = NSButton()
     private var row: LayersPanel.Row?
@@ -316,7 +322,8 @@ private final class LayerCell: NSTableCellView {
         textField = name
         imageView = icon
         icon.symbolConfiguration = .init(pointSize: 13, weight: .regular)
-        for (button, action) in [(duplicate, #selector(duplicated)), (eye, #selector(eyed)), (lock, #selector(locked))] {
+        for (button, action) in [(duplicate, #selector(duplicated)), (delete, #selector(deleted)), (eye, #selector(eyed)),
+                                 (lock, #selector(locked))] {
             button.isBordered = false
             button.imagePosition = .imageOnly
             button.target = self
@@ -324,6 +331,7 @@ private final class LayerCell: NSTableCellView {
             addSubview(button)
         }
         duplicate.image = NSImage(systemSymbolName: "plus.square.on.square", accessibilityDescription: nil)
+        delete.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)
         [icon, name].forEach(addSubview)
         wantsLayer = true
         layer?.cornerRadius = 6
@@ -339,7 +347,8 @@ private final class LayerCell: NSTableCellView {
         icon.frame = NSRect(x: 8, y: middle - 8, width: 16, height: 16)
         lock.frame = NSRect(x: bounds.maxX - 26, y: middle - 9, width: 18, height: 18)
         eye.frame = NSRect(x: bounds.maxX - 50, y: middle - 9, width: 20, height: 18)
-        duplicate.frame = NSRect(x: bounds.maxX - 74, y: middle - 9, width: 18, height: 18)
+        delete.frame = NSRect(x: bounds.maxX - 74, y: middle - 9, width: 18, height: 18)
+        duplicate.frame = NSRect(x: bounds.maxX - 98, y: middle - 9, width: 18, height: 18)
         name.frame = NSRect(x: 32, y: middle - 9, width: duplicate.frame.minX - 36, height: 18)
     }
 
@@ -353,6 +362,12 @@ private final class LayerCell: NSTableCellView {
         lock.image = NSImage(systemSymbolName: row.isLocked ? "lock.fill" : "lock.open", accessibilityDescription: nil)
         lock.alphaValue = row.isLocked ? 1 : 0.45
         duplicate.setAccessibilityLabel("Duplicate \(row.name)")
+        delete.setAccessibilityLabel("Delete \(row.name)")
+        delete.toolTip = "Delete, or the Delete key"
+        // A locked shape cannot be deleted until it is unlocked. Dimmed by hand, as a tint
+        // colour keeps a disabled button looking as bright as the rest.
+        delete.isEnabled = !row.isLocked
+        delete.alphaValue = row.isLocked ? 0.4 : 1
         eye.setAccessibilityLabel("\(row.isHidden ? "Show" : "Hide") \(row.name)")
         lock.setAccessibilityLabel("\(row.isLocked ? "Unlock" : "Lock") \(row.name)")
         eye.toolTip = row.isHidden ? "Show" : "Hide"
@@ -369,10 +384,11 @@ private final class LayerCell: NSTableCellView {
     private func restyle() {
         let chosen = backgroundStyle == .emphasized
         let tint: NSColor = chosen ? .white : .labelColor
-        [duplicate, eye, lock].forEach { $0.contentTintColor = tint }
+        [duplicate, delete, eye, lock].forEach { $0.contentTintColor = tint }
         icon.contentTintColor = tint
         name.textColor = tint
         duplicate.isHidden = !(chosen || hovering)
+        delete.isHidden = duplicate.isHidden
         // A faint wash under the pointer; the chosen row has its accent fill instead.
         layer?.backgroundColor = hovering && !chosen ? NSColor.labelColor.withAlphaComponent(0.07).cgColor : NSColor.clear.cgColor
     }
@@ -400,6 +416,11 @@ private final class LayerCell: NSTableCellView {
 
     @objc private func duplicated() {
         if let row { onDuplicate?(row.id) }
+        onClicked?()
+    }
+
+    @objc private func deleted() {
+        if let row { onDelete?(row.id) }
         onClicked?()
     }
 

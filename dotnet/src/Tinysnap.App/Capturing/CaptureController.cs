@@ -42,12 +42,13 @@ public sealed class CaptureController
         this.preferences = preferences;
         this.library = library;
         this.time = time;
+        Tabs = new WindowTabs(Raise);
         services = new EditorServices(platform.Clipboard, () => preferences.Current, dialogs ?? new AvaloniaDialogs(), Pin,
                                       preferences.RememberStyles, library, () => LibraryChanged?.Invoke(), time,
                                       () => ShowLibrary(), ReadAndCopy,
                                       measure => preferences.Update(p => p with { Measure = measure }),
                                       backdrop => preferences.Update(p => p with { Backdrop = backdrop }), ReadWallpaper,
-                                      shows => preferences.Update(p => p with { ShowsLayers = shows }));
+                                      shows => preferences.Update(p => p with { ShowsLayers = shows }), Tabs);
         // A Measure setting changed in one editor reaches every other.
         preferences.Changed += changed =>
         {
@@ -99,7 +100,7 @@ public sealed class CaptureController
             ShowSettings();
             return;
         }
-        foreach (var editor in editors) Raise(editor);
+        if (Tabs.Shown is { } shown) Tabs.Show(shown);
     }
 
     /// <summary>The countdown, the last area, or anything else the tray menu shows changed.</summary>
@@ -190,6 +191,11 @@ public sealed class CaptureController
 
     private ITimer? warmingUp;
 
+    /// <summary>The text reader's first read, of <see cref="Tinysnap.Core.TextReader.WarmUpSample"/>:
+    /// cold, it loads the recogniser and its language data, which on the Mac took 26 seconds of
+    /// the first Copy Text.</summary>
+    internal Task? TextWarming { get; private set; }
+
     /// <summary>The overlay warmed up without a window, where the desktop would pull one into view.</summary>
     internal bool IsWarm { get; private set; }
 
@@ -200,6 +206,11 @@ public sealed class CaptureController
     {
         // The editor once the overlay is done, still while nothing else is happening.
         if (!EditorIsWarm) ui.Post(WarmEditor, DispatcherPriority.Background);
+        TextWarming ??= Task.Run(async () =>
+        {
+            using var sample = Tinysnap.Core.TextReader.WarmUpSample();
+            await platform.Text.Read(sample, codes: false);
+        });
         if (WarmingUp is not null || IsWarm) return;
         using var surface = SKSurface.Create(new SKImageInfo(16, 16));
         surface.Canvas.Clear(SKColors.Black);
@@ -417,7 +428,7 @@ public sealed class CaptureController
     {
         if (editors.FirstOrDefault(e => e.Entry == entry) is { } open)
         {
-            Raise(open);
+            Tabs.Show(open);
             return;
         }
         if (library.Open(entry) is not { } opened) return;
@@ -461,8 +472,9 @@ public sealed class CaptureController
             editors.Remove(editor);
             if (editor.PendingRender() is var (edited, kept)) Render(kept, edited);
         };
-        editor.Show();
-        Raise(editor);
+        // A new capture joins the window that is up, as a tab; the first places itself.
+        editor.PlacesItself = Tabs.Shown is null;
+        Tabs.Show(editor);
     }
 
     private void ShowThumbnail(Document document, PixelRect around, LibraryEntry? entry)
@@ -529,7 +541,17 @@ public sealed class CaptureController
     /// monitor holding <paramref name="on"/>. The image stays the caller's.</summary>
     internal async Task ReadAndCopy(SKImage image, bool codes, PixelPoint? on)
     {
-        var reading = await Task.Run(() => platform.Text.Read(image, codes));
+        var read = Task.Run(() => platform.Text.Read(image, codes));
+        // A read takes a blink, except a first one that has to load its text model: anything
+        // slower than a blink says it is working, until the result replaces it.
+        if (await Task.WhenAny(read, Task.Delay(TimeSpan.FromMilliseconds(400), time ?? TimeProvider.System)) != read)
+        {
+            Toast?.Dismiss();
+            Toast = new TextToast(codes ? "Scanning for a QR code…" : "Reading text…", "", null, services.Clipboard,
+                                  platform.Files, on, time, working: true);
+            Toast.Show();
+        }
+        var reading = await read;
         Toast?.Dismiss();
         string title, shown = "";
         if (reading is null)
@@ -555,6 +577,9 @@ public sealed class CaptureController
 
     internal SettingsWindow? OpenSettings => settingsWindow;
 
+    /// <summary>Every capture and the library, as tabs of one window.</summary>
+    internal WindowTabs Tabs { get; }
+
     internal EditorServices Services => services;
 
     internal IFileActions Files => platform.Files;
@@ -567,6 +592,7 @@ public sealed class CaptureController
             libraryWindow = new LibraryWindow(this);
             libraryWindow.Closed += (_, _) => libraryWindow = null;
         }
+        Tabs.Show(libraryWindow);
         libraryWindow.ShowInFront();
         return libraryWindow;
     }

@@ -137,10 +137,13 @@ public sealed class FakeTextReader : ITextReader
     /// <summary>The size of each image asked about, not the image, which its owner may dispose.</summary>
     public List<(int Width, int Height, bool Codes)> Asked { get; } = [];
 
+    /// <summary>When set, a read waits on it, as a slow first read does.</summary>
+    public TaskCompletionSource<TextReading?>? Holding { get; set; }
+
     public Task<TextReading?> Read(SkiaSharp.SKImage image, bool codes)
     {
         Asked.Add((image.Width, image.Height, codes));
-        return Task.FromResult(Reading);
+        return Holding?.Task ?? Task.FromResult(Reading);
     }
 }
 

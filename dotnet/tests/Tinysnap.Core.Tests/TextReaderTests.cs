@@ -1,3 +1,5 @@
+using SkiaSharp;
+
 namespace Tinysnap.Core.Tests;
 
 // The Mac's other six TextReaderTests need an OCR engine, so they run against Windows OCR in
@@ -6,6 +8,17 @@ namespace Tinysnap.Core.Tests;
 // textUnderAnEraseIsNeverRead and onlyTheTextInADraggedAreaIsRead.
 public class TextReaderTests
 {
+    [Fact]
+    public void TheWarmUpSampleIsDarkWordsOnWhite()
+    {
+        // A blank image would never wake the recogniser: there has to be something to read.
+        using var sample = TextReader.WarmUpSample();
+        Assert.Equal((480, 80), (sample.Width, sample.Height));
+        using var bitmap = SKBitmap.FromImage(sample);
+        Assert.Equal(SKColors.White, bitmap.GetPixel(0, 0));
+        Assert.Contains(bitmap.Pixels, pixel => pixel.Red < 64);
+    }
+
     [Fact]
     public void JoiningLinesLeavesSingleSpaces()
     {

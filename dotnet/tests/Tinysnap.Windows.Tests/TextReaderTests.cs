@@ -46,6 +46,15 @@ public class TextReaderTests
         await Reader.Read(image, codes) ?? throw new InvalidOperationException("could not read");
 
     [Fact]
+    public async Task TheWarmUpSampleHasWordsToRead()
+    {
+        // A blank image would never wake the recogniser; the sample must be read as words.
+        NeedsARecogniser();
+        using var sample = Tinysnap.Core.TextReader.WarmUpSample();
+        Assert.Equal(new[] { "Tinysnap reads text" }, (await Read(sample)).Lines.ToArray());
+    }
+
+    [Fact]
     public async Task ReadsLinesTopToBottom()
     {
         NeedsARecogniser();

@@ -28,6 +28,15 @@ public class LinuxTextReaderTests
     }
 
     [Fact]
+    public async Task TheWarmUpSampleHasWordsToRead()
+    {
+        // A blank image would never load the recogniser; the sample must be read as words.
+        Linux.Only();
+        using var sample = Tinysnap.Core.TextReader.WarmUpSample();
+        Assert.Equal("Tinysnap reads text", await Read(sample));
+    }
+
+    [Fact]
     public async Task SmallScreenTextIsRead()
     {
         Linux.Only();

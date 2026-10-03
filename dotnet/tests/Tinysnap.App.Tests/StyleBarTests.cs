@@ -47,7 +47,6 @@ public class StyleBarTests
         Assert.Equal(5, bar.SizeChips.Count);
         Assert.Empty(bar.FillChips);
         Assert.Empty(bar.CornerChips);
-        Assert.Null(bar.DeleteChip);
 
         editor.Canvas.Choose(Tool.Rectangle);
         Assert.Equal(2, bar.FillChips.Count);
@@ -66,7 +65,6 @@ public class StyleBarTests
     public void ASwatchRecoloursTheSelection()
     {
         var editor = WithShape(Tool.Arrow);
-        Assert.NotNull(editor.StyleBar.DeleteChip);
         Click(editor.StyleBar.Swatches.Single(s => (string?)s.Tag == "#34C759"));
         Assert.Equal("#34C759", Selected(editor).ColorHex);
         Assert.Equal("#34C759", editor.Canvas.Session.ColorHex);
@@ -94,8 +92,6 @@ public class StyleBarTests
         Click(bar.CornerChips[0]);
         Assert.Equal(new Style(Palette.Red, StyleSize.ExtraLarge, filled: true, corners: CornerSize.Square), Selected(editor));
         Assert.True(bar.CornerChips[0].IsChecked);
-        Click(bar.DeleteChip!);
-        Assert.Empty(editor.Canvas.Session.Display.Annotations);
     }
 
     [AvaloniaFact]

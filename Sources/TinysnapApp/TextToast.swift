@@ -8,8 +8,18 @@ enum TextCopy {
     private static var toast: TextToast?
 
     static func read(_ image: CGImage, for target: TextReader.Target, on screen: NSScreen?) {
+        // A read takes a blink, except the first after macOS dropped its text model, which
+        // took 26 seconds: anything slower than a blink says it is working.
+        let working = Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            toast?.dismiss()
+            toast = TextToast(title: target == .codes ? "Scanning for a QR code…" : "Reading text…", preview: "",
+                              reading: nil, on: screen, working: true)
+        }
         Task {
             let reading = await Task.detached(priority: .userInitiated) { try? TextReader.read(image, for: target) }.value
+            working.cancel()
             show(reading, for: target, on: screen)
         }
     }
@@ -49,9 +59,12 @@ final class TextToast: NSObject {
     private let previewLabel: NSTextField
     private let reading: TextReading?
     private var timer: Timer?
+    /// Still reading: a spinner beside the title, and no timer, as the result replaces it.
+    private let working: Bool
 
-    init(title: String, preview: String, reading: TextReading?, on screen: NSScreen?) {
+    init(title: String, preview: String, reading: TextReading?, on screen: NSScreen?, working: Bool = false) {
         self.reading = reading
+        self.working = working
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 380, height: 60),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         titleLabel = NSTextField(labelWithString: title)
@@ -90,7 +103,17 @@ final class TextToast: NSObject {
         let row = NSStackView(views: buttons)
         row.isHidden = buttons.isEmpty
 
-        let stack = NSStackView(views: [titleLabel, previewLabel, row])
+        var heading: NSView = titleLabel
+        if working {
+            let spinner = NSProgressIndicator()
+            spinner.style = .spinning
+            spinner.controlSize = .small
+            spinner.startAnimation(nil)
+            let line = NSStackView(views: [spinner, titleLabel])
+            line.spacing = 8
+            heading = line
+        }
+        let stack = NSStackView(views: [heading, previewLabel, row])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
@@ -126,6 +149,7 @@ final class TextToast: NSObject {
 
     private func startTimer() {
         timer?.invalidate()
+        guard !working else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.dismiss() }
         }

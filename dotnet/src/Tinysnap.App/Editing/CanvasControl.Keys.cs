@@ -145,13 +145,6 @@ internal sealed partial class CanvasControl
         SessionChanged();
     }
 
-    public void DeleteSelection()
-    {
-        Session.DeleteSelection();
-        SessionChanged();
-        Focus();
-    }
-
     private void Nudge(double dx, double dy)
     {
         Session.Nudge(dx, dy);

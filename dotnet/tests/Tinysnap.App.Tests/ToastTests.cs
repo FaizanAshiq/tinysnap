@@ -23,6 +23,30 @@ public class ToastTests
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
     [AvaloniaFact]
+    public async Task ASlowReadSaysItIsWorkingUntilTheTextLands()
+    {
+        var setup = Launch();
+        var held = new TaskCompletionSource<TextReading?>();
+        ((FakeTextReader)setup.Platform.Text).Holding = held;
+        var reading = setup.Controller.ReadAndCopy(CanvasHost.Blank(400, 300).Image, false, null);
+        setup.Time.Elapse();
+        Assert.Equal("Reading text…", setup.Controller.Toast!.Heading);
+        Assert.True(setup.Controller.Toast.IsWorking);
+        held.SetResult(new TextReading([], ["Order shipped"]));
+        await reading;
+        Assert.Equal("Text copied", setup.Controller.Toast!.Heading);
+        Assert.False(setup.Controller.Toast.IsWorking);
+    }
+
+    [AvaloniaFact]
+    public async Task AQuickReadGoesStraightToTheResult()
+    {
+        var setup = await Read(new TextReading([], ["Order shipped"]));
+        Assert.Equal("Text copied", setup.Controller.Toast!.Heading);
+        Assert.False(setup.Controller.Toast.IsWorking);
+    }
+
+    [AvaloniaFact]
     public async Task TextIsCopiedAndShown()
     {
         var setup = await Read(new TextReading([], ["Order shipped", "Arrives soon"]));
