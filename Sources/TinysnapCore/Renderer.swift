@@ -171,7 +171,8 @@ struct Canvas {
         let metrics = TextLayout.metrics(of: label, points: points, scale: scale, bold: true)
         let origin = CGPoint(x: center.x - metrics.width / 2,
                              y: center.y - (metrics.ascent + metrics.descent) / 2)
-        TextLayout.draw(label, at: origin, points: points, scale: scale, color: CGColor(gray: 1, alpha: 1), bold: true, in: context)
+        TextLayout.draw(label, at: origin, points: points, scale: scale, color: MeasureShape.textColor(on: color), bold: true,
+                        in: context)
     }
 
     /// A box's corner radius in capture pixels, never more than half its shorter side.
