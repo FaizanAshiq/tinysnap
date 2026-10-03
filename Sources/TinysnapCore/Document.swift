@@ -46,7 +46,9 @@ public struct Document: Equatable, Sendable {
     /// Applied only on export. Nil means the whole capture.
     public var crop: CGRect?
     /// Drawn bottom to top, in creation order.
-    public var annotations: [Annotation]
+    public var annotations: [Annotation] {
+        didSet { numberNewShapes() }
+    }
     /// Nil while there is no backdrop.
     public var backdrop: Backdrop?
     /// The export's size as output pixels per capture pixel, 0.01 to 4. Nil follows the
@@ -60,6 +62,18 @@ public struct Document: Equatable, Sendable {
         self.annotations = annotations
         self.backdrop = backdrop
         self.resize = resize
+        numberNewShapes()
+    }
+
+    /// Each shape without a number takes the next one, in list order: a new shape, a
+    /// duplicate, or every shape of a file from before numbers, counted bottom up.
+    private mutating func numberNewShapes() {
+        guard annotations.contains(where: { $0.serial == 0 }) else { return }
+        var next = (annotations.map(\.serial).max() ?? 0) + 1
+        for index in annotations.indices where annotations[index].serial == 0 {
+            annotations[index].serial = next
+            next += 1
+        }
     }
 
     public var scale: CGFloat { capture.scale }
@@ -115,10 +129,17 @@ public struct Document: Equatable, Sendable {
         return nil
     }
 
-    /// What the layers panel calls a shape: its tool, its text's first line, a step's number,
-    /// a measurement's length as its tag gives it.
+    /// What the layers panel calls a shape: its tool and its count among that tool's shapes,
+    /// its text's first line, a step's number, a measurement's length as its tag gives it.
     public func layerName(of id: Annotation.ID) -> String {
         guard let annotation = annotation(id) else { return "" }
+        if let kind = kindName(of: annotation) {
+            // Counted among the shapes of its kind in the order they were drawn, so no two
+            // rows share a name and reordering renames nothing.
+            let same = annotations.enumerated().filter { kindName(of: $0.element) == kind }
+                .sorted { ($0.element.serial, $0.offset) < ($1.element.serial, $1.offset) }
+            return "\(kind) \((same.firstIndex { $0.element.id == id } ?? 0) + 1)"
+        }
         switch annotation.kind {
         case let .text(_, string):
             let line = string.split(whereSeparator: \.isNewline).first.map(String.init)?
@@ -126,11 +147,20 @@ public struct Document: Equatable, Sendable {
             return line.isEmpty ? "Text" : String(line.prefix(40))
         case .step: return stepNumber(of: id).map { "Step \($0)" } ?? "Step"
         case let .measure(from, to): return "Measure " + MeasureReading.label(forPixels: from.distance(to: to), scale: scale)
+        default: return ""
+        }
+    }
+
+    /// The name a shape shares with every other of its kind, before its number; nil for text,
+    /// steps and measurements, which are named by what they say.
+    private func kindName(of annotation: Annotation) -> String? {
+        switch annotation.kind {
+        case .text, .step, .measure: nil
         // Their tool titles carry a warning that has no place in a list of names.
-        case .blur: return "Blur"
-        case .pixelate: return "Pixelate"
-        case .erase: return "Erase"
-        default: return annotation.tool.title
+        case .blur: "Blur"
+        case .pixelate: "Pixelate"
+        case .erase: "Erase"
+        default: annotation.tool.title
         }
     }
 

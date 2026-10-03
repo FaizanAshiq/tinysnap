@@ -28,7 +28,7 @@ public class DocumentArchiveTests
         Assert.Empty(images);
         Assert.Equal("measure", Json.String(Root(json)["annotations"]![0]!.AsObject(), "kind"));
         var edits = DocumentArchive.Decode(json, _ => null);
-        Assert.Equal(new[] { measure }, edits.Annotations);
+        Assert.Equal(document.Annotations.ToArray(), edits.Annotations);
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class DocumentArchiveTests
         var items = Root(json)["annotations"]!.AsArray().Select(item => item!.AsObject()).ToList();
         Assert.Equal([true, false, false], items.Select(item => item.ContainsKey("locked")));
         Assert.Equal([false, true, false], items.Select(item => item.ContainsKey("hidden")));
-        Assert.Equal(new[] { locked, hidden, plain }, DocumentArchive.Decode(json, _ => null).Annotations);
+        Assert.Equal(document.Annotations.ToArray(), DocumentArchive.Decode(json, _ => null).Annotations);
     }
 
     [Fact]

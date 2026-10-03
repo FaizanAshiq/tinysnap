@@ -53,7 +53,8 @@ public class LayersPanelTests
         Open(editor);
         var ids = Order(editor);
         Assert.Equal([ids[1], ids[0]], editor.Layers.Rows.Select(row => row.Id));
-        Assert.Equal(["Rectangle", "Rectangle"], editor.Layers.Rows.Select(row => row.Name));
+        // Top first, each counted in the order it was drawn: never two rows of the same name.
+        Assert.Equal(["Rectangle 2", "Rectangle 1"], editor.Layers.Rows.Select(row => row.Name));
         Assert.Equal("Layers", AutomationProperties.GetName(editor.Layers.List));
     }
 
@@ -75,10 +76,10 @@ public class LayersPanelTests
         var top = editor.Layers.Rows[0];
         Click(top.HideButton);
         Assert.True(editor.Canvas.Session.Display.Annotation(top.Id)!.IsHidden);
-        Assert.Equal("Show Rectangle", AutomationProperties.GetName(editor.Layers.Rows[0].HideButton));
+        Assert.Equal("Show Rectangle 2", AutomationProperties.GetName(editor.Layers.Rows[0].HideButton));
         Click(editor.Layers.Rows[1].LockButton);
         Assert.True(editor.Canvas.Session.Display.Annotation(editor.Layers.Rows[1].Id)!.IsLocked);
-        Assert.Equal("Rectangle, locked", AutomationProperties.GetName(editor.Layers.Rows[1].Item));
+        Assert.Equal("Rectangle 1, locked", AutomationProperties.GetName(editor.Layers.Rows[1].Item));
     }
 
     /// <summary>Presses the top row and drags it to the lower half of the second, without
@@ -378,7 +379,7 @@ public class LayersPanelTests
         var editor = WithTwoShapes();
         Open(editor);
         var ids = Order(editor);
-        Assert.Equal("Delete Rectangle", AutomationProperties.GetName(editor.Layers.Rows[0].DeleteButton));
+        Assert.Equal("Delete Rectangle 2", AutomationProperties.GetName(editor.Layers.Rows[0].DeleteButton));
         Click(editor.Layers.Rows[0].DeleteButton);
         Assert.Equal([ids[0]], Order(editor));
         Click(editor.Layers.Rows[0].LockButton);

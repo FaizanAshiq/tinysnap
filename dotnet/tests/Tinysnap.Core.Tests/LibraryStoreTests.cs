@@ -163,7 +163,7 @@ public class LibraryStoreTests
         Assert.True(File.Exists(pastedPath));
         var reopened = Opened(library, entry).Document;
         Assert.Equal(document.Crop, reopened.Crop);
-        Assert.Equal(arrow, reopened.Annotations[0]);
+        Assert.Equal(document.Annotations[0], reopened.Annotations[0]);
         var kind = Assert.IsType<AnnotationKind.Image>(reopened.Annotations[^1].Kind);
         Assert.Equal(new Rect(10, 10, 12, 10), kind.Rect);
         Assert.Equal(6, kind.Pasted.Image.Width);

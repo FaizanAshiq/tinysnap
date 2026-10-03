@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 @testable import TinysnapCore
 
@@ -199,7 +200,46 @@ struct LayerTests {
         #expect(doc.layerName(of: first.id) == "Step 1")
         #expect(doc.layerName(of: second.id) == "Step 2")
         #expect(doc.layerName(of: hiddenStep.id) == "Step")
-        #expect(doc.layerName(of: blur.id) == "Blur")
-        #expect(doc.layerName(of: arrow.id) == "Arrow")
+        #expect(doc.layerName(of: blur.id) == "Blur 1")
+        #expect(doc.layerName(of: arrow.id) == "Arrow 1")
+    }
+
+    private func names(_ document: Document) -> [String] {
+        document.annotations.map { document.layerName(of: $0.id) }
+    }
+
+    @Test func eachShapeIsCountedAmongItsKindInTheOrderItWasDrawn() {
+        let first = Fixture.annotation(.rectangle(CGRect(x: 10, y: 10, width: 40, height: 30)))
+        let line = Fixture.annotation(.line(from: CGPoint(x: 5, y: 5), to: CGPoint(x: 90, y: 90)))
+        let second = Fixture.annotation(.rectangle(CGRect(x: 60, y: 10, width: 40, height: 30)))
+        #expect(names(document([first, line, second])) == ["Rectangle 1", "Line 1", "Rectangle 2"])
+    }
+
+    @Test func aNumberStaysWithItsShapeThroughReorderAndSaveAndCloseUpOnDelete() throws {
+        let first = Fixture.annotation(.rectangle(CGRect(x: 10, y: 10, width: 40, height: 30)))
+        let second = Fixture.annotation(.rectangle(CGRect(x: 60, y: 10, width: 40, height: 30)))
+        var editor = EditorSession(document: document([first, second]), tool: .select)
+        editor.moveLayer(second.id, to: 0)
+        #expect(names(editor.display) == ["Rectangle 2", "Rectangle 1"])
+        let (json, _) = try DocumentArchive.encode(editor.display, captured: Date(timeIntervalSince1970: 0))
+        let reopened = document(try DocumentArchive.decode(json) { _ in nil }.annotations)
+        #expect(names(reopened) == ["Rectangle 2", "Rectangle 1"])
+        editor.select(first.id)
+        editor.deleteSelection()
+        #expect(names(editor.display) == ["Rectangle 1"])
+    }
+
+    @Test func aDuplicateTakesTheNextNumber() {
+        let first = Fixture.annotation(.rectangle(CGRect(x: 10, y: 10, width: 40, height: 30)))
+        let second = Fixture.annotation(.rectangle(CGRect(x: 60, y: 10, width: 40, height: 30)))
+        var editor = EditorSession(document: document([first, second]), tool: .select)
+        editor.select(first.id)
+        editor.duplicateSelection()
+        #expect(names(editor.display) == ["Rectangle 1", "Rectangle 3", "Rectangle 2"])
+    }
+
+    @Test func aFileFromBeforeNumbersCountsBottomUp() throws {
+        let json = Data(##"{"version":1,"captured":"2026-10-02T16:34:05Z","scale":2,"annotations":[{"id":"F86ED62D-E65F-492A-9835-C9A1EF940F71","kind":"oval","rect":{"x":34,"y":40,"width":30,"height":20},"style":{"colorHex":"#FF3B30","size":"large"}},{"id":"0A6ED62D-E65F-492A-9835-C9A1EF940F72","kind":"oval","rect":{"x":84,"y":40,"width":30,"height":20},"style":{"colorHex":"#FF3B30","size":"large"}}]}"##.utf8)
+        #expect(names(document(try DocumentArchive.decode(json) { _ in nil }.annotations)) == ["Oval 1", "Oval 2"])
     }
 }

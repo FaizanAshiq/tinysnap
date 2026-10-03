@@ -19,7 +19,7 @@ struct DocumentArchiveTests {
         #expect(images.isEmpty)
         #expect(String(decoding: json, as: UTF8.self).contains(#""kind" : "measure""#))
         let edits = try DocumentArchive.decode(json) { _ in nil }
-        #expect(edits.annotations == [measure])
+        #expect(edits.annotations == document.annotations)
     }
 
     @Test func aMeasurementsMovedTagComesBack() throws {
@@ -45,7 +45,7 @@ struct DocumentArchiveTests {
         let text = String(decoding: json, as: UTF8.self)
         #expect(text.components(separatedBy: "\"locked\"").count == 2)
         #expect(text.components(separatedBy: "\"hidden\"").count == 2)
-        #expect(try DocumentArchive.decode(json) { _ in nil }.annotations == [locked, hidden, plain])
+        #expect(try DocumentArchive.decode(json) { _ in nil }.annotations == document.annotations)
     }
 
     @Test func aFileFromBeforeLayersOpensUnlockedAndShown() throws {
