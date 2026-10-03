@@ -13,14 +13,14 @@ public static partial class Renderer
     /// with the region it covers. Null when nothing is in view, or when a box that reads back makes
     /// it too big to draw.</summary>
     public static (SKImage Image, Rect Region)? RenderCloseUp(Document document, Rect visible, double outputScale, bool framed,
-                                                             IReadOnlySet<Guid>? hidden = null)
+                                                             Guid? typing = null)
     {
         if (CloseUpRegion(document, visible, framed) is not { } region) return null;
         var size = PixelSize(region, outputScale);
         // ponytail: a huge blur half in view at a deep zoom shows as squares; render only its
         // visible part with the reach it needs if that ever matters.
         if (size.Width * size.Height > CloseUpPixelLimit) return null;
-        return Render(document, region, outputScale, hidden, sharpPixels: true) is { } image ? (image, region) : null;
+        return Render(document, region, outputScale, typing: typing, sharpPixels: true) is { } image ? (image, region) : null;
     }
 
     /// <summary><paramref name="visible"/> on whole capture pixels, inside the output when framed,

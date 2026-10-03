@@ -100,7 +100,12 @@ public sealed record Annotation(Guid Id, AnnotationKind Kind, Style Style, doubl
             case AnnotationKind.Measure(var from, var to):
                 return MeasureShape.Extent(from, to, size / scale, scale, LabelAt);
             case AnnotationKind.Text(var origin, var text):
-                return new Rect(origin, TextLayout.Size(text, size / scale, scale));
+            {
+                var letters = new Rect(origin, TextLayout.Size(text, size / scale, scale));
+                if (!Style.Filled) return letters;
+                var padding = TextLayout.BoxPadding(size / scale);
+                return letters.Inset(-padding.Width * scale, -padding.Height * scale);
+            }
             case AnnotationKind.Freehand(var points):
                 if (points.IsEmpty) return Rect.Null;
                 var box = points.Aggregate(new Rect(points[0], Size.Zero), (box, p) => box.Union(new Rect(p, Size.Zero)));

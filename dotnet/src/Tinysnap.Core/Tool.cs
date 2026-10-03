@@ -79,7 +79,8 @@ public static class ToolInfo
     public static bool HasColor(this Tool tool) => tool is Tool.Arrow or Tool.Line or Tool.Rectangle or Tool.Oval
         or Tool.Text or Tool.Highlighter or Tool.Freehand or Tool.Step or Tool.Measure;
 
-    public static bool HasFill(this Tool tool) => tool is Tool.Rectangle or Tool.Oval;
+    /// <summary>Boxes and ovals filled instead of outlined, and text set on a box in its colour.</summary>
+    public static bool HasFill(this Tool tool) => tool is Tool.Rectangle or Tool.Oval or Tool.Text;
 
     /// <summary>Text only: its lines set left, centred or right.</summary>
     public static bool HasAlign(this Tool tool) => tool is Tool.Text;

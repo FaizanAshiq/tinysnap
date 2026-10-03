@@ -52,6 +52,7 @@ public class StyleBarTests
 
         editor.Canvas.Choose(Tool.Text);
         Assert.Equal(3, bar.AlignChips.Count);
+        Assert.Equal(2, bar.FillChips.Count);
 
         editor.Canvas.Choose(Tool.Rectangle);
         Assert.Equal(2, bar.FillChips.Count);
@@ -85,8 +86,8 @@ public class StyleBarTests
         Assert.Equal("#123ABC", Selected(editor).ColorHex);
     }
 
-    [AvaloniaFact]
-    public void AnAlignChipSetsTheTextAndTheBoxItIsTypedIn()
+    /// <summary>An editor with "Hi" being typed in its text field.</summary>
+    private static (EditorWindow Editor, EditorSession Session) Typing()
     {
         var session = new EditorSession(new Document(CanvasHost.Blank(400, 300)), Tool.Text);
         var editor = new EditorWindow(session, DateTimeOffset.Now, TestServices.Make());
@@ -97,11 +98,29 @@ public class StyleBarTests
         editor.MouseDown(at, MouseButton.Left);
         editor.MouseUp(at, MouseButton.Left);
         editor.KeyTextInput("Hi");
+        return (editor, session);
+    }
+
+    [AvaloniaFact]
+    public void AnAlignChipSetsTheTextAndTheBoxItIsTypedIn()
+    {
+        var (editor, session) = Typing();
         Click(editor.StyleBar.AlignChips[1]);
         Assert.Equal(TextAlign.Center, Assert.Single(session.Display.Annotations).Style.Align);
         Assert.True(editor.StyleBar.AlignChips[1].IsChecked);
         var box = editor.Canvas.GetVisualDescendants().OfType<TextBox>().Single();
         Assert.Equal(Avalonia.Media.TextAlignment.Center, box.TextAlignment);
+    }
+
+    /// <summary>Red text on a box types in white, the colour its letters are drawn in.</summary>
+    [AvaloniaFact]
+    public void TextOnABoxIsTypedInLettersThatReadOnTheBox()
+    {
+        var (editor, session) = Typing();
+        Click(editor.StyleBar.FillChips[1]);
+        Assert.True(Assert.Single(session.Display.Annotations).Style.Filled);
+        var box = editor.Canvas.GetVisualDescendants().OfType<TextBox>().Single();
+        Assert.Equal(Avalonia.Media.Colors.White, Assert.IsType<Avalonia.Media.SolidColorBrush>(box.Foreground).Color);
     }
 
     [AvaloniaFact]
