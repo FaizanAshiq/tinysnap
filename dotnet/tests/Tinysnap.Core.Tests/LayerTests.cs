@@ -53,6 +53,35 @@ public class LayerTests
     }
 
     [Fact]
+    public void ADraggedRowMovesItsShapeAsItGoesAndLandsAsOneStep()
+    {
+        var editor = Session(Tool.Rectangle);
+        foreach (var x in new[] { 10.0, 110, 210 }) Drag(editor, new Point(x, 10), new Point(x + 50, 60));
+        var ids = Order(editor);
+        editor.DragLayer(ids[0], 1);
+        editor.DragLayer(ids[0], 2);
+        Assert.Equal([ids[1], ids[2], ids[0]], Order(editor));
+        editor.DropLayer();
+        // Every place it passed on the way is one step, not two.
+        editor.Undo();
+        Assert.Equal(ids, Order(editor));
+    }
+
+    [Fact]
+    public void ARowLetGoOutsideTheListPutsItsShapeBack()
+    {
+        var editor = Session(Tool.Rectangle);
+        foreach (var x in new[] { 10.0, 110, 210 }) Drag(editor, new Point(x, 10), new Point(x + 50, 60));
+        var ids = Order(editor);
+        editor.DragLayer(ids[2], 0);
+        editor.CancelLayerDrag();
+        Assert.Equal(ids, Order(editor));
+        // Nothing was kept: an undo takes back the last rectangle drawn.
+        editor.Undo();
+        Assert.Equal([ids[0], ids[1]], Order(editor));
+    }
+
+    [Fact]
     public void ALockedShapeCannotChangeAndADrawingToolDrawsOverIt()
     {
         var editor = Session(Tool.Blur);

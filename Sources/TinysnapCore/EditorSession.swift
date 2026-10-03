@@ -464,15 +464,30 @@ public struct EditorSession {
         moveLayer(id, to: target)
     }
 
-    /// Puts a shape at `index` in the list, bottom first, as a drag in the layers panel
-    /// does. One undo step, and none when it lands where it was.
+    /// Puts a shape at `index` in the list, bottom first, in one go, as Arrange does. One
+    /// undo step, and none when it lands where it was.
     public mutating func moveLayer(_ id: Annotation.ID, to index: Int) {
+        dragLayer(id, to: index)
+        dropLayer()
+    }
+
+    /// A row being dragged in the layers list: its shape moves as the pointer goes, kept by
+    /// `dropLayer` as one step, or put back by `cancelLayerDrag`.
+    public mutating func dragLayer(_ id: Annotation.ID, to index: Int) {
         finishTyping()
         guard phase == .idle, let from = display.annotations.firstIndex(where: { $0.id == id }) else { return }
         let target = min(max(index, 0), display.annotations.count - 1)
         guard target != from else { return }
         display.annotations.insert(display.annotations.remove(at: from), at: target)
+    }
+
+    public mutating func dropLayer() {
+        guard phase == .idle else { return }
         history.commit(display)
+    }
+
+    public mutating func cancelLayerDrag() {
+        display = history.document
     }
 
     public mutating func setLocked(_ id: Annotation.ID, _ locked: Bool) {

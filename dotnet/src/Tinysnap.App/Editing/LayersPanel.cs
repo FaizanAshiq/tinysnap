@@ -35,8 +35,15 @@ internal sealed class LayersPanel : Border
     /// <summary>A row was chosen, or none.</summary>
     public event Action<Guid?>? Selected;
 
-    /// <summary>A shape dragged to a place in the document's list, bottom first.</summary>
-    public event Action<Guid, int>? Moved;
+    /// <summary>A row dragged to a place in the document's list, bottom first: its shape moves
+    /// there at once, before it is let go.</summary>
+    public event Action<Guid, int>? DraggedTo;
+
+    /// <summary>The dragged row let go on the list, where it now stands.</summary>
+    public event Action? Dropped;
+
+    /// <summary>The dragged row let go anywhere else, or Esc: its shape goes back.</summary>
+    public event Action? DragCancelled;
 
     public event Action<Guid, bool>? HideChanged;
     public event Action<Guid, bool>? LockChanged;
@@ -50,6 +57,11 @@ internal sealed class LayersPanel : Border
     public event Action? Clicked;
 
     public event Action? CloseRequested;
+
+    /// <summary>Ctrl+Z in the list, and Ctrl+Shift+Z or Ctrl+Y: undo and redo work wherever the
+    /// keys are, as on the Mac, a row dragged included.</summary>
+    public event Action? UndoRequested;
+    public event Action? RedoRequested;
 
     internal ListBox List { get; }
     /// <summary>The row being dragged, lifted above the list under the pointer.</summary>
@@ -69,20 +81,14 @@ internal sealed class LayersPanel : Border
     internal IReadOnlyList<LayerRow> Rows => rows;
 
     private readonly TextBlock count = new() { FontSize = 12, Opacity = 0.6, HorizontalAlignment = HorizontalAlignment.Right };
-    private readonly Border dropLine = new()
-    {
-        Height = 2,
-        IsVisible = false,
-        IsHitTestVisible = false,
-        VerticalAlignment = VerticalAlignment.Top,
-        [!BackgroundProperty] = new DynamicResourceExtension("SystemControlHighlightAccentBrush"),
-    };
     private List<LayerRow> rows = [];
     private Shape[] shown = [];
     /// <summary>Set while the list is told the selection, so that is not sent back as a choice.</summary>
     private bool syncing;
     private (Guid Id, Point Start)? press;
-    private int? dropRow;
+    /// <summary>The row being dragged, faded where it stands while its card follows the pointer.</summary>
+    private Guid? lifted;
+    private IPointer? dragging;
 
     public LayersPanel()
     {
@@ -117,7 +123,7 @@ internal sealed class LayersPanel : Border
 
         DockPanel.SetDock(header, Dock.Top);
         DockPanel.SetDock(EmptyNote, Dock.Top);
-        Child = new DockPanel { Children = { header, EmptyNote, new Panel { Children = { List, dropLine, DragGhost } } } };
+        Child = new DockPanel { Children = { header, EmptyNote, new Panel { Children = { List, DragGhost } } } };
     }
 
     /// <summary>The chosen row filled with the accent colour, its words and icons white, as the
@@ -258,7 +264,13 @@ internal sealed class LayersPanel : Border
             Grid.SetColumn(control, column);
             grid.Children.Add(control);
         }
-        var item = new ListBoxItem { Content = grid, Padding = new Thickness(8, 0, 4, 0), MinHeight = RowHeight };
+        var item = new ListBoxItem
+        {
+            Content = grid,
+            Padding = new Thickness(8, 0, 4, 0),
+            MinHeight = RowHeight,
+            Opacity = id == lifted ? 0.4 : 1,
+        };
         // Duplicate and delete show under the pointer and on the chosen row; the canvas borders
         // the shape.
         void ShowActions(bool shown) => duplicate.IsVisible = delete.IsVisible = shown;
@@ -309,12 +321,24 @@ internal sealed class LayersPanel : Border
 
     private void OnListKey(object? sender, KeyEventArgs e)
     {
+        if ((e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0)
+        {
+            if (e.Key is not (Key.Z or Key.Y)) return;
+            var redo = e.Key == Key.Y || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+            (redo ? RedoRequested : UndoRequested)?.Invoke();
+            e.Handled = true;
+            return;
+        }
         if (e.KeyModifiers != KeyModifiers.None) return;
         switch (e.Key)
         {
             case Key.Space when List.SelectedIndex >= 0 && List.SelectedIndex < rows.Count:
                 var row = rows[List.SelectedIndex];
                 HideChanged?.Invoke(row.Id, !row.IsHidden);
+                e.Handled = true;
+                break;
+            case Key.Escape when lifted is not null:
+                EndDrag(dropped: false);
                 e.Handled = true;
                 break;
             case Key.Escape:
@@ -326,15 +350,15 @@ internal sealed class LayersPanel : Border
 
     // Dragging a row
 
-    /// <summary>Lands the shape of <paramref name="id"/> above row <paramref name="row"/>, counted
-    /// top first, <c>Rows.Count</c> being below the last. The document wants a place in its list,
-    /// bottom first, once the shape has left its old one.</summary>
-    internal void Drop(Guid id, int row)
+    /// <summary>Moves the shape of <paramref name="id"/> to above row <paramref name="row"/>,
+    /// counted top first, <c>Rows.Count</c> being below the last. The document wants a place in
+    /// its list, bottom first, once the shape has left its old one.</summary>
+    internal void DragTo(Guid id, int row)
     {
         var from = rows.FindIndex(r => r.Id == id);
-        if (from < 0) return;
         var to = from < row ? row - 1 : row;
-        Moved?.Invoke(id, rows.Count - 1 - to);
+        if (from < 0 || to == from) return;
+        DraggedTo?.Invoke(id, rows.Count - 1 - to);
     }
 
     /// <summary>A drag starts only on a row's body: not on its buttons, nor on the list's
@@ -351,29 +375,31 @@ internal sealed class LayersPanel : Border
     private void OnDragged(object? sender, PointerEventArgs e)
     {
         if (press is not { } held) return;
-        // A release the list never heard about leaves nothing armed.
+        // A release the list never heard about puts the shape back.
         if (!e.GetCurrentPoint(List).Properties.IsLeftButtonPressed)
         {
-            EndDrag();
+            EndDrag(dropped: false);
             return;
         }
         var at = e.GetPosition(List);
         // A few pixels of travel before it counts as a drag, so a click never moves anything.
-        if (dropRow is null && Math.Abs(at.Y - held.Start.Y) < 4) return;
-        if (dropRow is null) Lift(rows.First(row => row.Id == held.Id));
+        if (lifted is null && Math.Abs(at.Y - held.Start.Y) < 4) return;
+        if (lifted is null) Lift(rows.First(row => row.Id == held.Id));
+        dragging = e.Pointer;
         e.Pointer.Capture(List);
         DragGhost.Margin = new Thickness(4, at.Y - RowHeight / 2, 4, 0);
-        // Over a row, its upper half lands the shape above it and its lower half below.
-        dropRow = Math.Clamp((int)Math.Round(FromFirstRow(e) / RowHeight), 0, rows.Count);
-        var top = rows[0].Item.TranslatePoint(default, List)?.Y ?? 0;
-        dropLine.Margin = new Thickness(4, top + dropRow.Value * RowHeight - 1, 4, 0);
-        dropLine.IsVisible = true;
+        // Over a row, its upper half lands the shape above it and its lower half below; the
+        // row and its shape move there at once.
+        DragTo(held.Id, Math.Clamp((int)Math.Round(FromFirstRow(e) / RowHeight), 0, rows.Count));
         e.Handled = true;
     }
 
-    /// <summary>The dragged row's icon and name on a raised card that follows the pointer.</summary>
+    /// <summary>The dragged row's icon and name on a raised card that follows the pointer, and
+    /// the row itself faded where it stands.</summary>
     private void Lift(LayerRow row)
     {
+        lifted = row.Id;
+        row.Item.Opacity = 0.4;
         var shape = shown.First(s => s.Id == row.Id);
         var icon = Glyphs.Icon(ToolIcons.For(shape.Tool), 16);
         icon.VerticalAlignment = VerticalAlignment.Center;
@@ -386,27 +412,33 @@ internal sealed class LayersPanel : Border
         DragGhost.IsVisible = true;
     }
 
-    private void EndDrag()
+    /// <summary>Kept where it stands when <paramref name="dropped"/>, put back otherwise.</summary>
+    private void EndDrag(bool dropped)
     {
+        var wasLifted = lifted is not null;
         press = null;
-        dropRow = null;
-        dropLine.IsVisible = false;
+        lifted = null;
+        dragging?.Capture(null);
+        dragging = null;
         DragGhost.IsVisible = false;
+        foreach (var row in rows) row.Item.Opacity = 1;
+        if (!wasLifted) return;
+        if (dropped) Dropped?.Invoke();
+        else DragCancelled?.Invoke();
     }
 
     private void OnReleased(object? sender, PointerReleasedEventArgs e)
     {
-        var (held, landing) = (press, dropRow);
-        EndDrag();
-        if (held is null) return;
-        if (landing is { } row)
+        if (press is null) return;
+        if (lifted is null)
         {
-            e.Pointer.Capture(null);
-            Drop(held.Value.Id, row);
-            e.Handled = true;
+            press = null;
+            Clicked?.Invoke();
             return;
         }
-        Clicked?.Invoke();
+        // Let go over the list it stays; anywhere else it goes back, as on the Mac.
+        EndDrag(dropped: new Avalonia.Rect(List.Bounds.Size).Contains(e.GetPosition(List)));
+        e.Handled = true;
     }
 
     /// <summary>How far below the first row's top the pointer is, wherever the list is scrolled.</summary>

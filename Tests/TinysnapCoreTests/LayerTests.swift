@@ -47,6 +47,31 @@ struct LayerTests {
         #expect(editor.display.annotations.map(\.id) == ids)
     }
 
+    @Test func aDraggedRowMovesItsShapeAsItGoesAndLandsAsOneStep() {
+        var editor = session(.rectangle)
+        for x in [10.0, 110, 210] { drag(&editor, from: CGPoint(x: x, y: 10), to: CGPoint(x: x + 50, y: 60)) }
+        let ids = editor.display.annotations.map(\.id)
+        editor.dragLayer(ids[0], to: 1)
+        editor.dragLayer(ids[0], to: 2)
+        #expect(editor.display.annotations.map(\.id) == [ids[1], ids[2], ids[0]])
+        editor.dropLayer()
+        // Every place it passed on the way is one step, not two.
+        editor.undo()
+        #expect(editor.display.annotations.map(\.id) == ids)
+    }
+
+    @Test func aRowLetGoOutsideTheListPutsItsShapeBack() {
+        var editor = session(.rectangle)
+        for x in [10.0, 110, 210] { drag(&editor, from: CGPoint(x: x, y: 10), to: CGPoint(x: x + 50, y: 60)) }
+        let ids = editor.display.annotations.map(\.id)
+        editor.dragLayer(ids[2], to: 0)
+        editor.cancelLayerDrag()
+        #expect(editor.display.annotations.map(\.id) == ids)
+        // Nothing was kept: an undo takes back the last rectangle drawn.
+        editor.undo()
+        #expect(editor.display.annotations.map(\.id) == [ids[0], ids[1]])
+    }
+
     @Test func aLockedShapeCannotChangeAndADrawingToolDrawsOverIt() {
         var editor = session(.blur)
         drag(&editor, from: CGPoint(x: 100, y: 100), to: CGPoint(x: 200, y: 160))

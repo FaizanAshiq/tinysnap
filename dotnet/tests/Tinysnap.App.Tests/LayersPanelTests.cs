@@ -79,16 +79,67 @@ public class LayersPanelTests
         Assert.Equal("Rectangle, locked", AutomationProperties.GetName(editor.Layers.Rows[1].Item));
     }
 
+    /// <summary>Presses the top row and drags it to the lower half of the second, without
+    /// letting go.</summary>
+    private static Point DragTopRowDown(EditorWindow editor)
+    {
+        var top = editor.Layers.Rows[0].Item;
+        var start = top.TranslatePoint(new Point(40, 16), editor)!.Value;
+        var end = top.TranslatePoint(new Point(40, 16 + 32 + 10), editor)!.Value;
+        editor.MouseDown(start, MouseButton.Left);
+        editor.MouseMove(new Point(start.X, start.Y + 6), RawInputModifiers.LeftMouseButton);
+        editor.MouseMove(end, RawInputModifiers.LeftMouseButton);
+        return end;
+    }
+
     [AvaloniaFact]
-    public void DroppingARowReordersAsOneUndoStep()
+    public void ADraggedRowMovesItsShapeBeforeItIsLetGoAndLandsAsOneUndoStep()
     {
         var editor = WithTwoShapes();
         Open(editor);
+        editor.UpdateLayout();
         var ids = Order(editor);
-        editor.Layers.Drop(ids[1], 2);
+        var end = DragTopRowDown(editor);
+        // Already moved, list and canvas, while the button is still down; the row stays faded.
         Assert.Equal([ids[1], ids[0]], Order(editor));
+        Assert.Equal(ids[1], editor.Layers.Rows[1].Id);
+        Assert.Equal(0.4, editor.Layers.Rows[1].Item.Opacity);
+        editor.MouseUp(end, MouseButton.Left);
+        Assert.Equal([ids[1], ids[0]], Order(editor));
+        Assert.Equal(1, editor.Layers.Rows[1].Item.Opacity);
         Press(editor, Key.Z, RawInputModifiers.Control, "z");
         Assert.Equal(ids, Order(editor));
+    }
+
+    [AvaloniaFact]
+    public void ARowLetGoOutsideTheListGoesBack()
+    {
+        var editor = WithTwoShapes();
+        Open(editor);
+        editor.UpdateLayout();
+        var ids = Order(editor);
+        var end = DragTopRowDown(editor);
+        var outside = new Point(end.X - 300, end.Y);
+        editor.MouseMove(outside, RawInputModifiers.LeftMouseButton);
+        editor.MouseUp(outside, MouseButton.Left);
+        Assert.Equal(ids, Order(editor));
+        // Nothing was kept: an undo takes back the second shape drawn.
+        Press(editor, Key.Z, RawInputModifiers.Control, "z");
+        Assert.Equal([ids[0]], Order(editor));
+    }
+
+    [AvaloniaFact]
+    public void EscWhileDraggingPutsTheRowBackAndKeepsThePanel()
+    {
+        var editor = WithTwoShapes();
+        Open(editor);
+        editor.UpdateLayout();
+        var ids = Order(editor);
+        DragTopRowDown(editor);
+        Press(editor, Key.Escape);
+        Assert.Equal(ids, Order(editor));
+        Assert.True(editor.Layers.IsVisible);
+        Assert.False(editor.Layers.DragGhost.IsVisible);
     }
 
     [AvaloniaFact]
