@@ -42,12 +42,13 @@ public sealed class CaptureController
         this.preferences = preferences;
         this.library = library;
         this.time = time;
+        Tabs = new WindowTabs(Raise);
         services = new EditorServices(platform.Clipboard, () => preferences.Current, dialogs ?? new AvaloniaDialogs(), Pin,
                                       preferences.RememberStyles, library, () => LibraryChanged?.Invoke(), time,
                                       () => ShowLibrary(), ReadAndCopy,
                                       measure => preferences.Update(p => p with { Measure = measure }),
                                       backdrop => preferences.Update(p => p with { Backdrop = backdrop }), ReadWallpaper,
-                                      shows => preferences.Update(p => p with { ShowsLayers = shows }));
+                                      shows => preferences.Update(p => p with { ShowsLayers = shows }), Tabs);
         // A Measure setting changed in one editor reaches every other.
         preferences.Changed += changed =>
         {
@@ -99,7 +100,7 @@ public sealed class CaptureController
             ShowSettings();
             return;
         }
-        foreach (var editor in editors) Raise(editor);
+        if (Tabs.Shown is { } shown) Tabs.Show(shown);
     }
 
     /// <summary>The countdown, the last area, or anything else the tray menu shows changed.</summary>
@@ -417,7 +418,7 @@ public sealed class CaptureController
     {
         if (editors.FirstOrDefault(e => e.Entry == entry) is { } open)
         {
-            Raise(open);
+            Tabs.Show(open);
             return;
         }
         if (library.Open(entry) is not { } opened) return;
@@ -461,8 +462,9 @@ public sealed class CaptureController
             editors.Remove(editor);
             if (editor.PendingRender() is var (edited, kept)) Render(kept, edited);
         };
-        editor.Show();
-        Raise(editor);
+        // A new capture joins the window that is up, as a tab; the first places itself.
+        editor.PlacesItself = Tabs.Shown is null;
+        Tabs.Show(editor);
     }
 
     private void ShowThumbnail(Document document, PixelRect around, LibraryEntry? entry)
@@ -555,6 +557,9 @@ public sealed class CaptureController
 
     internal SettingsWindow? OpenSettings => settingsWindow;
 
+    /// <summary>Every capture and the library, as tabs of one window.</summary>
+    internal WindowTabs Tabs { get; }
+
     internal EditorServices Services => services;
 
     internal IFileActions Files => platform.Files;
@@ -567,6 +572,7 @@ public sealed class CaptureController
             libraryWindow = new LibraryWindow(this);
             libraryWindow.Closed += (_, _) => libraryWindow = null;
         }
+        Tabs.Show(libraryWindow);
         libraryWindow.ShowInFront();
         return libraryWindow;
     }

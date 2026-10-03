@@ -90,7 +90,9 @@ internal sealed class LibraryWindow : Window
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
             Padding = new Thickness(0, 0, 0, 24),
         };
-        Content = new DockPanel { Children = { toolbar, new Panel { Children = { scroll, emptyNote } } } };
+        var strip = new WindowTabStrip(captures.Tabs, this);
+        DockPanel.SetDock(strip, Dock.Top);
+        Content = new DockPanel { Children = { strip, toolbar, new Panel { Children = { scroll, emptyNote } } } };
 
         captures.LibraryChanged += Reload;
         Closed += (_, _) =>

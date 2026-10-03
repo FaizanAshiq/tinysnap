@@ -91,6 +91,10 @@ internal sealed class EditorWindow : Window
     /// <summary>Opens and closes the layers panel, under Library in the rail.</summary>
     internal ToggleButton LayersButton { get; }
 
+    /// <summary>False for a capture joining the window that is up, as a tab: it takes that
+    /// window's place and size instead of sizing itself to the capture.</summary>
+    internal bool PlacesItself { get; set; } = true;
+
     /// <summary>The strip down the window's right edge, under the toolbar.</summary>
     internal Control Rail { get; }
 
@@ -290,7 +294,14 @@ internal sealed class EditorWindow : Window
         var page = new Grid { Children = { scroll, StyleBar, Layers, TextHint } };
         // Tall lists scroll inside the panel rather than run off the window.
         page.SizeChanged += (_, e) => Layers.MaxHeight = Math.Max(80, e.NewSize.Height - Layers.Margin.Top - 12);
-        Content = new DockPanel { Children = { Toolbar, Rail, page } };
+        var dock = new DockPanel { Children = { Toolbar, Rail, page } };
+        if (services.Tabs is { } tabs)
+        {
+            var strip = new WindowTabStrip(tabs, this);
+            DockPanel.SetDock(strip, Dock.Top);
+            dock.Children.Insert(0, strip);
+        }
+        Content = dock;
         WireLayers();
         PaintGround();
         ActualThemeVariantChanged += (_, _) => PaintGround();
@@ -309,7 +320,9 @@ internal sealed class EditorWindow : Window
         {
             Toolbar.Measure(Avalonia.Size.Infinity);
             MinWidth = Toolbar.DesiredSize.Width;
-            Place();
+            if (PlacesItself) Place();
+            // A tab fits its capture to the window it joined, once laid out at that size.
+            else Avalonia.Threading.Dispatcher.UIThread.Post(Refit, Avalonia.Threading.DispatcherPriority.Background);
             Canvas.Focus();
         };
         Closed += (_, _) =>
@@ -489,15 +502,8 @@ internal sealed class EditorWindow : Window
         Height = client.Height;
         if (work is not { } workArea) return;
         var size = new PixelSize((int)((client.Width + frame.Width) * scaling), (int)((client.Height + frame.Height) * scaling));
-        var position = new PixelPoint(workArea.X + (workArea.Width - size.Width) / 2, workArea.Y + (workArea.Height - size.Height) / 2);
-        if (Open.LastOrDefault(e => e != this && e.IsVisible && Screens.ScreenFromWindow(e) == screen) is { } previous)
-        {
-            var step = (int)(28 * scaling);
-            position = new PixelPoint(previous.Position.X + step, previous.Position.Y + step);
-            if (position.X + size.Width > workArea.Right || position.Y + size.Height > workArea.Bottom)
-                position = new PixelPoint(workArea.X + step, workArea.Y + step);
-        }
-        Position = position;
+        // Later captures join this window as tabs, so there is no window of another to step past.
+        Position = new PixelPoint(workArea.X + (workArea.Width - size.Width) / 2, workArea.Y + (workArea.Height - size.Height) / 2);
     }
 
     private void ZoomTo(double zoom) => Canvas.Zoom = EditorFit.Clamp(zoom);
@@ -748,6 +754,7 @@ internal sealed class EditorWindow : Window
         Canvas.SessionChanged();
         if (Entry is not null && Keep(renderingImage: false)) return;
         if (!Canvas.Session.IsUnsaved) return;
+        ShowTab();
         var asking = services.Dialogs.AskToSave(this, libraryFailed: Entry is not null);
         // An answer already given decides this close; closing again from inside it would re-enter.
         if (asking.IsCompleted)
@@ -761,6 +768,13 @@ internal sealed class EditorWindow : Window
         Close();
     }
 
+    /// <summary>A question about this capture is asked with its tab showing, not from behind
+    /// another.</summary>
+    private void ShowTab()
+    {
+        if (services.Tabs is { } tabs && tabs.Members.Contains(this)) tabs.Show(this);
+    }
+
     /// <summary>Closes for Quit, asking first when there are unsaved edits, in front so the
     /// question is plainly about this capture. False when the person chose to keep it.</summary>
     internal async Task<bool> CloseAsking()
@@ -770,6 +784,7 @@ internal sealed class EditorWindow : Window
         var kept = Entry is not null && Keep(renderingImage: true);
         if (!kept && Canvas.Session.IsUnsaved)
         {
+            ShowTab();
             Activate();
             if (!MayClose(await services.Dialogs.AskToSave(this, libraryFailed: Entry is not null))) return false;
         }
