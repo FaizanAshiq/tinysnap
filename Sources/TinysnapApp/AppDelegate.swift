@@ -229,7 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return
             }
             let controller = AreaOverlayController(displays: frozen.displays, pickable: frozen.windows) { [weak self] result in
-                self?.finishArea(result, for: purpose)
+                self?.finishArea(result, for: purpose, frozen: frozen.displays)
             }
             self.overlay = controller
             controller.show()
@@ -237,7 +237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func finishArea(_ result: AreaResult, for purpose: Purpose) {
+    private func finishArea(_ result: AreaResult, for purpose: Purpose, frozen: [FrozenDisplay]) {
         overlay = nil
         switch result {
         case .cancelled:
@@ -252,7 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             take(capture, on: display.displayID, for: purpose)
         case let .window(picked):
             Task {
-                guard let capture = await ScreenReader.capture(picked) else {
+                guard let capture = await ScreenReader.capture(picked, frozen: frozen) else {
                     showCaptureFailed()
                     return
                 }

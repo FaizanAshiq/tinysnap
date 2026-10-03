@@ -38,6 +38,20 @@ public final class Capture: Equatable, Sendable {
               let cropped = image.cropping(to: pixels) else { return nil }
         return Capture(image: cropped, scale: scale)
     }
+
+    /// `image` wherever `shape` is drawn and see-through where it is not: a window cut from a
+    /// frozen display, given the rounded corners of the window's own capture. Only `shape`'s
+    /// alpha counts, stretched to `image`'s size.
+    public static func shaped(_ image: CGImage, like shape: CGImage) -> CGImage? {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        let whole = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        context.draw(shape, in: whole)
+        context.setBlendMode(.sourceIn)
+        context.draw(image, in: whole)
+        return context.makeImage()
+    }
 }
 
 /// One capture plus everything drawn on it. Plain values, so undo is a stack of these.
