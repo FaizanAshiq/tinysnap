@@ -35,6 +35,9 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
     private var renderedFramed = false
     /// The backdrop's fill and shadow, kept while the frame's size and backdrop hold.
     private var frameGround: FrameGround?
+    /// Past 100%, what is in view drawn at the screen's resolution, and what it was drawn for.
+    private var closeUp: (image: CGImage, region: CGRect)?
+    private var closeUpKey: CloseUpKey?
     private var textView: NSTextView?
     /// What the canvas shows, in capture pixels: the framed output with a backdrop on,
     /// otherwise the whole extent. Kept here because working it out measures text. The
@@ -399,12 +402,55 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
             context.draw(rendered, in: bounds)
             context.restoreGState()
         }
+        drawCloseUp(in: context)
 
         drawCrop(in: context)
         drawBorders(in: context)
         drawSelection(in: context)
         drawLiveReading(in: context)
         drawTextPick(in: context)
+    }
+
+    private struct CloseUpKey: Equatable {
+        let document: Document
+        let hidden: Annotation.ID?
+        let visible: CGRect
+        let outputScale: CGFloat
+        let framed: Bool
+    }
+
+    /// Past 100%, what is in view drawn again at the screen's own resolution over the
+    /// enlarged render, so shapes stay smooth however far in while the capture's pixels stay
+    /// sharp squares. With a backdrop it is clipped to the output's rounded corners.
+    private func drawCloseUp(in context: CGContext) {
+        // Screen pixels per capture pixel: below one the render already has more than the screen.
+        guard magnification > 1, let window, magnification * window.backingScaleFactor / scale > 1.001 else { return }
+        let visible = visibleRect
+        let key = CloseUpKey(document: session.display, hidden: session.typingID,
+                             visible: CGRect(x: visible.minX * scale + shown.minX, y: visible.minY * scale + shown.minY,
+                                             width: visible.width * scale, height: visible.height * scale),
+                             outputScale: magnification * window.backingScaleFactor / scale, framed: framed)
+        if key != closeUpKey {
+            closeUp = Renderer.renderCloseUp(key.document, visible: key.visible, outputScale: key.outputScale, framed: key.framed,
+                                             hiding: key.hidden.map { [$0] } ?? [])
+            closeUpKey = key
+        }
+        guard let closeUp else { return }
+        context.saveGState()
+        if framed, let backdrop = session.display.backdrop {
+            let output = session.display.outputPixelRect
+            let corner = min((backdrop.corners.points ?? .greatestFiniteMagnitude) * scale, min(output.width, output.height) / 2) / scale
+            context.addPath(CGPath(roundedRect: viewRect(output), cornerWidth: corner, cornerHeight: corner, transform: nil))
+            context.clip()
+        }
+        // ponytail: drawn over the enlarged render, so a half see-through pixel (a window
+        // capture's corner) comes out a little more solid; clip the render out first if it shows.
+        context.interpolationQuality = .none
+        let rect = viewRect(closeUp.region)
+        context.translateBy(x: rect.minX, y: rect.maxY)
+        context.scaleBy(x: 1, y: -1)
+        context.draw(closeUp.image, in: CGRect(origin: .zero, size: rect.size))
+        context.restoreGState()
     }
 
     /// While Copy Text waits: everything dimmed but the box being dragged.

@@ -109,4 +109,36 @@ public class CanvasTests
         var middle = frame.GetPixel(100, 75);
         Assert.True(middle.Red > 230 && middle.Green < 90 && middle.Blue < 80, middle.ToString());
     }
+
+    [AvaloniaFact]
+    public void ZoomedInAnArrowStaysSmoothWhileTheCapturesPixelsStaySquare()
+    {
+        // At 400% a 2x capture shows each of its pixels as two by two screen pixels. The arrow's
+        // edge is drawn at the screen's resolution, so it cuts across those squares. Both stay
+        // well inside the capture, so the canvas does not grow and the squares start at 0, 0.
+        var capture = CanvasHost.Capture(300, 200, 2, canvas =>
+        {
+            using var black = new SkiaSharp.SKPaint { Color = SkiaSharp.SKColors.Black };
+            for (var x = 0; x < 300; x += 2) canvas.DrawRect(new SkiaSharp.SKRect(x, 170, x + 1, 200), black);
+        });
+        var (window, canvas) = CanvasHost.Open(capture, zoom: 4);
+        window.MouseDown(new Point(120, 120), MouseButton.Left);
+        window.MouseMove(new Point(400, 300), RawInputModifiers.LeftMouseButton);
+        window.MouseUp(new Point(400, 300), MouseButton.Left);
+        // Its selection border would cut the squares too.
+        canvas.Apply(session => session.Select(null));
+        Assert.Equal(new CoreRect(0, 0, 300, 200), canvas.Shown);
+        using var frame = Frames.Capture(window);
+        var cut = 0;
+        for (var y = 100; y < 320; y += 2)
+            for (var x = 100; x < 420; x += 2)
+            {
+                var block = new[] { frame.GetPixel(x, y), frame.GetPixel(x + 1, y), frame.GetPixel(x, y + 1), frame.GetPixel(x + 1, y + 1) };
+                if (block.Distinct().Count() > 1) cut++;
+            }
+        Assert.True(cut > 20, $"{cut} squares cut by the arrow's edge");
+        // The stripes, one capture pixel wide, stay sharp: black then white, nothing between.
+        Assert.Equal(SkiaSharp.SKColors.Black, frame.GetPixel(1, 360));
+        Assert.Equal(SkiaSharp.SKColors.White, frame.GetPixel(2, 360));
+    }
 }
