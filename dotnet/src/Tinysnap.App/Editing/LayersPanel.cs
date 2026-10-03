@@ -7,8 +7,11 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Media.Transformation;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -78,6 +81,9 @@ internal sealed class LayersPanel : Border
         [!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumBrush"),
     };
     internal TextBlock EmptyNote { get; }
+
+    /// <summary>The system asks for less motion: dragged rows change places without sliding.</summary>
+    internal bool ReduceMotion { get; set; }
     internal IReadOnlyList<LayerRow> Rows => rows;
 
     private readonly TextBlock count = new() { FontSize = 12, Opacity = 0.6, HorizontalAlignment = HorizontalAlignment.Right };
@@ -187,6 +193,9 @@ internal sealed class LayersPanel : Border
             // Only names changed, as on every key typed into a text: renamed where they stand.
             if (now.Length == shown.Length && now.Zip(shown).All(p => p.First with { Name = "" } == p.Second with { Name = "" }))
                 Rename(now);
+            // Only the order changed, as a drag changes it: the same rows change places.
+            else if (now.Length == shown.Length && now.ToHashSet().SetEquals(shown))
+                Reorder(now);
             else
                 Rebuild(now);
             shown = now;
@@ -229,6 +238,57 @@ internal sealed class LayersPanel : Border
         syncing = false;
         count.Text = rows.Count.ToString(CultureInfo.InvariantCulture);
         EmptyNote.IsVisible = rows.Count == 0;
+    }
+
+    /// <summary>The same rows in a new order, each sliding from where it stood to its new place,
+    /// as rows do in the Mac's list.</summary>
+    private void Reorder(Shape[] now)
+    {
+        var was = rows.Select(row => row.Id).ToList();
+        // The row with the keys, the one being dragged, never leaves the list, so Esc and Ctrl+Z
+        // still reach it; the rest are made again around it. A row taken out and put back as
+        // itself is never shown again by the list, which only realizes rows it has not seen.
+        var kept = rows.FirstOrDefault(row => row.Item.IsKeyboardFocusWithin);
+        syncing = true;
+        for (var i = List.Items.Count - 1; i >= 0; i--)
+            if (!ReferenceEquals(List.Items[i], kept?.Item)) List.Items.RemoveAt(i);
+        rows = [.. now.Select(shape => shape.Id == kept?.Id ? kept : MakeRow(shape))];
+        for (var i = 0; i < rows.Count; i++)
+            if (!ReferenceEquals(rows[i], kept)) List.Items.Insert(i, rows[i].Item);
+        syncing = false;
+        if (ReduceMotion) return;
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var from = (was.IndexOf(rows[i].Id) - i) * RowHeight;
+            if (from != 0) Slide(rows[i].Item, from);
+        }
+    }
+
+    /// <summary>Shown <paramref name="from"/> DIPs from its new place, then eased into it. A row put
+    /// back in the list is off screen until the next layout, and only then can it animate.</summary>
+    private static void Slide(Control item, double from)
+    {
+        item.Transitions = null;
+        item.RenderTransform = TransformOperations.Parse($"translateY({from.ToString(CultureInfo.InvariantCulture)}px)");
+        void Start()
+        {
+            item.Transitions =
+            [
+                new TransformOperationsTransition { Property = RenderTransformProperty, Duration = TimeSpan.FromMilliseconds(200), Easing = new CubicEaseOut() },
+            ];
+            item.RenderTransform = TransformOperations.Identity;
+        }
+        if (TopLevel.GetTopLevel(item) is not null)
+        {
+            Start();
+            return;
+        }
+        void Attached(object? sender, VisualTreeAttachmentEventArgs e)
+        {
+            item.AttachedToVisualTree -= Attached;
+            Start();
+        }
+        item.AttachedToVisualTree += Attached;
     }
 
     private LayerRow MakeRow(Shape shape)
@@ -389,8 +449,9 @@ internal sealed class LayersPanel : Border
         e.Pointer.Capture(List);
         DragGhost.Margin = new Thickness(4, at.Y - RowHeight / 2, 4, 0);
         // Over a row, its upper half lands the shape above it and its lower half below; the
-        // row and its shape move there at once.
-        DragTo(held.Id, Math.Clamp((int)Math.Round(FromFirstRow(e) / RowHeight), 0, rows.Count));
+        // row and its shape move there at once. Above or below the list nothing moves, as on the Mac.
+        if (new Avalonia.Rect(List.Bounds.Size).Contains(at))
+            DragTo(held.Id, Math.Clamp((int)Math.Round(FromFirstRow(e) / RowHeight), 0, rows.Count));
         e.Handled = true;
     }
 

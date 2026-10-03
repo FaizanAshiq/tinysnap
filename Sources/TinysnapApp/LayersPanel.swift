@@ -257,7 +257,12 @@ final class LayersPanel: NSVisualEffectView, NSTableViewDataSource, NSTableViewD
         let to = from < above ? above - 1 : above
         if to != from {
             rows.insert(rows.remove(at: from), at: to)
-            tableView.moveRow(at: from, to: to)
+            // The rows slide into place, unless the system asks for less motion.
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                tableView.reloadData()
+            } else {
+                tableView.moveRow(at: from, to: to)
+            }
             onDragTo?(id, rows.count - 1 - to)
         }
         tableView.setDropRow(to, dropOperation: .above)

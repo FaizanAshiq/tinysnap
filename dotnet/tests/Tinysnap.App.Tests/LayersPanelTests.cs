@@ -1,10 +1,12 @@
 using Avalonia;
+using Avalonia.Animation;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media.Transformation;
 using Avalonia.VisualTree;
 using Tinysnap.App.Editing;
 using Tinysnap.Core;
@@ -126,6 +128,51 @@ public class LayersPanelTests
         // Nothing was kept: an undo takes back the second shape drawn.
         Press(editor, Key.Z, RawInputModifiers.Control, "z");
         Assert.Equal([ids[0]], Order(editor));
+    }
+
+    [AvaloniaFact]
+    public void APointerAboveTheListMovesNothingAsOnTheMac()
+    {
+        var editor = WithTwoShapes();
+        Open(editor);
+        editor.UpdateLayout();
+        var ids = Order(editor);
+        var end = DragTopRowDown(editor);
+        editor.UpdateLayout();
+        // Above the list the row would have jumped back to the top.
+        editor.MouseMove(new Point(end.X, end.Y - 400), RawInputModifiers.LeftMouseButton);
+        Assert.Equal([ids[1], ids[0]], Order(editor));
+    }
+
+    [AvaloniaFact]
+    public void TheRowsSlideToTheirNewPlacesAndTheDraggedOneKeepsTheKeys()
+    {
+        var editor = WithTwoShapes();
+        Open(editor);
+        editor.UpdateLayout();
+        var dragged = editor.Layers.Rows[0].Item;
+        DragTopRowDown(editor);
+        Assert.Same(dragged, editor.Layers.Rows[1].Item);
+        Assert.True(dragged.IsKeyboardFocusWithin);
+        // The row passed over is back in the list at the next layout, then slides up from where it was.
+        editor.UpdateLayout();
+        var passed = editor.Layers.Rows[0].Item;
+        Assert.Contains(passed.Transitions!, t => t is TransformOperationsTransition);
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Assert.InRange(((TransformOperations)passed.RenderTransform!).Value.M32, 16, 32);
+    }
+
+    [AvaloniaFact]
+    public void WithReduceMotionTheRowsMoveWithoutSliding()
+    {
+        var editor = WithTwoShapes();
+        editor.Layers.ReduceMotion = true;
+        Open(editor);
+        editor.UpdateLayout();
+        DragTopRowDown(editor);
+        editor.UpdateLayout();
+        Assert.Null(editor.Layers.Rows[0].Item.Transitions);
+        Assert.Null(editor.Layers.Rows[1].Item.Transitions);
     }
 
     [AvaloniaFact]

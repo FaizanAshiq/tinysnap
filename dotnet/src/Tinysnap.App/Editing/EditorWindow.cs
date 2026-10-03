@@ -386,6 +386,7 @@ internal sealed class EditorWindow : Window
     private void WireLayers()
     {
         showsLayers = services.Preferences().ShowsLayers;
+        Layers.ReduceMotion = services.ReduceMotion;
         Layers.Selected += id => Canvas.Apply(s => s.Select(id));
         Layers.DraggedTo += (id, index) => Canvas.Apply(s => s.DragLayer(id, index));
         Layers.Dropped += () => Canvas.Apply(s => s.DropLayer());
