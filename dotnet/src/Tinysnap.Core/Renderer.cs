@@ -315,49 +315,39 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
 
     public void Spotlight(IReadOnlyList<(Rect Rect, CornerSize Corners)> rects, bool blurring)
     {
-        if (blurring)
-        {
-            BlurOutside(rects);
-            return;
-        }
+        // Everything drawn so far, out of focus, to show outside the lit boxes.
+        using var blurred = blurring ? Blurred() : null;
+        if (blurring && blurred is null) return;
         Context.Save();
-        Context.SaveLayer();
-        using (var dim = new SKPaint { Color = new SKColor(0, 0, 0, 128) })
-            Context.DrawRect(Region.ToSK(), dim);
-        using var clear = new SKPaint { BlendMode = SKBlendMode.Clear, IsAntialias = true };
+        // One clip per lit box, each leaving that box out: what is left is outside all of them,
+        // overlaps included. One even-odd path round them all counted an overlap twice and put it
+        // back outside.
         foreach (var (rect, corners) in rects)
         {
             if (rect.Size.Width <= 0 || rect.Size.Height <= 0) continue;
             var corner = (float)Radius(corners, rect);
-            Context.DrawRoundRect(rect.ToSK(), corner, corner, clear);
+            Context.ClipRoundRect(new SKRoundRect(rect.ToSK(), corner, corner), SKClipOperation.Difference, antialias: true);
         }
-        Context.Restore();
+        if (blurred is not null)
+            Draw(blurred, Region, crisp: true);
+        else
+        {
+            using var dim = new SKPaint { Color = new SKColor(0, 0, 0, 128) };
+            Context.DrawRect(Region.ToSK(), dim);
+        }
         Context.Restore();
     }
 
-    /// <summary>Everything drawn so far, blurred, shown only outside the lit boxes.</summary>
-    private void BlurOutside(IReadOnlyList<(Rect Rect, CornerSize Corners)> rects)
+    private SKImage? Blurred()
     {
         using var snapshot = surface.Snapshot();
         using var patchSurface = SKSurface.Create(Renderer.Info((int)DeviceSize.Width, (int)DeviceSize.Height));
-        if (patchSurface is null) return;
+        if (patchSurface is null) return null;
         var sigma = (float)(SpotlightBlurPoints * Scale * OutputScale);
         using (var blur = SKImageFilter.CreateBlur(sigma, sigma, SKShaderTileMode.Clamp))
         using (var paint = new SKPaint { ImageFilter = blur })
             patchSurface.Canvas.DrawImage(snapshot, 0, 0, Crisp, paint);
-        using var blurred = patchSurface.Snapshot();
-        using var outside = new SKPath { FillType = SKPathFillType.EvenOdd };
-        outside.AddRect(Region.ToSK());
-        foreach (var (rect, corners) in rects)
-        {
-            if (rect.Size.Width <= 0 || rect.Size.Height <= 0) continue;
-            var corner = (float)Radius(corners, rect);
-            outside.AddRoundRect(rect.ToSK(), corner, corner);
-        }
-        Context.Save();
-        Context.ClipPath(outside, SKClipOperation.Intersect, antialias: true);
-        Draw(blurred, Region, crisp: true);
-        Context.Restore();
+        return patchSurface.Snapshot();
     }
 
     // Reading back what is drawn so far
