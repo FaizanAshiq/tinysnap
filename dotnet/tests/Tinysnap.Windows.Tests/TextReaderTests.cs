@@ -94,11 +94,15 @@ public class TextReaderTests
     public async Task AWordOnACapturePastTheLimitKeepsItsPlace()
     {
         NeedsARecogniser();
+        // As wide as three screens side by side, past the limit.
         var width = (int)OcrEngine.MaxImageDimension + 800;
-        var capture = Page([("Order 10482", new SKPoint(width - 700, 100))], width, 300);
-        var words = Assert.Single((await Reader.Lines(capture.Image))!).Words;
+        var capture = Page([("Shipped today", new SKPoint(40, 600)), ("Order 10482", new SKPoint(width - 700, 600))], width, 1600);
+        var lines = (await Reader.Lines(capture.Image))!;
+        var words = lines.SelectMany(line => line.Words).ToList();
+        var read = $"limit {OcrEngine.MaxImageDimension}, read: {string.Join(" | ", words.Select(word => $"{word.Text} {word.Box}"))}";
+        Assert.True(words.Any(word => word.Text == "Shipped"), read);
         var number = Assert.Single(words, word => word.Text.Contains("10482"));
-        Assert.InRange(number.Box.MinX, width - 600, width - 100);
+        Assert.True(number.Box.MinX > width - 600 && number.Box.MinX < width - 100, read);
     }
 
     [Fact]
