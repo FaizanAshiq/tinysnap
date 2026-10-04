@@ -13,9 +13,9 @@ UpgradeBehavior: install
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/FaizanAshiq/tinysnap/releases/download/v1.3.2/Tinysnap-win-x64-Setup.exe
-    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    InstallerSha256: DC27471E7F0CD86164B8C186B38523031384EDD699C981A73C9488A55D525126
   - Architecture: arm64
     InstallerUrl: https://github.com/FaizanAshiq/tinysnap/releases/download/v1.3.2/Tinysnap-win-arm64-Setup.exe
-    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    InstallerSha256: 76979FA37A9121A484BE8D44AB2A773911C42BE38264EFC9C484D6141C8536AC
 ManifestType: installer
 ManifestVersion: 1.12.0
