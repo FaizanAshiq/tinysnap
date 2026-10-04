@@ -74,6 +74,13 @@ under anything already drawn, so a box round the text stays whole.
 With Crop in hand, 1:1, 4:3 and 16:9 hold the crop to that shape, for slides and posts
 that want one. Picking one trims the frame to it straight away.
 
+Each tool's panel sets how it draws. Text can be bold, set left, centred or right, and sit
+on a box in its colour so it reads over a busy screenshot. Lines, boxes and ovals can be
+dashed. Steps can start from any number, or count in letters. The highlighter draws
+straight or follows the pointer, and shows on dark captures as well as light ones. The
+spotlight dims what is outside it, or blurs it. The colour panel keeps the last five custom
+colours picked beside its swatches.
+
 | Input | Effect |
 | --- | --- |
 | `Command+C` | Copy the image and close the editor |
