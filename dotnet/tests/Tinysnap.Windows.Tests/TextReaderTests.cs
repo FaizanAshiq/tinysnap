@@ -74,6 +74,33 @@ public class TextReaderTests
         Assert.Equal(new[] { "Left top", "Right top", "Left low", "Right low" }, (await Read(capture.Image)).Lines.ToArray());
     }
 
+    /// <summary>Redact needs each word's place: an email read from a page sits where it was drawn,
+    /// right of the word before it, on that line.</summary>
+    [Fact]
+    public async Task EachWordComesWithItsBox()
+    {
+        NeedsARecogniser();
+        var capture = Page([("Email marcus@example.com", new SKPoint(40, 100))], 1100, 300);
+        var words = Assert.Single((await Reader.Lines(capture.Image))!).Words;
+        var email = Assert.Single(words, word => word.Text.Contains('@'));
+        Assert.Equal("Email", words[0].Text);
+        Assert.True(email.Box.MinX > words[0].Box.MaxX && email.Box.MaxX < 1100, $"{email.Box}");
+        Assert.True(email.Box.MinY > 80 && email.Box.MaxY < 200, $"{email.Box}");
+    }
+
+    /// <summary>A capture past the recogniser's limit is read shrunk, and its words' boxes are scaled
+    /// back to the capture's pixels, so an erase lands on the word rather than short of it.</summary>
+    [Fact]
+    public async Task AWordOnACapturePastTheLimitKeepsItsPlace()
+    {
+        NeedsARecogniser();
+        var width = (int)OcrEngine.MaxImageDimension + 800;
+        var capture = Page([("Order 10482", new SKPoint(width - 700, 100))], width, 300);
+        var words = Assert.Single((await Reader.Lines(capture.Image))!).Words;
+        var number = Assert.Single(words, word => word.Text.Contains("10482"));
+        Assert.InRange(number.Box.MinX, width - 600, width - 100);
+    }
+
     [Fact]
     public async Task CopyingTextReadsOnlyTheTextAndScanningReadsOnlyTheCode()
     {
