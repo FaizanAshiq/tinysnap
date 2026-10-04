@@ -29,6 +29,21 @@ public enum TextLayout {
         }
     }
 
+    /// How far a filled text's box reaches past its letters, in points: a third of an em
+    /// at the sides, an eighth above and below, where the line's own ascent and descent
+    /// already leave room.
+    static func boxPadding(points: CGFloat) -> CGSize { CGSize(width: points * 0.3, height: points * 0.12) }
+
+    /// A filled text's box corner radius, in points.
+    static func boxCorner(points: CGFloat) -> CGFloat { points * 0.25 }
+
+    /// The colour a text's letters are drawn in: its own, or black or white on a filled
+    /// text's box so they read on it. Public so the editor's text field types in it too.
+    public static func letterColor(_ style: Style) -> CGColor {
+        let color = Palette.color(hex: style.colorHex)
+        return style.filled ? MeasureShape.textColor(on: color) : color
+    }
+
     /// The box the text fills in capture pixels, measured from its top left corner. An
     /// empty string still gets a narrow box, so text being typed can be clicked and found.
     static func size(of string: String, points: CGFloat, scale: CGFloat) -> CGSize {

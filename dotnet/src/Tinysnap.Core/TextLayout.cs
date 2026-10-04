@@ -131,6 +131,22 @@ public static class TextLayout
         return new Size(Math.Max(widest, points / 2) * scale, LineHeight(font) * lines.Length * scale);
     }
 
+    /// <summary>The colour a text's letters are drawn in: its own, or black or white on a filled
+    /// text's box so they read on it. Public so the editor's text field types in it too.</summary>
+    public static SKColor LetterColor(Style style)
+    {
+        var color = Palette.Color(style.ColorHex);
+        return style.Filled ? MeasureShape.TextColor(color) : color;
+    }
+
+    /// <summary>How far a filled text's box reaches past its letters, in points: a third of an em
+    /// at the sides, an eighth above and below, where the line's own ascent and descent already
+    /// leave room.</summary>
+    internal static Size BoxPadding(double points) => new(points * 0.3, points * 0.12);
+
+    /// <summary>A filled text's box corner radius, in points.</summary>
+    internal static double BoxCorner(double points) => points * 0.25;
+
     /// <summary>How far in from the box's left edge each line starts, in points: none when set
     /// left, half the room the line leaves when centred, all of it when set right.</summary>
     internal static double[] LineOffsets(string text, double points, TextAlign align)

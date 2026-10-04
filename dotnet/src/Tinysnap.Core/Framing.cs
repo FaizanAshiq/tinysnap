@@ -9,10 +9,11 @@ public static partial class Renderer
     /// <summary>The output flattened: the whole canvas drawn, then the crop cut out on whole
     /// output pixels. Drawing only the crop left a redaction or magnifier at its edge less to
     /// read back than the canvas had, so the export came out different from the screen.</summary>
-    public static SKImage? RenderOutput(Document document, double outputScale = 1, IReadOnlySet<Guid>? hidden = null)
+    public static SKImage? RenderOutput(Document document, double outputScale = 1, IReadOnlySet<Guid>? hidden = null,
+                                        Guid? typing = null)
     {
         if (OutputCut(document, outputScale) is not { } cut) return null;
-        var full = Render(document, document.Extent, outputScale, hidden);
+        var full = Render(document, document.Extent, outputScale, hidden, typing);
         return full is null ? null : Cut(full, cut);
     }
 
@@ -43,10 +44,10 @@ public static partial class Renderer
     }
 
     /// <summary>The output inside its backdrop, or the plain output when there is none.</summary>
-    public static SKImage? RenderFramed(Document document, double outputScale = 1, IReadOnlySet<Guid>? hidden = null)
+    public static SKImage? RenderFramed(Document document, double outputScale = 1)
     {
         FrameGround? ground = null;
-        try { return RenderFramed(document, outputScale, hidden, ref ground); }
+        try { return RenderFramed(document, outputScale, null, ref ground); }
         finally { ground?.Dispose(); }
     }
 
@@ -54,10 +55,9 @@ public static partial class Renderer
     /// new one kept there when it does not. The shadow was most of what a frame cost, and a
     /// stroke, an undo or a restyle never moves it, so the canvas keeps one ground and pays
     /// for the output. The ground belongs to the caller, and one this replaces is disposed.</summary>
-    public static SKImage? RenderFramed(Document document, double outputScale, IReadOnlySet<Guid>? hidden,
-                                        ref FrameGround? ground)
+    public static SKImage? RenderFramed(Document document, double outputScale, Guid? typing, ref FrameGround? ground)
     {
-        var content = RenderOutput(document, outputScale, hidden);
+        var content = RenderOutput(document, outputScale, typing: typing);
         if (content is null) return null;
         if (document.Backdrop is not { } backdrop) return content;
         var perPoint = document.Scale * outputScale;

@@ -17,11 +17,12 @@ public static partial class Renderer
 
     /// <summary>Draws <paramref name="region"/> of the document, in capture pixels, at
     /// <paramref name="outputScale"/> output pixels per capture pixel, the whole extent unless
-    /// told otherwise. <paramref name="hidden"/> leaves out annotations, used for the text
-    /// being typed. <paramref name="sharpPixels"/> enlarges the capture as squares, as the canvas
-    /// shows it past 100%, rather than smoothing it as an export does.</summary>
+    /// told otherwise. <paramref name="hidden"/> leaves out annotations. <paramref name="typing"/>
+    /// is the text being typed, whose letters the editor's text field shows, so only its box is
+    /// drawn. <paramref name="sharpPixels"/> enlarges the capture as squares, as the canvas shows
+    /// it past 100%, rather than smoothing it as an export does.</summary>
     public static SKImage? Render(Document document, Rect? region = null, double outputScale = 1,
-                                  IReadOnlySet<Guid>? hidden = null, bool sharpPixels = false)
+                                  IReadOnlySet<Guid>? hidden = null, Guid? typing = null, bool sharpPixels = false)
     {
         var area = region ?? document.Extent;
         var size = PixelSize(area, outputScale);
@@ -33,7 +34,7 @@ public static partial class Renderer
         canvas.Scale((float)outputScale);
         canvas.Translate((float)-area.MinX, (float)-area.MinY);
 
-        var painter = new Canvas(surface, area, outputScale, size, document.Scale, document.Extent.Origin);
+        var painter = new Canvas(surface, area, outputScale, size, document.Scale, document.Extent.Origin, typing);
         // Past the capture, the canvas carries on in the capture's edge colour.
         if (!document.Capture.Bounds.Contains(area))
         {
@@ -67,7 +68,8 @@ public static partial class Renderer
 /// drawn so far, which is why they affect everything beneath them and nothing above.</summary>
 /// <param name="anchor">Where the whole render starts, so a redaction's grain lies the same in a
 /// render of part of the document as in the whole.</param>
-internal sealed class Canvas(SKSurface surface, Rect region, double outputScale, Size deviceSize, double scale, Point anchor)
+internal sealed class Canvas(SKSurface surface, Rect region, double outputScale, Size deviceSize, double scale, Point anchor,
+                             Guid? typing = null)
 {
     private SKCanvas Context => surface.Canvas;
     public Rect Region { get; } = region;
@@ -144,7 +146,15 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
                     break;
                 }
                 case AnnotationKind.Text(var origin, var text):
-                    TextLayout.Draw(Context, text, origin, size / Scale, Scale, color, align: annotation.Style.Align);
+                    if (annotation.Style.Filled)
+                    {
+                        var corner = (float)(TextLayout.BoxCorner(size / Scale) * Scale);
+                        using var box = Fill(color);
+                        Context.DrawRoundRect(annotation.Bounds(Scale).ToSK(), corner, corner, box);
+                    }
+                    if (annotation.Id == typing) break;
+                    TextLayout.Draw(Context, text, origin, size / Scale, Scale, TextLayout.LetterColor(annotation.Style),
+                                    align: annotation.Style.Align);
                     break;
                 case AnnotationKind.Highlighter(var from, var to):
                 {
@@ -205,7 +215,7 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
         var points = diameter / Scale * 0.55;
         var metrics = TextLayout.Metrics(label, points, Scale, bold: true);
         var origin = new Point(center.X - metrics.Width / 2, center.Y - (metrics.Ascent + metrics.Descent) / 2);
-        TextLayout.Draw(Context, label, origin, points, Scale, SKColors.White, bold: true);
+        TextLayout.Draw(Context, label, origin, points, Scale, MeasureShape.TextColor(color), bold: true);
     }
 
     /// <summary>A box's corner radius in capture pixels, never more than half its shorter side.</summary>

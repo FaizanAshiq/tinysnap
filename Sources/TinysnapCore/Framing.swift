@@ -7,9 +7,10 @@ extension Renderer {
     /// output pixels. Drawing only the crop left a redaction or magnifier at its edge less
     /// to read back than the canvas had, so the export came out different from the screen.
     public static func renderOutput(_ document: Document, outputScale: CGFloat = 1,
-                                    hiding hidden: Set<Annotation.ID> = []) -> CGImage? {
+                                    hiding hidden: Set<Annotation.ID> = [], typing: Annotation.ID? = nil) -> CGImage? {
         guard let cut = outputCut(document, outputScale: outputScale),
-              let full = render(document, region: document.extent, outputScale: outputScale, hiding: hidden) else { return nil }
+              let full = render(document, region: document.extent, outputScale: outputScale, hiding: hidden,
+                                typing: typing) else { return nil }
         return full.cropping(to: cut)
     }
 
@@ -30,18 +31,17 @@ extension Renderer {
     }
 
     /// The output inside its backdrop, or the plain output when there is none.
-    public static func renderFramed(_ document: Document, outputScale: CGFloat = 1,
-                                    hiding hidden: Set<Annotation.ID> = []) -> CGImage? {
+    public static func renderFramed(_ document: Document, outputScale: CGFloat = 1) -> CGImage? {
         var ground: FrameGround?
-        return renderFramed(document, outputScale: outputScale, hiding: hidden, ground: &ground)
+        return renderFramed(document, outputScale: outputScale, ground: &ground)
     }
 
     /// The same, drawn over `ground` while it still fits, and over a new one kept there
     /// when it does not. The shadow was most of what a frame cost, and a stroke, an undo
     /// or a restyle never moves it, so the canvas keeps one ground and pays for the output.
-    public static func renderFramed(_ document: Document, outputScale: CGFloat = 1, hiding hidden: Set<Annotation.ID> = [],
+    public static func renderFramed(_ document: Document, outputScale: CGFloat = 1, typing: Annotation.ID? = nil,
                                     ground: inout FrameGround?) -> CGImage? {
-        guard let content = renderOutput(document, outputScale: outputScale, hiding: hidden) else { return nil }
+        guard let content = renderOutput(document, outputScale: outputScale, typing: typing) else { return nil }
         guard let backdrop = document.backdrop else { return content }
         let perPoint = document.scale * outputScale
         let place = placement(of: content, in: backdrop, perPoint: perPoint)

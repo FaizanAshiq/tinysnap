@@ -71,6 +71,13 @@ internal sealed partial class StyleBar : Border
         "M4 5H16V6.6H4ZM9 9.2H16V10.8H9ZM6 13.4H16V15H6Z",
     ];
 
+    /// <summary>Plain text, or text on a box: two lines alone, or cut out of a box, as the Mac's
+    /// chips draw them.</summary>
+    private const string PlainTextGlyph = "M4 7.2H16V8.8H4ZM4 11.2H11.2V12.8H4Z";
+    private const string TextOnABoxGlyph =
+        "F0 M5.5 4H14.5A2.5 2.5 0 0 1 17 6.5V13.5A2.5 2.5 0 0 1 14.5 16H5.5A2.5 2.5 0 0 1 3 13.5V6.5A2.5 2.5 0 0 1 5.5 4Z"
+        + "M6 7.2H14V8.8H6ZM6 11.2H10.8V12.8H6Z";
+
     private readonly CanvasControl canvas;
     private readonly StackPanel row = new() { Orientation = Orientation.Horizontal, Spacing = 14 };
     private (Tool Tool, Style Style, MeasureSettings Measure, bool Locked)? shown;
@@ -531,9 +538,11 @@ internal sealed partial class StyleBar : Border
         })];
 
     private List<ToggleButton> MakeFillChips(Tool tool, Style style) =>
-        [.. new[] { false, true }.Select(filled =>
-            Chip(Glyphs.Box(oval: tool == Tool.Oval, filled), filled ? "Filled" : "Outline", style.Filled == filled,
-                 () => canvas.Restyle(s => s with { Filled = filled })))];
+        [.. new[] { false, true }.Select(filled => tool == Tool.Text
+            ? Chip(Glyphs.Icon(filled ? TextOnABoxGlyph : PlainTextGlyph, 16), filled ? "Text on a box" : "Plain text",
+                   style.Filled == filled, () => canvas.Restyle(s => s with { Filled = filled }))
+            : Chip(Glyphs.Box(oval: tool == Tool.Oval, filled), filled ? "Filled" : "Outline", style.Filled == filled,
+                   () => canvas.Restyle(s => s with { Filled = filled })))];
 
     private List<ToggleButton> MakeAlignChips(Style style) =>
         [.. Enum.GetValues<TextAlign>().Select((align, index) =>

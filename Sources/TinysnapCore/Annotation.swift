@@ -100,7 +100,10 @@ public struct Annotation: Equatable, Identifiable, Sendable {
              let .blur(rect), let .pixelate(rect), let .erase(rect), let .image(rect, _):
             return rect
         case let .text(origin, string):
-            return CGRect(origin: origin, size: TextLayout.size(of: string, points: size / scale, scale: scale))
+            let letters = CGRect(origin: origin, size: TextLayout.size(of: string, points: size / scale, scale: scale))
+            guard style.filled else { return letters }
+            let padding = TextLayout.boxPadding(points: size / scale)
+            return letters.insetBy(dx: -padding.width * scale, dy: -padding.height * scale)
         case let .freehand(points):
             guard let first = points.first else { return .null }
             let box = points.reduce(CGRect(origin: first, size: .zero)) { $0.union(CGRect(origin: $1, size: .zero)) }
