@@ -58,6 +58,7 @@ public class StyleBarTests
         editor.Canvas.Choose(Tool.Rectangle);
         Assert.Equal(2, bar.FillChips.Count);
         Assert.Equal(5, bar.CornerChips.Count);
+        Assert.Equal(2, bar.DashChips.Count);
         Assert.Null(bar.BoldChip);
 
         editor.Canvas.Choose(Tool.Image);
@@ -148,6 +149,9 @@ public class StyleBarTests
         Click(bar.CornerChips[0]);
         Assert.Equal(new Style(Palette.Red, StyleSize.ExtraLarge, filled: true, corners: CornerSize.Square), Selected(editor));
         Assert.True(bar.CornerChips[0].IsChecked);
+        Click(bar.FillChips[0]);
+        Click(bar.DashChips[1]);
+        Assert.Equal(new Style(Palette.Red, StyleSize.ExtraLarge, corners: CornerSize.Square, dashed: true), Selected(editor));
     }
 
     [AvaloniaFact]

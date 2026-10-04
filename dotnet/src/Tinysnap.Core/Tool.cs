@@ -88,6 +88,9 @@ public static class ToolInfo
     /// <summary>Text only: set in the bold face.</summary>
     public static bool HasBold(this Tool tool) => tool is Tool.Text;
 
+    /// <summary>Lines, boxes and ovals: drawn in dashes. A filled box or oval has no outline to dash.</summary>
+    public static bool HasDash(this Tool tool) => tool is Tool.Line or Tool.Rectangle or Tool.Oval;
+
     /// <summary>Pasted images: opacity and the difference blend, for comparing against the capture.</summary>
     public static bool HasOverlay(this Tool tool) => tool is Tool.Image;
 

@@ -93,6 +93,11 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
         Context.DrawImage(image, rect.ToSK(), sampling, paint);
     }
 
+    /// <summary>Dashes two widths long with three between: the round ends take half a width off
+    /// each side of a gap, so dash and gap read about even. Null for a solid stroke.</summary>
+    private static SKPathEffect? Dashes(Annotation annotation, double width) =>
+        annotation.Style.Dashed ? SKPathEffect.CreateDash([(float)(width * 2), (float)(width * 3)], 0) : null;
+
     private static SKPaint Stroke(SKColor color, double width, SKStrokeCap cap = SKStrokeCap.Round) => new()
     {
         Color = color,
@@ -126,6 +131,8 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
                 case AnnotationKind.Line(var from, var to):
                 {
                     using var paint = Stroke(color, size);
+                    using var dashes = Dashes(annotation, size);
+                    paint.PathEffect = dashes;
                     Context.DrawLine(from.ToSK(), to.ToSK(), paint);
                     break;
                 }
@@ -137,12 +144,16 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
                     // Half the stroke again, so the inside of an outline is as round as the outside.
                     var radius = Radius(annotation.Style.Corners, rect, annotation.Style.Filled ? 0 : size / 2);
                     using var paint = annotation.Style.Filled ? Fill(color) : Stroke(color, size);
+                    using var dashes = annotation.Style.Filled ? null : Dashes(annotation, size);
+                    paint.PathEffect = dashes;
                     Context.DrawRoundRect(rect.ToSK(), (float)radius, (float)radius, paint);
                     break;
                 }
                 case AnnotationKind.Oval(var rect):
                 {
                     using var paint = annotation.Style.Filled ? Fill(color) : Stroke(color, size);
+                    using var dashes = annotation.Style.Filled ? null : Dashes(annotation, size);
+                    paint.PathEffect = dashes;
                     Context.DrawOval(rect.ToSK(), paint);
                     break;
                 }

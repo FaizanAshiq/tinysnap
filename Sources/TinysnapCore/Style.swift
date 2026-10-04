@@ -51,11 +51,14 @@ public struct Style: Equatable, Codable, Sendable {
     public var align: TextAlign
     /// Text only: set in the bold face.
     public var bold: Bool
+    /// Lines, and outlined boxes and ovals: drawn in dashes.
+    public var dashed: Bool
 
     public static let opacityRange: ClosedRange<CGFloat> = 0.1...1
 
     public init(colorHex: String, size: StyleSize = .medium, filled: Bool = false, corners: CornerSize = .medium,
-                opacity: CGFloat = 1, difference: Bool = false, align: TextAlign = .left, bold: Bool = false) {
+                opacity: CGFloat = 1, difference: Bool = false, align: TextAlign = .left, bold: Bool = false,
+                dashed: Bool = false) {
         self.colorHex = colorHex
         self.size = size
         self.filled = filled
@@ -64,10 +67,11 @@ public struct Style: Equatable, Codable, Sendable {
         self.difference = difference
         self.align = align
         self.bold = bold
+        self.dashed = dashed
     }
 
     private enum CodingKeys: String, CodingKey {
-        case colorHex, size, filled, corners, opacity, difference, align, bold
+        case colorHex, size, filled, corners, opacity, difference, align, bold, dashed
         /// Read only: the square corner switch this replaced.
         case sharpCorners
     }
@@ -82,6 +86,7 @@ public struct Style: Equatable, Codable, Sendable {
         try container.encode(difference, forKey: .difference)
         try container.encode(align, forKey: .align)
         try container.encode(bold, forKey: .bold)
+        try container.encode(dashed, forKey: .dashed)
     }
 
     /// Every key is optional and a bad value falls back on its own, so one hand edited
@@ -100,6 +105,7 @@ public struct Style: Equatable, Codable, Sendable {
         difference = (try? container.decodeIfPresent(Bool.self, forKey: .difference)) ?? false
         align = (try? container.decodeIfPresent(TextAlign.self, forKey: .align)) ?? .left
         bold = (try? container.decodeIfPresent(Bool.self, forKey: .bold)) ?? false
+        dashed = (try? container.decodeIfPresent(Bool.self, forKey: .dashed)) ?? false
     }
 }
 

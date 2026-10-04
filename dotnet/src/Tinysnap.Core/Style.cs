@@ -68,9 +68,12 @@ public sealed record Style
     /// <summary>Text only: set in the bold face.</summary>
     public bool Bold { get; init; }
 
+    /// <summary>Lines, and outlined boxes and ovals: drawn in dashes.</summary>
+    public bool Dashed { get; init; }
+
     public Style(string colorHex, StyleSize size = StyleSize.Medium, bool filled = false,
                  CornerSize corners = CornerSize.Medium, double opacity = 1, bool difference = false,
-                 TextAlign align = TextAlign.Left, bool bold = false)
+                 TextAlign align = TextAlign.Left, bool bold = false, bool dashed = false)
     {
         ColorHex = colorHex;
         Size = size;
@@ -80,6 +83,7 @@ public sealed record Style
         Difference = difference;
         Align = align;
         Bold = bold;
+        Dashed = dashed;
     }
 
     public JsonObject ToJson() => new()
@@ -92,6 +96,7 @@ public sealed record Style
         ["difference"] = Difference,
         ["align"] = Json.Wire(Align),
         ["bold"] = Bold,
+        ["dashed"] = Dashed,
     };
 
     /// <summary>Every key is optional and a bad value falls back on its own, so one hand
@@ -111,7 +116,8 @@ public sealed record Style
         var difference = Json.Bool(o, "difference") ?? false;
         var align = Json.Enum<TextAlign>(o, "align") ?? TextAlign.Left;
         var bold = Json.Bool(o, "bold") ?? false;
-        return new Style(colorHex, size, filled, corners, opacity, difference, align, bold);
+        var dashed = Json.Bool(o, "dashed") ?? false;
+        return new Style(colorHex, size, filled, corners, opacity, difference, align, bold, dashed);
     }
 }
 

@@ -90,6 +90,7 @@ internal sealed partial class StyleBar : Border
     public IReadOnlyList<Button> Swatches { get; private set; } = [];
     public IReadOnlyList<ToggleButton> SizeChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> FillChips { get; private set; } = [];
+    public IReadOnlyList<ToggleButton> DashChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> CornerChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> AlignChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> OpacityChips { get; private set; } = [];
@@ -195,7 +196,7 @@ internal sealed partial class StyleBar : Border
         colorSwatch = null;
         (DifferenceChip, BoldChip) = (null, null);
         (AcrossChip, DownChip, LowerContrast, RaiseContrast, ContrastLabel, HelpChip) = (null, null, null, null, null, null);
-        (SizeChips, FillChips, CornerChips, AlignChips, OpacityChips) = ([], [], [], [], []);
+        (SizeChips, FillChips, DashChips, CornerChips, AlignChips, OpacityChips) = ([], [], [], [], [], []);
         (BackdropFillChips, PaddingChips, BackdropCornerChips, ShadowChips) = ([], [], [], []);
         WallpaperNote = null;
         ClearSize();
@@ -209,6 +210,7 @@ internal sealed partial class StyleBar : Border
         if (tool.HasColor()) row.Children.Add(ColorButton = MakeColorButton(style.ColorHex));
         SizeChips = tool.HasSize() ? Group(MakeSizeChips(tool, style)) : [];
         FillChips = tool.HasFill() ? Group(MakeFillChips(tool, style)) : [];
+        DashChips = tool.HasDash() ? Group(MakeDashChips(style)) : [];
         CornerChips = tool.HasCorners() ? Group(MakeCornerChips(style)) : [];
         AlignChips = tool.HasAlign() ? Group(MakeAlignChips(style)) : [];
         if (tool.HasBold())
@@ -551,6 +553,15 @@ internal sealed partial class StyleBar : Border
                    style.Filled == filled, () => canvas.Restyle(s => s with { Filled = filled }))
             : Chip(Glyphs.Box(oval: tool == Tool.Oval, filled), filled ? "Filled" : "Outline", style.Filled == filled,
                    () => canvas.Restyle(s => s with { Filled = filled })))];
+
+    /// <summary>A solid line and a dashed one, as the Mac's chips draw them.</summary>
+    private static readonly string[] DashGlyphs =
+        ["M4 9.2H16V10.8H4Z", "M4 9.2H6.4V10.8H4ZM8.8 9.2H11.2V10.8H8.8ZM13.6 9.2H16V10.8H13.6Z"];
+
+    private List<ToggleButton> MakeDashChips(Style style) =>
+        [.. new[] { false, true }.Select(dashed =>
+            Chip(Glyphs.Icon(DashGlyphs[dashed ? 1 : 0], 16), dashed ? "Dashed" : "Solid", style.Dashed == dashed,
+                 () => canvas.Restyle(s => s with { Dashed = dashed })))];
 
     private List<ToggleButton> MakeAlignChips(Style style) =>
         [.. Enum.GetValues<TextAlign>().Select((align, index) =>
