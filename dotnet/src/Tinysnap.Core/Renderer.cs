@@ -155,7 +155,7 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
                     }
                     if (annotation.Id == typing) break;
                     TextLayout.Draw(Context, text, origin, size / Scale, Scale, TextLayout.LetterColor(annotation.Style),
-                                    align: annotation.Style.Align);
+                                    annotation.Style.Bold, annotation.Style.Align);
                     break;
                 case AnnotationKind.Highlighter(var from, var to):
                 {

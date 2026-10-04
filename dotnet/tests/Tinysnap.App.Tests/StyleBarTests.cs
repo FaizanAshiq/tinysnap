@@ -53,10 +53,12 @@ public class StyleBarTests
         editor.Canvas.Choose(Tool.Text);
         Assert.Equal(3, bar.AlignChips.Count);
         Assert.Equal(2, bar.FillChips.Count);
+        Assert.NotNull(bar.BoldChip);
 
         editor.Canvas.Choose(Tool.Rectangle);
         Assert.Equal(2, bar.FillChips.Count);
         Assert.Equal(5, bar.CornerChips.Count);
+        Assert.Null(bar.BoldChip);
 
         editor.Canvas.Choose(Tool.Image);
         Assert.Null(bar.ColorButton);
@@ -110,6 +112,17 @@ public class StyleBarTests
         Assert.True(editor.StyleBar.AlignChips[1].IsChecked);
         var box = editor.Canvas.GetVisualDescendants().OfType<TextBox>().Single();
         Assert.Equal(Avalonia.Media.TextAlignment.Center, box.TextAlignment);
+    }
+
+    [AvaloniaFact]
+    public void TheBoldChipSetsTheTextAndTheBoxItIsTypedIn()
+    {
+        var (editor, session) = Typing();
+        Click(editor.StyleBar.BoldChip!);
+        Assert.True(Assert.Single(session.Display.Annotations).Style.Bold);
+        Assert.True(editor.StyleBar.BoldChip!.IsChecked);
+        var box = editor.Canvas.GetVisualDescendants().OfType<TextBox>().Single();
+        Assert.Equal(Avalonia.Media.FontWeight.Bold, box.FontWeight);
     }
 
     /// <summary>Red text on a box types in white, the colour its letters are drawn in.</summary>

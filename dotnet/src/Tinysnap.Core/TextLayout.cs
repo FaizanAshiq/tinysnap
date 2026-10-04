@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using SkiaSharp;
-using SkiaSharp.HarfBuzz;
 
 namespace Tinysnap.Core;
 
@@ -113,19 +112,15 @@ public static class TextLayout
     private static double Width(string line, SKFont font)
     {
         double total = 0;
-        foreach (var (text, runFont) in VisualRuns(line, font))
-        {
-            using var shaper = new SKShaper(runFont.Typeface);
-            total += shaper.Shape(text, runFont).Width;
-        }
+        foreach (var (text, runFont) in VisualRuns(line, font)) total += Shaping.Shape(text, runFont).Width;
         return total;
     }
 
     /// <summary>The box the text fills in capture pixels, measured from its top left corner.
     /// An empty string still gets a narrow box, so text being typed can be clicked and found.</summary>
-    internal static Size Size(string text, double points, double scale)
+    internal static Size Size(string text, double points, double scale, bool bold = false)
     {
-        using var font = Font(points);
+        using var font = Font(points, bold);
         var lines = text.Split('\n');
         var widest = lines.Select(line => Width(line, font)).DefaultIfEmpty(0).Max();
         return new Size(Math.Max(widest, points / 2) * scale, LineHeight(font) * lines.Length * scale);
@@ -149,9 +144,9 @@ public static class TextLayout
 
     /// <summary>How far in from the box's left edge each line starts, in points: none when set
     /// left, half the room the line leaves when centred, all of it when set right.</summary>
-    internal static double[] LineOffsets(string text, double points, TextAlign align)
+    internal static double[] LineOffsets(string text, double points, TextAlign align, bool bold = false)
     {
-        using var font = Font(points);
+        using var font = Font(points, bold);
         var widths = text.Split('\n').Select(line => Width(line, font)).ToArray();
         var box = Math.Max(widths.DefaultIfEmpty(0).Max(), points / 2);
         var share = align switch { TextAlign.Center => 0.5, TextAlign.Right => 1.0, _ => 0.0 };
@@ -165,7 +160,7 @@ public static class TextLayout
     internal static void Draw(SKCanvas canvas, string text, Point origin, double points, double scale, SKColor color,
                               bool bold = false, TextAlign align = TextAlign.Left)
     {
-        var offsets = align == TextAlign.Left ? [] : LineOffsets(text, points, align);
+        var offsets = align == TextAlign.Left ? [] : LineOffsets(text, points, align, bold);
         using var font = Font(points, bold);
         using var paint = new SKPaint { Color = color, IsAntialias = true };
         var ascent = -font.Metrics.Ascent;
@@ -179,11 +174,7 @@ public static class TextLayout
             var x = index < offsets.Length ? offsets[index] : 0;
             var baseline = ascent + index * height;
             foreach (var (run, runFont) in VisualRuns(lines[index], font))
-            {
-                using var shaper = new SKShaper(runFont.Typeface);
-                canvas.DrawShapedText(shaper, run, (float)x, (float)baseline, SKTextAlign.Left, runFont, paint);
-                x += shaper.Shape(run, runFont).Width;
-            }
+                x += Shaping.Draw(canvas, run, (float)x, (float)baseline, runFont, paint);
         }
         canvas.Restore();
     }

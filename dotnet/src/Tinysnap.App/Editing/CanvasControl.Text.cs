@@ -35,6 +35,7 @@ internal sealed partial class CanvasControl
         var box = textBox ?? MakeTextBox();
         using (var font = TextLayout.Font(points)) box.FontFamily = new FontFamily(font.Typeface.FamilyName);
         box.FontSize = points * zoom;
+        box.FontWeight = annotation.Style.Bold ? FontWeight.Bold : FontWeight.Normal;
         box.MinWidth = points * zoom;
         var brush = new SolidColorBrush(Color.FromUInt32(ToArgb(TextLayout.LetterColor(annotation.Style))));
         box.Foreground = brush;

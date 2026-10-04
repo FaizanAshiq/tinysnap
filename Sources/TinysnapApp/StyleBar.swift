@@ -156,6 +156,7 @@ final class StyleBar: NSVisualEffectView {
         if tool.hasFill { row.addArrangedSubview(group(fillChips())) }
         if tool.hasCorners { row.addArrangedSubview(group(cornerChips())) }
         if tool.hasAlign { row.addArrangedSubview(group(alignChips())) }
+        if tool.hasBold { row.addArrangedSubview(group([boldChip()])) }
         if tool.hasOverlay {
             row.addArrangedSubview(group(opacityChips()))
             row.addArrangedSubview(group([differenceChip()]))
@@ -800,6 +801,25 @@ final class StyleBar: NSVisualEffectView {
 
     @objc private func toggleDifference() {
         change { $0.difference.toggle() }
+    }
+
+    /// A bold B, on and off.
+    private func boldChip() -> NSView {
+        let chip = ChipButton(label: "Bold") { box, color in
+            let letter = NSAttributedString(string: "B", attributes: [
+                .font: NSFont.systemFont(ofSize: 15, weight: .heavy), .foregroundColor: color,
+            ])
+            let size = letter.size()
+            letter.draw(at: NSPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2))
+        }
+        chip.isChosen = style.bold
+        chip.target = self
+        chip.action = #selector(toggleBold)
+        return chip
+    }
+
+    @objc private func toggleBold() {
+        change { $0.bold.toggle() }
     }
 }
 

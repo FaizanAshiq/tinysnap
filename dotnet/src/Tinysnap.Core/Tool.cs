@@ -85,6 +85,9 @@ public static class ToolInfo
     /// <summary>Text only: its lines set left, centred or right.</summary>
     public static bool HasAlign(this Tool tool) => tool is Tool.Text;
 
+    /// <summary>Text only: set in the bold face.</summary>
+    public static bool HasBold(this Tool tool) => tool is Tool.Text;
+
     /// <summary>Pasted images: opacity and the difference blend, for comparing against the capture.</summary>
     public static bool HasOverlay(this Tool tool) => tool is Tool.Image;
 

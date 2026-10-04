@@ -142,7 +142,7 @@ struct Canvas {
             }
             guard annotation.id != typing else { break }
             TextLayout.draw(string, at: origin, points: size / scale, scale: scale, color: TextLayout.letterColor(annotation.style),
-                            align: annotation.style.align, in: context)
+                            bold: annotation.style.bold, align: annotation.style.align, in: context)
         case let .highlighter(from, to):
             // Darkens a light capture like a marker, and lightens a dark one, where darkening
             // would hardly show. Read from the screenshot, so it never changes with the zoom.

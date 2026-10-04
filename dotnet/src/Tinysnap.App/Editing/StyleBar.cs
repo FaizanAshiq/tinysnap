@@ -94,6 +94,7 @@ internal sealed partial class StyleBar : Border
     public IReadOnlyList<ToggleButton> AlignChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> OpacityChips { get; private set; } = [];
     public ToggleButton? DifferenceChip { get; private set; }
+    public ToggleButton? BoldChip { get; private set; }
     public ToggleButton? AcrossChip { get; private set; }
     public ToggleButton? DownChip { get; private set; }
     public Button? LowerContrast { get; private set; }
@@ -192,7 +193,7 @@ internal sealed partial class StyleBar : Border
         Swatches = [];
         CustomColor = null;
         colorSwatch = null;
-        DifferenceChip = null;
+        (DifferenceChip, BoldChip) = (null, null);
         (AcrossChip, DownChip, LowerContrast, RaiseContrast, ContrastLabel, HelpChip) = (null, null, null, null, null, null);
         (SizeChips, FillChips, CornerChips, AlignChips, OpacityChips) = ([], [], [], [], []);
         (BackdropFillChips, PaddingChips, BackdropCornerChips, ShadowChips) = ([], [], [], []);
@@ -210,6 +211,13 @@ internal sealed partial class StyleBar : Border
         FillChips = tool.HasFill() ? Group(MakeFillChips(tool, style)) : [];
         CornerChips = tool.HasCorners() ? Group(MakeCornerChips(style)) : [];
         AlignChips = tool.HasAlign() ? Group(MakeAlignChips(style)) : [];
+        if (tool.HasBold())
+        {
+            var bold = Chip(new TextBlock { Text = "B", FontSize = 15, FontWeight = FontWeight.Black }, "Bold", style.Bold,
+                            () => canvas.Restyle(s => s with { Bold = !s.Bold }));
+            Group([bold]);
+            BoldChip = bold;
+        }
         OpacityChips = tool.HasOverlay() ? Group(MakeOpacityChips(style)) : [];
         if (tool.HasOverlay())
         {
