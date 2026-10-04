@@ -90,6 +90,9 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
     /// Text only: set in the bold face.
     public var hasBold: Bool { self == .text }
 
+    /// Lines, boxes and ovals: drawn in dashes. A filled box or oval has no outline to dash.
+    public var hasDash: Bool { self == .line || self == .rectangle || self == .oval }
+
     /// Pasted images: opacity and the difference blend, for comparing against the capture.
     public var hasOverlay: Bool { self == .image }
 
