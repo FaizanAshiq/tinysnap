@@ -406,6 +406,7 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         drawCrop(in: context)
         drawBorders(in: context)
         drawSelection(in: context)
+        drawGuides(in: context)
         drawLiveReading(in: context)
         drawTextPick(in: context)
     }
@@ -501,6 +502,21 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
             return
         }
         drawHandles(annotation.handles(scale: scale).map(\.1), in: context)
+    }
+
+    /// Thin magenta lines where the shape being dragged lines up with another, or the output.
+    private func drawGuides(in context: CGContext) {
+        guard !session.guides.isEmpty else { return }
+        context.saveGState()
+        context.setStrokeColor(NSColor.systemPink.cgColor)
+        context.setLineWidth(1 / magnification)
+        for guide in session.guides {
+            let line = guide.axis == .vertical
+                ? viewRect(CGRect(x: guide.position, y: guide.from, width: 0, height: guide.to - guide.from))
+                : viewRect(CGRect(x: guide.from, y: guide.position, width: guide.to - guide.from, height: 0))
+            context.strokeLineSegments(between: [CGPoint(x: line.minX, y: line.minY), CGPoint(x: line.maxX, y: line.maxY)])
+        }
+        context.restoreGState()
     }
 
     /// An accent disc with a white lock, centred on the outline's top right corner.

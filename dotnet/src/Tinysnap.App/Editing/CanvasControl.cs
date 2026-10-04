@@ -126,6 +126,7 @@ internal sealed partial class CanvasControl : Control
         DrawCrop(context, bounds);
         DrawBorders(context);
         DrawSelection(context);
+        DrawGuides(context);
         DrawLiveReading(context, bounds);
         DrawTextPick(context, bounds);
     }
@@ -239,6 +240,20 @@ internal sealed partial class CanvasControl : Control
             return;
         }
         DrawHandles(context, annotation.Handles(Session.Scale).Select(h => h.Point));
+    }
+
+    private static readonly Pen GuidePen = new(new SolidColorBrush(Color.FromRgb(255, 45, 85)), 1);
+
+    /// <summary>Thin magenta lines where the shape being dragged lines up with another, or the output.</summary>
+    private void DrawGuides(DrawingContext context)
+    {
+        foreach (var guide in Session.Guides)
+        {
+            var line = guide.Axis == GuideAxis.Vertical
+                ? ToDips(new Rect(guide.Position, guide.From, 0, guide.To - guide.From))
+                : ToDips(new Rect(guide.From, guide.Position, guide.To - guide.From, 0));
+            context.DrawLine(GuidePen, line.TopLeft, line.BottomRight);
+        }
     }
 
     private static readonly Avalonia.Media.Geometry LockGlyph = Avalonia.Media.Geometry.Parse(ToolIcons.Lock);
