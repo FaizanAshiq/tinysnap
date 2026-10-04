@@ -50,13 +50,14 @@ public static partial class Renderer
         {
             if (annotation.Kind is AnnotationKind.Spotlight)
             {
-                // Every spotlight lights one shared area, drawn at the first one's place.
+                // Every spotlight lights one shared area, drawn at the first one's place and
+                // dimmed or blurred as the first one says.
                 if (spotlightDrawn) continue;
                 spotlightDrawn = true;
                 painter.Spotlight(visible
                     .Where(a => a.Kind is AnnotationKind.Spotlight)
                     .Select(a => (((AnnotationKind.Spotlight)a.Kind).Rect, a.Style.Corners))
-                    .ToList());
+                    .ToList(), annotation.Style.BlurOutside);
                 continue;
             }
             painter.Draw(annotation, document.StepLabel(annotation.Id));
@@ -268,8 +269,16 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
         Context.ClipPath(path, SKClipOperation.Intersect, antialias: true);
     }
 
-    public void Spotlight(IReadOnlyList<(Rect Rect, CornerSize Corners)> rects)
+    /// <summary>How far a blurring spotlight softens what is outside it, in points.</summary>
+    internal const double SpotlightBlurPoints = 6;
+
+    public void Spotlight(IReadOnlyList<(Rect Rect, CornerSize Corners)> rects, bool blurring)
     {
+        if (blurring)
+        {
+            BlurOutside(rects);
+            return;
+        }
         Context.Save();
         Context.SaveLayer();
         using (var dim = new SKPaint { Color = new SKColor(0, 0, 0, 128) })
@@ -282,6 +291,31 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
             Context.DrawRoundRect(rect.ToSK(), corner, corner, clear);
         }
         Context.Restore();
+        Context.Restore();
+    }
+
+    /// <summary>Everything drawn so far, blurred, shown only outside the lit boxes.</summary>
+    private void BlurOutside(IReadOnlyList<(Rect Rect, CornerSize Corners)> rects)
+    {
+        using var snapshot = surface.Snapshot();
+        using var patchSurface = SKSurface.Create(Renderer.Info((int)DeviceSize.Width, (int)DeviceSize.Height));
+        if (patchSurface is null) return;
+        var sigma = (float)(SpotlightBlurPoints * Scale * OutputScale);
+        using (var blur = SKImageFilter.CreateBlur(sigma, sigma, SKShaderTileMode.Clamp))
+        using (var paint = new SKPaint { ImageFilter = blur })
+            patchSurface.Canvas.DrawImage(snapshot, 0, 0, Crisp, paint);
+        using var blurred = patchSurface.Snapshot();
+        using var outside = new SKPath { FillType = SKPathFillType.EvenOdd };
+        outside.AddRect(Region.ToSK());
+        foreach (var (rect, corners) in rects)
+        {
+            if (rect.Size.Width <= 0 || rect.Size.Height <= 0) continue;
+            var corner = (float)Radius(corners, rect);
+            outside.AddRoundRect(rect.ToSK(), corner, corner);
+        }
+        Context.Save();
+        Context.ClipPath(outside, SKClipOperation.Intersect, antialias: true);
+        Draw(blurred, Region, crisp: true);
         Context.Restore();
     }
 

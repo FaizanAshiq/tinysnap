@@ -29,6 +29,12 @@ extension Renderer {
         guard !shown.isNull, shown.width > 0, shown.height > 0 else { return nil }
         let reaches = document.annotations.filter { !$0.isHidden }.compactMap { readBack($0, scale: document.scale) }
         var region = shown.integral
+        // A blurring spotlight reads everything outside it, but only its blur's reach around
+        // what is in view changes what is in view.
+        if document.annotations.first(where: { if case .spotlight = $0.kind { !$0.isHidden } else { false } })?.style.blurOutside == true {
+            let reach = Canvas.spotlightBlurPoints * document.scale * 3
+            region = region.insetBy(dx: -reach, dy: -reach).integral
+        }
         // A box taken in can reach another, as a magnifier over a blur does.
         var grown = true
         while grown {
