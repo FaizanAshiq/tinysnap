@@ -46,9 +46,9 @@ public enum Renderer {
                 continue
             }
             if case let .erase(rect) = annotation.kind, let ground {
-                let source = ground.context.makeImage()
-                canvas.erase(rect, from: source)
-                ground.erase(rect, from: source)
+                // The main canvas first: it reads the ground before the ground's own erase lands.
+                canvas.erase(rect, from: ground)
+                ground.erase(rect)
                 continue
             }
             canvas.draw(annotation, stepLabel: document.stepLabel(of: annotation.id))
@@ -360,13 +360,13 @@ struct Canvas {
         drawRounded(blocks, in: captureRect(for: device), crisp: true, corners: corners)
     }
 
-    /// Fills from `source` when given, a render of what is beneath without its outlines, or else
-    /// from everything drawn so far.
-    func erase(_ rect: CGRect, from source: CGImage? = nil) {
-        guard let device = deviceRect(for: rect), let snapshot = source ?? context.makeImage() else { return }
+    /// Fills from what `source` has drawn when given, the canvas without outlines, or else from
+    /// everything drawn here so far. Only the pixels around the box are read.
+    func erase(_ rect: CGRect, from source: Canvas? = nil) {
+        guard let device = deviceRect(for: rect) else { return }
         // One pixel of surroundings on each side, where the output has them.
         let around = device.insetBy(dx: -1, dy: -1).intersection(CGRect(origin: .zero, size: deviceSize))
-        guard let patch = snapshot.cropping(to: around), var buffer = PixelBuffer(image: patch) else { return }
+        guard var buffer = PixelBuffer(context: (source ?? self).context, rect: around) else { return }
         buffer.eraseFill(inner: (x: Int(device.minX - around.minX), y: Int(device.minY - around.minY),
                                  width: Int(device.width), height: Int(device.height)))
         guard let filled = buffer.makeImage() else { return }

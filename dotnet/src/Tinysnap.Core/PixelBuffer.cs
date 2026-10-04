@@ -130,24 +130,48 @@ internal sealed class PixelBuffer
     /// channel, of those within 16 of it along the edge.</summary>
     private (byte R, byte G, byte B, byte A)[] SmoothedEdge(int count, Func<int, int> index)
     {
-        const int reach = 16;
         var channels = Enumerable.Range(0, 4)
-            .Select(channel => Enumerable.Range(0, count).Select(i => Bytes[index(i) + channel]).ToArray())
+            .Select(channel => SlidingMedians([.. Enumerable.Range(0, count).Select(i => Bytes[index(i) + channel])], 16))
             .ToArray();
-        var result = new (byte, byte, byte, byte)[count];
-        for (var i = 0; i < count; i++)
+        return [.. Enumerable.Range(0, count).Select(i => (channels[0][i], channels[1][i], channels[2][i], channels[3][i]))];
+    }
+
+    /// <summary>For each value, the median of those within <paramref name="reach"/> of it, its window
+    /// sorted as one: the window slides along, one value in and one out at each step. Sorting a fresh
+    /// copy at every pixel made the medians most of an erase's cost.</summary>
+    internal static byte[] SlidingMedians(byte[] values, int reach)
+    {
+        var window = new List<byte>(2 * reach + 1);
+        // Where a value goes in the sorted window: before the first larger one.
+        int Slot(byte value)
         {
-            var from = Math.Max(0, i - reach);
-            var to = Math.Min(count - 1, i + reach);
-            byte Median(int channel)
+            int low = 0, high = window.Count;
+            while (low < high)
             {
-                var sorted = channels[channel][from..(to + 1)];
-                Array.Sort(sorted);
-                return sorted[sorted.Length / 2];
+                var middle = (low + high) / 2;
+                if (window[middle] <= value) low = middle + 1;
+                else high = middle;
             }
-            result[i] = (Median(0), Median(1), Median(2), Median(3));
+            return low;
         }
-        return result;
+        var medians = new byte[values.Length];
+        int first = 0, last = -1;
+        for (var i = 0; i < values.Length; i++)
+        {
+            while (last < Math.Min(values.Length - 1, i + reach))
+            {
+                last++;
+                window.Insert(Slot(values[last]), values[last]);
+            }
+            while (first < i - reach)
+            {
+                // The slot after the last copy of the value, so one before it is a copy.
+                window.RemoveAt(Slot(values[first]) - 1);
+                first++;
+            }
+            medians[i] = window[window.Count / 2];
+        }
+        return medians;
     }
 
     /// <summary>Only when the box covers the whole buffer: there is nothing outside to blend.</summary>
