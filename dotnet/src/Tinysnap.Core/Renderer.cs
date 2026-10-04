@@ -25,26 +25,19 @@ public static partial class Renderer
                                   IReadOnlySet<Guid>? hidden = null, Guid? typing = null, bool sharpPixels = false)
     {
         var area = region ?? document.Extent;
-        var size = PixelSize(area, outputScale);
-        using var surface = SKSurface.Create(Info((int)size.Width, (int)size.Height));
+        using var surface = Surface(area, outputScale);
         if (surface is null) return null;
-        var canvas = surface.Canvas;
-        canvas.Clear(SKColors.Transparent);
-        // Capture pixels, y down, which is Skia's own space: scale and shift, nothing flips.
-        canvas.Scale((float)outputScale);
-        canvas.Translate((float)-area.MinX, (float)-area.MinY);
-
-        var painter = new Canvas(surface, area, outputScale, size, document.Scale, document.Extent.Origin, document.Capture,
-                                 typing);
-        // Past the capture, the canvas carries on in the capture's edge colour.
-        if (!document.Capture.Bounds.Contains(area))
-        {
-            using var edge = new SKPaint { Color = document.Capture.EdgeColor };
-            canvas.DrawRect(area.ToSK(), edge);
-        }
-        painter.Draw(document.Capture.Image, document.Capture.Bounds, crisp: sharpPixels);
-
+        var painter = Start(surface, document, area, outputScale, typing, sharpPixels);
         var visible = document.Annotations.Where(a => !a.IsHidden && (hidden is null || !hidden.Contains(a.Id))).ToList();
+        // An erase fills from what is around it, but not from outlines beneath it: one running
+        // along its edge, as a box's does when the erase is drawn just inside it, filled the whole
+        // erase with its colour. So when an erase lies over an outline, a second canvas takes
+        // everything but the outlines, and every erase fills from that.
+        var firstOutline = visible.FindIndex(IsOutline);
+        using var groundSurface = firstOutline >= 0 && visible.Skip(firstOutline).Any(a => a.Kind is AnnotationKind.Erase)
+            ? Surface(area, outputScale)
+            : null;
+        var ground = groundSurface is null ? null : Start(groundSurface, document, area, outputScale, typing, sharpPixels);
         var spotlightDrawn = false;
         foreach (var annotation in visible)
         {
@@ -54,16 +47,64 @@ public static partial class Renderer
                 // dimmed or blurred as the first one says.
                 if (spotlightDrawn) continue;
                 spotlightDrawn = true;
-                painter.Spotlight(visible
+                var lit = visible
                     .Where(a => a.Kind is AnnotationKind.Spotlight)
                     .Select(a => (((AnnotationKind.Spotlight)a.Kind).Rect, a.Style.Corners))
-                    .ToList(), annotation.Style.BlurOutside);
+                    .ToList();
+                painter.Spotlight(lit, annotation.Style.BlurOutside);
+                ground?.Spotlight(lit, annotation.Style.BlurOutside);
+                continue;
+            }
+            if (annotation.Kind is AnnotationKind.Erase(var rect) && groundSurface is not null)
+            {
+                using var source = groundSurface.Snapshot();
+                painter.Erase(rect, source);
+                ground!.Erase(rect, source);
                 continue;
             }
             painter.Draw(annotation, document.StepLabel(annotation.Id));
+            if (!IsOutline(annotation)) ground?.Draw(annotation, document.StepLabel(annotation.Id));
         }
         return surface.Snapshot();
     }
+
+    private static SKSurface? Surface(Rect area, double outputScale)
+    {
+        var size = PixelSize(area, outputScale);
+        return SKSurface.Create(Info((int)size.Width, (int)size.Height));
+    }
+
+    /// <summary>A canvas on <paramref name="surface"/> for <paramref name="area"/> with the capture
+    /// drawn, ready for the annotations.</summary>
+    private static Canvas Start(SKSurface surface, Document document, Rect area, double outputScale, Guid? typing,
+                                bool sharpPixels)
+    {
+        var canvas = surface.Canvas;
+        canvas.Clear(SKColors.Transparent);
+        // Capture pixels, y down, which is Skia's own space: scale and shift, nothing flips.
+        canvas.Scale((float)outputScale);
+        canvas.Translate((float)-area.MinX, (float)-area.MinY);
+
+        var painter = new Canvas(surface, area, outputScale, PixelSize(area, outputScale), document.Scale, document.Extent.Origin,
+                                 document.Capture, typing);
+        // Past the capture, the canvas carries on in the capture's edge colour.
+        if (!document.Capture.Bounds.Contains(area))
+        {
+            using var edge = new SKPaint { Color = document.Capture.EdgeColor };
+            canvas.DrawRect(area.ToSK(), edge);
+        }
+        painter.Draw(document.Capture.Image, document.Capture.Bounds, crisp: sharpPixels);
+        return painter;
+    }
+
+    /// <summary>A thin line drawn over the capture: an arrow, a line, a freehand stroke, a
+    /// measurement, or a box or oval left unfilled.</summary>
+    private static bool IsOutline(Annotation annotation) => annotation.Kind switch
+    {
+        AnnotationKind.Arrow or AnnotationKind.Line or AnnotationKind.Freehand or AnnotationKind.Measure => true,
+        AnnotationKind.Rectangle or AnnotationKind.Oval => !annotation.Style.Filled,
+        _ => false,
+    };
 }
 
 /// <summary>One render in progress. Redactions and the magnifier read back what has been
@@ -389,12 +430,14 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
         DrawRounded(blocks, CaptureRect(device), crisp: true, corners);
     }
 
-    private void Erase(Rect rect)
+    /// <summary>Fills from <paramref name="source"/> when given, a render of what is beneath without
+    /// its outlines, or else from everything drawn so far.</summary>
+    public void Erase(Rect rect, SKImage? source = null)
     {
         if (DeviceRect(rect) is not { } device) return;
         // One pixel of surroundings on each side, where the output has them.
         var around = device.Inset(-1, -1).Intersection(new Rect(Point.Zero, DeviceSize));
-        using var patch = surface.Snapshot(around.ToSKRectI());
+        using var patch = source is null ? surface.Snapshot(around.ToSKRectI()) : source.Subset(around.ToSKRectI());
         if (patch is null || PixelBuffer.From(patch) is not { } buffer) return;
         buffer.EraseFill(((int)(device.MinX - around.MinX), (int)(device.MinY - around.MinY),
                           (int)device.Width, (int)device.Height));

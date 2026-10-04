@@ -21,6 +21,45 @@ public enum Renderer {
                               hiding hidden: Set<Annotation.ID> = [], typing: Annotation.ID? = nil,
                               sharpPixels: Bool = false) -> CGImage? {
         let region = region ?? document.extent
+        guard let canvas = start(document, region: region, outputScale: outputScale, typing: typing,
+                                 sharpPixels: sharpPixels) else { return nil }
+        let visible = document.annotations.filter { !$0.isHidden && !hidden.contains($0.id) }
+        // An erase fills from what is around it, but not from outlines beneath it: one running
+        // along its edge, as a box's does when the erase is drawn just inside it, filled the
+        // whole erase with its colour. So when an erase lies over an outline, a second canvas
+        // takes everything but the outlines, and every erase fills from that.
+        let ground = visible.firstIndex(where: isOutline).flatMap { first in
+            visible[first...].contains { if case .erase = $0.kind { true } else { false } }
+                ? start(document, region: region, outputScale: outputScale, typing: typing, sharpPixels: sharpPixels)
+                : nil
+        }
+        var spotlightDrawn = false
+        for annotation in visible {
+            if case .spotlight = annotation.kind {
+                // Every spotlight lights one shared area, drawn at the first one's place and
+                // dimmed or blurred as the first one says.
+                guard !spotlightDrawn else { continue }
+                spotlightDrawn = true
+                let lit = visible.compactMap { if case let .spotlight(rect) = $0.kind { (rect, $0.style.corners) } else { nil } }
+                canvas.spotlight(lit, blurring: annotation.style.blurOutside)
+                ground?.spotlight(lit, blurring: annotation.style.blurOutside)
+                continue
+            }
+            if case let .erase(rect) = annotation.kind, let ground {
+                let source = ground.context.makeImage()
+                canvas.erase(rect, from: source)
+                ground.erase(rect, from: source)
+                continue
+            }
+            canvas.draw(annotation, stepLabel: document.stepLabel(of: annotation.id))
+            if !isOutline(annotation) { ground?.draw(annotation, stepLabel: document.stepLabel(of: annotation.id)) }
+        }
+        return canvas.context.makeImage()
+    }
+
+    /// A canvas for `region` with the capture drawn, ready for the annotations.
+    private static func start(_ document: Document, region: CGRect, outputScale: CGFloat, typing: Annotation.ID?,
+                              sharpPixels: Bool) -> Canvas? {
         let size = pixelSize(of: region, outputScale: outputScale)
         let width = Int(size.width), height = Int(size.height)
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),
@@ -42,22 +81,17 @@ public enum Renderer {
             context.fill(region)
         }
         canvas.draw(document.capture.image, in: document.capture.bounds, crisp: sharpPixels)
+        return canvas
+    }
 
-        let visible = document.annotations.filter { !$0.isHidden && !hidden.contains($0.id) }
-        var spotlightDrawn = false
-        for annotation in visible {
-            if case .spotlight = annotation.kind {
-                // Every spotlight lights one shared area, drawn at the first one's place and
-                // dimmed or blurred as the first one says.
-                guard !spotlightDrawn else { continue }
-                spotlightDrawn = true
-                canvas.spotlight(visible.compactMap { if case let .spotlight(rect) = $0.kind { (rect, $0.style.corners) } else { nil } },
-                                 blurring: annotation.style.blurOutside)
-                continue
-            }
-            canvas.draw(annotation, stepLabel: document.stepLabel(of: annotation.id))
+    /// A thin line drawn over the capture: an arrow, a line, a freehand stroke, a measurement,
+    /// or a box or oval left unfilled.
+    private static func isOutline(_ annotation: Annotation) -> Bool {
+        switch annotation.kind {
+        case .arrow, .line, .freehand, .measure: true
+        case .rectangle, .oval: !annotation.style.filled
+        default: false
         }
-        return context.makeImage()
     }
 }
 
@@ -326,8 +360,10 @@ struct Canvas {
         drawRounded(blocks, in: captureRect(for: device), crisp: true, corners: corners)
     }
 
-    private func erase(_ rect: CGRect) {
-        guard let device = deviceRect(for: rect), let snapshot = context.makeImage() else { return }
+    /// Fills from `source` when given, a render of what is beneath without its outlines, or else
+    /// from everything drawn so far.
+    func erase(_ rect: CGRect, from source: CGImage? = nil) {
+        guard let device = deviceRect(for: rect), let snapshot = source ?? context.makeImage() else { return }
         // One pixel of surroundings on each side, where the output has them.
         let around = device.insetBy(dx: -1, dy: -1).intersection(CGRect(origin: .zero, size: deviceSize))
         guard let patch = snapshot.cropping(to: around), var buffer = PixelBuffer(image: patch) else { return }

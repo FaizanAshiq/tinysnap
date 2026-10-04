@@ -145,6 +145,40 @@ struct RendererTests {
         #expect(abs(Fixture.pixel(image, 128, 30).r - 128) <= 3)
     }
 
+    /// Erasing what is inside a box drawn round it: the erase's edges lie on the box's outline,
+    /// which it took for its surroundings and filled solid with.
+    @Test func anEraseJustInsideABoxFillsFromTheCaptureNotTheOutline() {
+        let capture = Fixture.capture(width: 300, height: 200)
+        let box = Fixture.annotation(.rectangle(CGRect(x: 40, y: 40, width: 160, height: 80)))
+        let erase = Fixture.annotation(.erase(CGRect(x: 42, y: 42, width: 156, height: 76)))
+        let image = render(capture, [box, erase])
+        #expect(Fixture.isClose(Fixture.pixel(image, 120, 80), white))
+        // The outline's outer half, past the erase, still shows.
+        #expect(Fixture.pixel(image, 39, 80).g < 100)
+    }
+
+    /// A pasted image is part of the picture, so an erase in it fills from it, outlines or not.
+    @Test func anEraseInAPastedImageTakesItsColourWithAnOutlineBeneath() {
+        let capture = Fixture.capture(width: 300, height: 200)
+        let box = Fixture.annotation(.rectangle(CGRect(x: 10, y: 10, width: 60, height: 60)))
+        let blue = PastedImage(Fixture.capture(width: 10, height: 10, fill: Fixture.blue).image)
+        let pasted = Annotation(kind: .image(CGRect(x: 100, y: 40, width: 160, height: 120), blue),
+                                style: Style(colorHex: Palette.red, corners: .square))
+        let erase = Fixture.annotation(.erase(CGRect(x: 140, y: 80, width: 60, height: 40)))
+        let image = render(capture, [box, pasted, erase])
+        #expect(Fixture.isClose(Fixture.pixel(image, 170, 100), (0, 0, 255)))
+    }
+
+    /// Inside a filled box the erase still takes the fill, so it blends in.
+    @Test func anEraseInsideAFilledBoxTakesItsColour() {
+        let capture = Fixture.capture(width: 300, height: 200)
+        let box = Fixture.annotation(.rectangle(CGRect(x: 40, y: 40, width: 160, height: 80)),
+                                     style: Style(colorHex: "#0000FF", filled: true))
+        let erase = Fixture.annotation(.erase(CGRect(x: 80, y: 60, width: 40, height: 30)))
+        let image = render(capture, [box, erase])
+        #expect(Fixture.isClose(Fixture.pixel(image, 100, 75), (0, 0, 255)))
+    }
+
     @Test func aRedactionHidesWhatIsBelowAndLeavesWhatIsAbove() {
         let capture = Fixture.capture(width: 200, height: 100)
         let square = Fixture.annotation(.rectangle(CGRect(x: 20, y: 20, width: 40, height: 40)),
