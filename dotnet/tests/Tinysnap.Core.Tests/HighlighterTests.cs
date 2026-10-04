@@ -49,3 +49,55 @@ public class HighlighterTests
         Assert.True(Fixture.Pixel(image, 100, 50).R > 100);
     }
 }
+
+/// <summary>The highlighter can follow the pointer, for marking a word on a line that is not
+/// straight or circling a patch, as well as drawing the straight stroke it always has.</summary>
+public class FreehandHighlighterTests
+{
+    private static EditorSession Traced()
+    {
+        var session = new EditorSession(new Document(Fixture.Capture(120, 80)), Tool.Highlighter);
+        session.Restyle(s => s with { Freehand = true });
+        session.PointerDown(new Point(20, 20), reach: 4);
+        session.PointerDragged(new Point(60, 60));
+        session.PointerDragged(new Point(100, 20));
+        session.PointerUp();
+        return session;
+    }
+
+    [Fact]
+    public void AFreehandHighlightFollowsThePointer()
+    {
+        var session = Traced();
+        var mark = Assert.Single(session.Display.Annotations);
+        var path = Assert.IsType<AnnotationKind.HighlighterPath>(mark.Kind);
+        Assert.Equal(3, path.Points.Length);
+        Assert.Equal(Tool.Highlighter, mark.Tool);
+        using var image = Renderer.Render(session.Display)!;
+        // The bottom of the V, which a straight stroke from end to end never reaches.
+        Assert.False(Fixture.IsClose(Fixture.Pixel(image, 60, 58), (255, 255, 255)));
+    }
+
+    [Fact]
+    public void APathIsSavedWithItsEndsSoAnOlderTinysnapDrawsItStraight()
+    {
+        var document = Traced().Display;
+        var (json, _) = DocumentArchive.Encode(document, DateTimeOffset.FromUnixTimeSeconds(1_700_000_000));
+        var text = System.Text.Encoding.UTF8.GetString(json);
+        Assert.Contains("\"highlighter\"", text);
+        Assert.Contains("\"from\"", text);
+        Assert.Contains("\"points\"", text);
+        var read = DocumentArchive.Decode(json, _ => null);
+        Assert.Equal(document.Annotations.Select(a => a.Kind), read.Annotations.Select(a => a.Kind));
+    }
+
+    [Fact]
+    public void FreehandIsSavedAndAStyleFromBeforeDrawsStraight()
+    {
+        var style = new Style(Palette.Yellow, freehand: true);
+        Assert.Equal(style, Style.FromJson(System.Text.Json.Nodes.JsonNode.Parse(style.ToJson().ToJsonString())));
+        Assert.False(Style.FromJson(System.Text.Json.Nodes.JsonNode.Parse("""{"colorHex":"#FFCC00","size":"medium"}""")).Freehand);
+        Assert.True(Tool.Highlighter.HasFreehand());
+        Assert.False(Tool.Line.HasFreehand());
+    }
+}

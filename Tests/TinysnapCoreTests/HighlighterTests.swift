@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 @testable import TinysnapCore
 
@@ -43,5 +44,47 @@ struct HighlighterTests {
     @Test func aWhiteHighlightShowsOnADarkCapture() throws {
         let image = try render(Fixture.capture(width: 200, height: 100, fill: dark), [mark(50, "#FFFFFF")])
         #expect(Fixture.pixel(image, 100, 50).r > 100)
+    }
+}
+
+/// The highlighter can follow the pointer, for marking a word on a line that is not straight
+/// or circling a patch, as well as drawing the straight stroke it always has.
+struct FreehandHighlighterTests {
+    private func traced() -> EditorSession {
+        var session = EditorSession(document: Document(capture: Fixture.capture(width: 120, height: 80)), tool: .highlighter)
+        session.restyle { $0.freehand = true }
+        session.pointerDown(at: CGPoint(x: 20, y: 20), reach: 4)
+        session.pointerDragged(to: CGPoint(x: 60, y: 60))
+        session.pointerDragged(to: CGPoint(x: 100, y: 20))
+        session.pointerUp()
+        return session
+    }
+
+    @Test func aFreehandHighlightFollowsThePointer() throws {
+        let session = traced()
+        let mark = try #require(session.display.annotations.first)
+        guard case let .highlighterPath(points) = mark.kind else { Issue.record("not a path"); return }
+        #expect(points.count == 3)
+        #expect(mark.tool == .highlighter)
+        let image = try #require(Renderer.render(session.display))
+        // The bottom of the V, which a straight stroke from end to end never reaches.
+        #expect(!Fixture.isClose(Fixture.pixel(image, 60, 58), (255, 255, 255)))
+    }
+
+    @Test func aPathIsSavedWithItsEndsSoAnOlderTinysnapDrawsItStraight() throws {
+        let document = traced().display
+        let (json, _) = try DocumentArchive.encode(document, captured: Date(timeIntervalSince1970: 1_700_000_000))
+        let text = String(decoding: json, as: UTF8.self)
+        #expect(text.contains(#""kind" : "highlighter""#) && text.contains(#""from""#) && text.contains(#""points""#))
+        let read = try DocumentArchive.decode(json) { _ in nil }
+        #expect(read.annotations.map(\.kind) == document.annotations.map(\.kind))
+    }
+
+    @Test func freehandIsSavedAndAStyleFromBeforeDrawsStraight() throws {
+        let style = Style(colorHex: Palette.yellow, freehand: true)
+        #expect(try JSONDecoder().decode(Style.self, from: JSONEncoder().encode(style)) == style)
+        let old = Data(##"{"colorHex":"#FFCC00","size":"medium"}"##.utf8)
+        #expect(try JSONDecoder().decode(Style.self, from: old).freehand == false)
+        #expect(Tool.highlighter.hasFreehand && !Tool.line.hasFreehand)
     }
 }

@@ -46,6 +46,8 @@ public struct Annotation: Equatable, Identifiable, Sendable {
         case oval(CGRect)
         case text(origin: CGPoint, string: String)
         case highlighter(from: CGPoint, to: CGPoint)
+        /// A highlight that follows the pointer.
+        case highlighterPath([CGPoint])
         case freehand([CGPoint])
         case step(center: CGPoint)
         case spotlight(CGRect)
@@ -66,7 +68,7 @@ public struct Annotation: Equatable, Identifiable, Sendable {
         case .rectangle: .rectangle
         case .oval: .oval
         case .text: .text
-        case .highlighter: .highlighter
+        case .highlighter, .highlighterPath: .highlighter
         case .freehand: .freehand
         case .step: .step
         case .spotlight: .spotlight
@@ -105,7 +107,7 @@ public struct Annotation: Equatable, Identifiable, Sendable {
             guard style.filled else { return letters }
             let padding = TextLayout.boxPadding(points: size / scale)
             return letters.insetBy(dx: -padding.width * scale, dy: -padding.height * scale)
-        case let .freehand(points):
+        case let .freehand(points), let .highlighterPath(points):
             guard let first = points.first else { return .null }
             let box = points.reduce(CGRect(origin: first, size: .zero)) { $0.union(CGRect(origin: $1, size: .zero)) }
             return box.insetBy(dx: -size / 2, dy: -size / 2)
@@ -145,7 +147,7 @@ public struct Annotation: Equatable, Identifiable, Sendable {
             return rect.contains(point)
         case .text, .step:
             return bounds(scale: scale).insetBy(dx: -reach, dy: -reach).contains(point)
-        case let .freehand(points):
+        case let .freehand(points), let .highlighterPath(points):
             if points.count == 1 { return point.distance(to: points[0]) <= reach }
             return zip(points, points.dropFirst()).contains { point.distance(toSegmentFrom: $0, to: $1) <= reach }
         case let .magnifier(center, radius, _):
@@ -177,6 +179,7 @@ public struct Annotation: Equatable, Identifiable, Sendable {
         case let .image(rect, image): copy.kind = .image(shift(rect), image)
         case let .text(origin, string): copy.kind = .text(origin: origin.offset(by: vector), string: string)
         case let .freehand(points): copy.kind = .freehand(points.map { $0.offset(by: vector) })
+        case let .highlighterPath(points): copy.kind = .highlighterPath(points.map { $0.offset(by: vector) })
         case let .step(center): copy.kind = .step(center: center.offset(by: vector))
         case let .magnifier(center, radius, zoom): copy.kind = .magnifier(center: center.offset(by: vector), radius: radius, zoom: zoom)
         }
@@ -193,7 +196,7 @@ public struct Annotation: Equatable, Identifiable, Sendable {
             return rect.handlePoints
         case .magnifier:
             return Array(bounds(scale: scale).handlePoints.prefix(4))
-        case .text, .freehand, .step:
+        case .text, .freehand, .highlighterPath, .step:
             return []
         }
     }
@@ -226,7 +229,7 @@ public struct Annotation: Equatable, Identifiable, Sendable {
         case let .magnifier(center, _, zoom):
             let radius = max(abs(point.x - center.x), abs(point.y - center.y), 8)
             copy.kind = .magnifier(center: center, radius: radius, zoom: zoom)
-        case .text, .freehand, .step:
+        case .text, .freehand, .highlighterPath, .step:
             break
         }
         return copy
@@ -242,7 +245,7 @@ public struct Annotation: Equatable, Identifiable, Sendable {
         case let .rectangle(rect), let .oval(rect), let .spotlight(rect),
              let .blur(rect), let .pixelate(rect), let .erase(rect), let .image(rect, _):
             return rect.width < minimum || rect.height < minimum
-        case let .freehand(points):
+        case let .freehand(points), let .highlighterPath(points):
             return points.count < 2
         case let .text(_, string):
             return string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
