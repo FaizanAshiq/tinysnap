@@ -227,7 +227,7 @@ internal sealed partial class StyleBar : Border
             BoldChip = bold;
         }
         if (tool.HasCounter()) AddStepChips(style);
-        OpacityChips = tool.HasOverlay() ? Group(MakeOpacityChips(style)) : [];
+        OpacityChips = tool.HasOpacity() ? Group(MakeOpacityChips(style)) : [];
         if (tool.HasOverlay())
         {
             var difference = Chip(Glyphs.Difference(), "Difference: what matches goes black", style.Difference,

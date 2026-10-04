@@ -99,6 +99,9 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
     /// Pasted images: opacity and the difference blend, for comparing against the capture.
     public var hasOverlay: Bool { self == .image }
 
+    /// Pasted images, boxes and ovals: see-through, so a filled box tints rather than hides.
+    public var hasOpacity: Bool { self == .image || self == .rectangle || self == .oval }
+
     /// Boxes whose corner radius can be set. Not erase: rounding it would leave the
     /// corners of what it hides showing.
     public var hasCorners: Bool {

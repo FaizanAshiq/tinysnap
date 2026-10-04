@@ -97,6 +97,9 @@ public static class ToolInfo
     /// <summary>Pasted images: opacity and the difference blend, for comparing against the capture.</summary>
     public static bool HasOverlay(this Tool tool) => tool is Tool.Image;
 
+    /// <summary>Pasted images, boxes and ovals: see-through, so a filled box tints rather than hides.</summary>
+    public static bool HasOpacity(this Tool tool) => tool is Tool.Image or Tool.Rectangle or Tool.Oval;
+
     /// <summary>Boxes whose corner radius can be set. Not erase: rounding it would leave the
     /// corners of what it hides showing.</summary>
     public static bool HasCorners(this Tool tool) =>

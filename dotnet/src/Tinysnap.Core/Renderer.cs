@@ -98,6 +98,9 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
     private static SKPathEffect? Dashes(Annotation annotation, double width) =>
         annotation.Style.Dashed ? SKPathEffect.CreateDash([(float)(width * 2), (float)(width * 3)], 0) : null;
 
+    /// <summary>A box or oval's colour at its opacity, so a filled one tints what is under it.</summary>
+    private static SKColor SeeThrough(SKColor color, double opacity) => color.WithAlpha((byte)Geometry.Round(color.Alpha * opacity));
+
     private static SKPaint Stroke(SKColor color, double width, SKStrokeCap cap = SKStrokeCap.Round) => new()
     {
         Color = color,
@@ -143,7 +146,8 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
                 {
                     // Half the stroke again, so the inside of an outline is as round as the outside.
                     var radius = Radius(annotation.Style.Corners, rect, annotation.Style.Filled ? 0 : size / 2);
-                    using var paint = annotation.Style.Filled ? Fill(color) : Stroke(color, size);
+                    var tint = SeeThrough(color, annotation.Style.Opacity);
+                    using var paint = annotation.Style.Filled ? Fill(tint) : Stroke(tint, size);
                     using var dashes = annotation.Style.Filled ? null : Dashes(annotation, size);
                     paint.PathEffect = dashes;
                     Context.DrawRoundRect(rect.ToSK(), (float)radius, (float)radius, paint);
@@ -151,7 +155,8 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
                 }
                 case AnnotationKind.Oval(var rect):
                 {
-                    using var paint = annotation.Style.Filled ? Fill(color) : Stroke(color, size);
+                    var tint = SeeThrough(color, annotation.Style.Opacity);
+                    using var paint = annotation.Style.Filled ? Fill(tint) : Stroke(tint, size);
                     using var dashes = annotation.Style.Filled ? null : Dashes(annotation, size);
                     paint.PathEffect = dashes;
                     Context.DrawOval(rect.ToSK(), paint);
