@@ -73,11 +73,13 @@ public sealed record Style
 
     /// <summary>Steps only: counted A, B, C rather than 1, 2, 3, apart from the numbered ones.</summary>
     public bool Letters { get; init; }
+    /// <summary>The highlighter only: following the pointer instead of drawing a straight stroke.</summary>
+    public bool Freehand { get; init; }
 
     public Style(string colorHex, StyleSize size = StyleSize.Medium, bool filled = false,
                  CornerSize corners = CornerSize.Medium, double opacity = 1, bool difference = false,
                  TextAlign align = TextAlign.Left, bool bold = false, bool dashed = false,
-                 bool letters = false)
+                 bool letters = false, bool freehand = false)
     {
         ColorHex = colorHex;
         Size = size;
@@ -89,6 +91,7 @@ public sealed record Style
         Bold = bold;
         Dashed = dashed;
         Letters = letters;
+        Freehand = freehand;
     }
 
     public JsonObject ToJson() => new()
@@ -103,6 +106,7 @@ public sealed record Style
         ["bold"] = Bold,
         ["dashed"] = Dashed,
         ["letters"] = Letters,
+        ["freehand"] = Freehand,
     };
 
     /// <summary>Every key is optional and a bad value falls back on its own, so one hand
@@ -124,7 +128,8 @@ public sealed record Style
         var bold = Json.Bool(o, "bold") ?? false;
         var dashed = Json.Bool(o, "dashed") ?? false;
         var letters = Json.Bool(o, "letters") ?? false;
-        return new Style(colorHex, size, filled, corners, opacity, difference, align, bold, dashed, letters);
+        var freehand = Json.Bool(o, "freehand") ?? false;
+        return new Style(colorHex, size, filled, corners, opacity, difference, align, bold, dashed, letters, freehand);
     }
 }
 

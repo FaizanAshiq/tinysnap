@@ -94,6 +94,9 @@ public static class ToolInfo
     /// <summary>Steps only: numbers or letters, from a start the capture keeps.</summary>
     public static bool HasCounter(this Tool tool) => tool is Tool.Step;
 
+    /// <summary>The highlighter only: a straight stroke, or one that follows the pointer.</summary>
+    public static bool HasFreehand(this Tool tool) => tool is Tool.Highlighter;
+
     /// <summary>Pasted images: opacity and the difference blend, for comparing against the capture.</summary>
     public static bool HasOverlay(this Tool tool) => tool is Tool.Image;
 
