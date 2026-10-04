@@ -570,10 +570,11 @@ public sealed class CaptureController
         Toast.Show();
     }
 
-    /// <summary>Reads <paramref name="image"/>'s words on a worker thread and finds every
-    /// <paramref name="target"/> among them, saying how many in a toast at the top of the monitor
-    /// holding <paramref name="on"/>. The boxes are in the image's pixels; the image stays the caller's.</summary>
-    internal async Task<IReadOnlyList<Rect>> RedactText(SKImage image, RedactTarget target, PixelPoint? on)
+    /// <summary>Reads <paramref name="image"/>'s words on a worker thread, hands every
+    /// <paramref name="target"/> among them to <paramref name="erase"/>, and says how many it added in a
+    /// toast at the top of the monitor holding <paramref name="on"/>. The boxes are in the image's
+    /// pixels; the image stays the caller's.</summary>
+    internal async Task RedactText(SKImage image, RedactTarget target, PixelPoint? on, Func<IReadOnlyList<Rect>, int> erase)
     {
         var (one, many) = target switch
         {
@@ -587,13 +588,14 @@ public sealed class CaptureController
         Toast.Show();
         var lines = await Task.Run(() => platform.Text.Lines(image));
         IReadOnlyList<Rect> boxes = lines is null ? [] : TextRedaction.Boxes(lines, target);
+        var added = boxes.Count == 0 ? 0 : erase(boxes);
         Toast?.Dismiss();
         var title = lines is null ? "Could not read text"
             : boxes.Count == 0 ? $"No {many} found"
-            : $"Erased {boxes.Count} {(boxes.Count == 1 ? one : many)}";
+            : added == 0 ? "Already erased"
+            : $"Erased {added} {(added == 1 ? one : many)}";
         Toast = new TextToast(title, "", null, services.Clipboard, platform.Files, on, time);
         Toast.Show();
-        return boxes;
     }
 
     // Library

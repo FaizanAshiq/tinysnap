@@ -205,20 +205,25 @@ public sealed class EditorSession
 
     /// <summary>An erase box over each of <paramref name="boxes"/>, a little past each so no edge of a
     /// letter shows, all as one undoable step. Each stays a box of its own, to delete if it covers
-    /// too much.</summary>
-    public void Redact(IReadOnlyList<Rect> boxes)
+    /// too much. A box an erase already covers is skipped: the reader sees the text under the erases
+    /// and finds it again, and a second box under the first would make deleting it look like it did
+    /// nothing. Returns how many it added.</summary>
+    public int Redact(IReadOnlyList<Rect> boxes)
     {
-        if (boxes.Count == 0) return;
-        FinishTyping();
         var margin = 2 * Scale;
+        var erased = Display.Annotations.Select(a => a.Kind).OfType<AnnotationKind.Erase>().Select(e => e.Rect).ToList();
+        var fresh = boxes.Select(box => box.Inset(-margin, -margin).WholePixels)
+            .Where(box => !erased.Any(rect => rect.Contains(box))).ToList();
+        if (fresh.Count == 0) return 0;
+        FinishTyping();
         var style = StyleFor(Tool.Erase);
         Display = Display with
         {
-            Annotations = Display.Annotations.AddRange(boxes.Select(box =>
-                Annotation.New(new AnnotationKind.Erase(box.Inset(-margin, -margin).WholePixels), style))),
+            Annotations = Display.Annotations.AddRange(fresh.Select(box => Annotation.New(new AnnotationKind.Erase(box), style))),
         };
         Selection = null;
         History.Commit(Display);
+        return fresh.Count;
     }
 
     // Steps

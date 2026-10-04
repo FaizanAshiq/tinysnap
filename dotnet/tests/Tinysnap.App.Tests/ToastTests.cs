@@ -22,19 +22,27 @@ public class ToastTests
 
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
-    /// <summary>Redact finds the email among the words read and says how many it erased.</summary>
+    /// <summary>Redact finds the email among the words read, hands it over to be erased, and says how
+    /// many were.</summary>
     [AvaloniaFact]
     public async Task RedactFindsTheEmailAndSaysSo()
     {
         var setup = Launch();
         var email = new TextWord("marcus@example.com", new Rect(80, 10, 140, 16));
         ((FakeTextReader)setup.Platform.Text).Words = [new TextLine([new TextWord("Email", new Rect(10, 10, 60, 16)), email])];
-        var boxes = await setup.Controller.RedactText(CanvasHost.Blank(400, 300).Image, RedactTarget.Emails, null);
+        IReadOnlyList<Rect> erased = [];
+        await setup.Controller.RedactText(CanvasHost.Blank(400, 300).Image, RedactTarget.Emails, null, boxes =>
+        {
+            erased = boxes;
+            return boxes.Count;
+        });
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal([email.Box], boxes);
+        Assert.Equal([email.Box], erased);
         Assert.Equal("Erased 1 email", setup.Controller.Toast!.Heading);
-        boxes = await setup.Controller.RedactText(CanvasHost.Blank(400, 300).Image, RedactTarget.Phones, null);
-        Assert.Empty(boxes);
+        // Found again, under an erase that already covers it.
+        await setup.Controller.RedactText(CanvasHost.Blank(400, 300).Image, RedactTarget.Emails, null, _ => 0);
+        Assert.Equal("Already erased", setup.Controller.Toast!.Heading);
+        await setup.Controller.RedactText(CanvasHost.Blank(400, 300).Image, RedactTarget.Phones, null, boxes => boxes.Count);
         Assert.Equal("No phone numbers found", setup.Controller.Toast!.Heading);
     }
 

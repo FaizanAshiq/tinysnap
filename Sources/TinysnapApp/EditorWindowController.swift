@@ -638,8 +638,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             let lines = await Task.detached(priority: .userInitiated) { (try? TextReader.lines(in: image)) ?? [] }.value
             guard let self else { return }
             let boxes = TextRedaction.boxes(in: lines, for: target)
-            self.canvas.session.redact(boxes)
-            TextCopy.say(boxes.isEmpty ? "No \(many) found" : "Erased \(boxes.count) \(boxes.count == 1 ? one : many)", on: screen)
+            let added = self.canvas.session.redact(boxes)
+            TextCopy.say(boxes.isEmpty ? "No \(many) found"
+                         : added == 0 ? "Already erased"
+                         : "Erased \(added) \(added == 1 ? one : many)", on: screen)
         }
     }
 

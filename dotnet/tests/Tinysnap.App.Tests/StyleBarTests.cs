@@ -179,7 +179,11 @@ public class StyleBarTests
         var found = new Tinysnap.Core.Rect(40, 40, 120, 20);
         var services = TestServices.Make() with
         {
-            Redact = (_, target, _) => Task.FromResult<IReadOnlyList<Tinysnap.Core.Rect>>(target == RedactTarget.Numbers ? [found] : []),
+            Redact = (_, target, _, erase) =>
+            {
+                erase(target == RedactTarget.Numbers ? [found] : []);
+                return Task.CompletedTask;
+            },
         };
         var editor = TestServices.Editor(services, Tool.Erase);
         Assert.True(editor.StyleBar.IsVisible);

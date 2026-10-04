@@ -67,4 +67,18 @@ public class TextRedactionTests
         session.Undo();
         Assert.Empty(session.Display.Annotations);
     }
+
+    /// <summary>The reader sees the capture under the erases, so a second pass finds the same text again.</summary>
+    [Fact]
+    public void RedactingAgainSkipsWhatIsAlreadyErased()
+    {
+        var session = new EditorSession(new Document(Fixture.Capture(400, 200)), Tool.Erase);
+        Assert.Equal(3, session.Redact(TextRedaction.Boxes(Page, RedactTarget.Numbers)));
+        // The phone number was one of the numbers.
+        Assert.Equal(0, session.Redact(TextRedaction.Boxes(Page, RedactTarget.Phones)));
+        Assert.Equal(3, session.Display.Annotations.Length);
+        // A line reaches past any number on it, so every line is new.
+        Assert.Equal(4, session.Redact(TextRedaction.Boxes(Page, RedactTarget.AllText)));
+        Assert.Equal(7, session.Display.Annotations.Length);
+    }
 }

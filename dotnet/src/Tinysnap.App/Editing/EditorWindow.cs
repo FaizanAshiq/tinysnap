@@ -870,8 +870,7 @@ internal sealed class EditorWindow : Window
         if (services.Redact is not { } redact) return;
         var center = new PixelPoint(Position.X + (int)(Bounds.Width * DesktopScaling / 2),
                                     Position.Y + (int)(Bounds.Height * DesktopScaling / 2));
-        var boxes = await redact(Canvas.Session.Display.Capture.Image, target, center);
-        Canvas.Redact(boxes);
+        await redact(Canvas.Session.Display.Capture.Image, target, center, Canvas.Redact);
     }
 
     // Library
