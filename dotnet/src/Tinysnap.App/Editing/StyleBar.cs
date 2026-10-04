@@ -93,6 +93,7 @@ internal sealed partial class StyleBar : Border
     public IReadOnlyList<ToggleButton> DashChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> FreehandChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> OutsideChips { get; private set; } = [];
+    public IReadOnlyList<ToggleButton> RatioChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> CornerChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> AlignChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> OpacityChips { get; private set; } = [];
@@ -139,7 +140,7 @@ internal sealed partial class StyleBar : Border
 
     /// <summary>Whether a tool has anything to set, and so whether the bar shows at all.</summary>
     public static bool Shows(Tool tool) =>
-        tool.HasColor() || tool.HasSize() || tool.HasFill() || tool.HasCorners() || tool.HasOverlay();
+        tool.HasColor() || tool.HasSize() || tool.HasFill() || tool.HasCorners() || tool.HasOverlay() || tool.HasRatio();
 
     public void Refresh()
     {
@@ -204,8 +205,8 @@ internal sealed partial class StyleBar : Border
         (DifferenceChip, BoldChip) = (null, null);
         (CounterChips, LowerStart, RaiseStart, StartLabel) = ([], null, null, null);
         (AcrossChip, DownChip, LowerContrast, RaiseContrast, ContrastLabel, HelpChip) = (null, null, null, null, null, null);
-        (SizeChips, FillChips, DashChips, FreehandChips, OutsideChips, CornerChips, AlignChips, OpacityChips) =
-            ([], [], [], [], [], [], [], []);
+        (SizeChips, FillChips, DashChips, FreehandChips, OutsideChips, RatioChips, CornerChips, AlignChips, OpacityChips) =
+            ([], [], [], [], [], [], [], [], []);
         (BackdropFillChips, PaddingChips, BackdropCornerChips, ShadowChips) = ([], [], [], []);
         WallpaperNote = null;
         ClearSize();
@@ -222,6 +223,7 @@ internal sealed partial class StyleBar : Border
         DashChips = tool.HasDash() ? Group(MakeDashChips(style)) : [];
         FreehandChips = tool.HasFreehand() ? Group(MakeFreehandChips(style)) : [];
         OutsideChips = tool.HasOutsideBlur() ? Group(MakeOutsideChips(style)) : [];
+        RatioChips = tool.HasRatio() ? Group(MakeRatioChips(style)) : [];
         CornerChips = tool.HasCorners() ? Group(MakeCornerChips(style)) : [];
         AlignChips = tool.HasAlign() ? Group(MakeAlignChips(style)) : [];
         if (tool.HasBold())
@@ -632,6 +634,17 @@ internal sealed partial class StyleBar : Border
         [.. new[] { false, true }.Select(blur =>
             Chip(Glyphs.Icon(OutsideGlyphs[blur ? 1 : 0], 16), blur ? "Blur what is outside" : "Dim what is outside",
                  style.BlurOutside == blur, () => canvas.Restyle(s => s with { BlurOutside = blur })))];
+
+    /// <summary>Free, 1:1, 4:3 and 16:9, written out.</summary>
+    private List<ToggleButton> MakeRatioChips(Style style) =>
+        [.. Enum.GetValues<CropRatio>().Select(ratio =>
+        {
+            var chip = Chip(new TextBlock { Text = ratio == CropRatio.Free ? "Free" : ratio.Wire(), FontSize = 11, FontWeight = FontWeight.SemiBold },
+                            ratio == CropRatio.Free ? "Crop to any shape" : $"Crop to {ratio.Wire()}", style.CropRatio == ratio,
+                            () => canvas.Restyle(s => s with { CropRatio = ratio }));
+            chip.Width = 42;
+            return chip;
+        })];
 
     private List<ToggleButton> MakeAlignChips(Style style) =>
         [.. Enum.GetValues<TextAlign>().Select((align, index) =>

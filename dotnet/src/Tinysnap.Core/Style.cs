@@ -34,6 +34,34 @@ public static class StyleSizes
 /// <summary>Where each line of a text sits in the box its widest line makes.</summary>
 public enum TextAlign { Left, Center, Right }
 
+/// <summary>The shape the crop keeps: any, or width to height as named.</summary>
+public enum CropRatio { Free, Square, FourThree, SixteenNine }
+
+public static class CropRatios
+{
+    /// <summary>Width over height, landscape; null for a crop of any shape.</summary>
+    public static double? Value(this CropRatio ratio) => ratio switch
+    {
+        CropRatio.Square => 1,
+        CropRatio.FourThree => 4.0 / 3,
+        CropRatio.SixteenNine => 16.0 / 9,
+        _ => null,
+    };
+
+    /// <summary>As the Mac writes it: <c>free</c>, <c>1:1</c>, <c>4:3</c>, <c>16:9</c>.</summary>
+    public static string Wire(this CropRatio ratio) => ratio switch
+    {
+        CropRatio.Square => "1:1",
+        CropRatio.FourThree => "4:3",
+        CropRatio.SixteenNine => "16:9",
+        _ => "free",
+    };
+
+    /// <summary>Anything unreadable is a crop of any shape.</summary>
+    public static CropRatio FromWire(string? wire) =>
+        Enum.GetValues<CropRatio>().FirstOrDefault(ratio => ratio.Wire() == wire, CropRatio.Free);
+}
+
 public sealed record Style
 {
     public const double OpacityMin = 0.1;
@@ -79,10 +107,14 @@ public sealed record Style
     /// <summary>The spotlight only: what is outside it blurred instead of dimmed.</summary>
     public bool BlurOutside { get; init; }
 
+    /// <summary>The crop tool only: the shape a crop keeps.</summary>
+    public CropRatio CropRatio { get; init; }
+
     public Style(string colorHex, StyleSize size = StyleSize.Medium, bool filled = false,
                  CornerSize corners = CornerSize.Medium, double opacity = 1, bool difference = false,
                  TextAlign align = TextAlign.Left, bool bold = false, bool dashed = false,
-                 bool letters = false, bool freehand = false, bool blurOutside = false)
+                 bool letters = false, bool freehand = false, bool blurOutside = false,
+                 CropRatio cropRatio = CropRatio.Free)
     {
         ColorHex = colorHex;
         Size = size;
@@ -96,6 +128,7 @@ public sealed record Style
         Letters = letters;
         Freehand = freehand;
         BlurOutside = blurOutside;
+        CropRatio = cropRatio;
     }
 
     public JsonObject ToJson() => new()
@@ -112,6 +145,7 @@ public sealed record Style
         ["letters"] = Letters,
         ["freehand"] = Freehand,
         ["blurOutside"] = BlurOutside,
+        ["cropRatio"] = CropRatio.Wire(),
     };
 
     /// <summary>Every key is optional and a bad value falls back on its own, so one hand
@@ -135,7 +169,9 @@ public sealed record Style
         var letters = Json.Bool(o, "letters") ?? false;
         var freehand = Json.Bool(o, "freehand") ?? false;
         var blurOutside = Json.Bool(o, "blurOutside") ?? false;
-        return new Style(colorHex, size, filled, corners, opacity, difference, align, bold, dashed, letters, freehand, blurOutside);
+        var cropRatio = CropRatios.FromWire(Json.String(o, "cropRatio"));
+        return new Style(colorHex, size, filled, corners, opacity, difference, align, bold, dashed, letters, freehand, blurOutside,
+                         cropRatio);
     }
 }
 

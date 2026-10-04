@@ -115,9 +115,17 @@ public sealed class EditorSession
         if (SelectedAnnotation?.IsLocked == true) return;
         if (Selection is not { } id || Display.Annotation(id) is not { } annotation)
         {
+            var ratio = StyleFor(Tool).CropRatio;
             var style = change(StyleFor(Tool));
             styles[Tool] = style;
             ColorHex = style.ColorHex;
+            // A ratio picked with a crop already drawn trims that crop to it.
+            if (Tool == Tool.Crop && style.CropRatio != ratio && Display.Crop is { } crop && style.CropRatio.Value() is { } value
+                && crop.Trimmed(value).WholePixels is { Width: >= 1, Height: >= 1 } trimmed)
+            {
+                Display = Display with { Crop = trimmed };
+                History.Commit(Display);
+            }
             return;
         }
         var before = annotation.Style.ColorHex;
@@ -330,11 +338,13 @@ public sealed class EditorSession
                     return;
                 }
                 // A new crop, drawn from nothing, follows the same keys as a box. Dragging an
-                // existing crop's handle only takes Shift.
+                // existing crop's handle only takes Shift. Either keeps a chosen ratio; Shift
+                // squares it whatever the ratio.
                 var isNew = original.Size == Size.Zero;
+                var ratio = constrained ? 1 : StyleFor(Tool.Crop).CropRatio.Value();
                 var rect = (isNew
-                        ? Rect.Dragged(original.Origin, point, constrained, modifiers.HasFlag(Modifiers.Option))
-                        : original.Resized(handle, point, constrained))
+                        ? Rect.Dragged(original.Origin, point, ratio, modifiers.HasFlag(Modifiers.Option))
+                        : original.Resized(handle, point, ratio))
                     .Intersection(bounds).WholePixels;
                 if (rect.Width >= 1 && rect.Height >= 1) Display = Display with { Crop = rect };
                 Phase = new EditorPhase.Cropping(original, handle, point);
