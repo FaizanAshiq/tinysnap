@@ -46,6 +46,23 @@ public class ToastTests
         Assert.Equal("No phone numbers found", setup.Controller.Toast!.Heading);
     }
 
+    /// <summary>A read that failed says so, and erases nothing: "No emails found" would vouch for a
+    /// capture nobody read.</summary>
+    [AvaloniaFact]
+    public async Task RedactWithNoReaderSaysItCouldNotRead()
+    {
+        var setup = Launch();
+        ((FakeTextReader)setup.Platform.Text).Words = null;
+        var erased = false;
+        await setup.Controller.RedactText(CanvasHost.Blank(400, 300).Image, RedactTarget.Emails, null, boxes =>
+        {
+            erased = true;
+            return boxes.Count;
+        });
+        Assert.Equal("Could not read text", setup.Controller.Toast!.Heading);
+        Assert.False(erased);
+    }
+
     [AvaloniaFact]
     public async Task ASlowReadSaysItIsWorkingUntilTheTextLands()
     {

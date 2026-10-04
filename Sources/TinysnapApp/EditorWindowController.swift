@@ -635,8 +635,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         }
         TextCopy.say("Finding \(many)…", on: screen, working: true)
         Task { @MainActor [weak self] in
-            let lines = await Task.detached(priority: .userInitiated) { (try? TextReader.lines(in: image)) ?? [] }.value
+            let lines = await Task.detached(priority: .userInitiated) { try? TextReader.lines(in: image) }.value
             guard let self else { return }
+            // A read that failed says so: "No emails found" would vouch for a capture nobody read.
+            guard let lines else {
+                TextCopy.say("Could not read text", on: screen)
+                return
+            }
             let boxes = TextRedaction.boxes(in: lines, for: target)
             let added = self.canvas.session.redact(boxes)
             TextCopy.say(boxes.isEmpty ? "No \(many) found"
