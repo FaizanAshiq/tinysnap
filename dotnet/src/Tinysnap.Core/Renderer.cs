@@ -275,15 +275,19 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
     private void Blur(Rect rect, double blurRadius, CornerSize corners)
     {
         if (DeviceRect(rect) is not { } device) return;
-        using var snapshot = surface.Snapshot();
-        using var patchSurface = SKSurface.Create(Renderer.Info((int)device.Width, (int)device.Height));
-        if (patchSurface is null) return;
         var sigma = (float)Math.Max(1, blurRadius);
-        // The whole snapshot is the blur's input, clamped at its edges, so the patch reads
-        // its real neighbours rather than a dark border.
+        // The blur reads no further than three sigma, so only that much around the box is copied
+        // out: a copy of the whole canvas for each box was most of a frame on a 5K capture. It is
+        // clamped at the output's edges, so the patch reads its real neighbours, not a dark border.
+        var reach = Math.Ceiling(sigma * 3) + 1;
+        var source = device.Inset(-reach, -reach).Intersection(new Rect(Point.Zero, DeviceSize));
+        using var snapshot = surface.Snapshot(source.ToSKRectI());
+        using var patchSurface = SKSurface.Create(Renderer.Info((int)device.Width, (int)device.Height));
+        if (snapshot is null || patchSurface is null) return;
         using (var blur = SKImageFilter.CreateBlur(sigma, sigma, SKShaderTileMode.Clamp))
         using (var paint = new SKPaint { ImageFilter = blur })
-            patchSurface.Canvas.DrawImage(snapshot, (float)-device.MinX, (float)-device.MinY, Crisp, paint);
+            patchSurface.Canvas.DrawImage(snapshot, (float)(source.MinX - device.MinX), (float)(source.MinY - device.MinY),
+                                          Crisp, paint);
         using var patch = patchSurface.Snapshot();
         var buffer = PixelBuffer.From(patch);
         if (buffer is null) return;
@@ -307,8 +311,7 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
     private void Pixelate(Rect rect, double block, CornerSize corners)
     {
         if (DeviceRect(rect) is not { } device) return;
-        using var snapshot = surface.Snapshot();
-        using var patch = snapshot.Subset(device.ToSKRectI());
+        using var patch = surface.Snapshot(device.ToSKRectI());
         if (patch is null || PixelBuffer.From(patch) is not { } buffer) return;
         buffer.Pixelate(Math.Max(2, (int)Geometry.Round(block)));
         buffer.AddNoise(12, Grain(device));
@@ -320,10 +323,9 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
     private void Erase(Rect rect)
     {
         if (DeviceRect(rect) is not { } device) return;
-        using var snapshot = surface.Snapshot();
         // One pixel of surroundings on each side, where the output has them.
         var around = device.Inset(-1, -1).Intersection(new Rect(Point.Zero, DeviceSize));
-        using var patch = snapshot.Subset(around.ToSKRectI());
+        using var patch = surface.Snapshot(around.ToSKRectI());
         if (patch is null || PixelBuffer.From(patch) is not { } buffer) return;
         buffer.EraseFill(((int)(device.MinX - around.MinX), (int)(device.MinY - around.MinY),
                           (int)device.Width, (int)device.Height));
