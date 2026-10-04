@@ -9,13 +9,13 @@ extension Renderer {
     /// `visible`, in capture pixels, drawn at `outputScale` with the region it covers. Nil when
     /// nothing is in view, or when a box that reads back makes it too big to draw.
     public static func renderCloseUp(_ document: Document, visible: CGRect, outputScale: CGFloat, framed: Bool,
-                                     hiding hidden: Set<Annotation.ID> = []) -> (image: CGImage, region: CGRect)? {
+                                     typing: Annotation.ID? = nil) -> (image: CGImage, region: CGRect)? {
         guard let region = closeUpRegion(document, visible: visible, framed: framed) else { return nil }
         let size = pixelSize(of: region, outputScale: outputScale)
         // ponytail: a huge blur half in view at a deep zoom shows as squares; render only its
         // visible part with the reach it needs if that ever matters.
         guard size.width * size.height <= closeUpPixelLimit,
-              let image = render(document, region: region, outputScale: outputScale, hiding: hidden, sharpPixels: true)
+              let image = render(document, region: region, outputScale: outputScale, typing: typing, sharpPixels: true)
         else { return nil }
         return (image, region)
     }

@@ -81,7 +81,8 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    public var hasFill: Bool { self == .rectangle || self == .oval }
+    /// Boxes and ovals filled instead of outlined, and text set on a box in its colour.
+    public var hasFill: Bool { self == .rectangle || self == .oval || self == .text }
 
     /// Text only: its lines set left, centred or right.
     public var hasAlign: Bool { self == .text }

@@ -139,10 +139,9 @@ internal sealed partial class CanvasControl : Control
         var framed = Framed;
         if (rendered is not null && renderedDocument == Session.Display && renderedHidden == hidden && renderedFramed == framed)
             return rendered;
-        var hiding = hidden is { } id ? new HashSet<Guid> { id } : null;
         var image = framed
-            ? Renderer.RenderFramed(Session.Display, 1, hiding, ref ground)
-            : Renderer.Render(Session.Display, hidden: hiding);
+            ? Renderer.RenderFramed(Session.Display, 1, hidden, ref ground)
+            : Renderer.Render(Session.Display, typing: hidden);
         rendered?.Release();
         rendered = image is null ? null : new SharedImage(image);
         (renderedDocument, renderedHidden, renderedFramed) = (Session.Display, hidden, framed);
@@ -164,8 +163,7 @@ internal sealed partial class CanvasControl : Control
         if (closeUpKey != key)
         {
             closeUp?.Image.Release();
-            var hiding = key.TypingId is { } id ? new HashSet<Guid> { id } : null;
-            closeUp = Renderer.RenderCloseUp(key.Display, visible, outputScale, key.Framed, hiding) is { } made
+            closeUp = Renderer.RenderCloseUp(key.Display, visible, outputScale, key.Framed, key.TypingId) is { } made
                 ? (new SharedImage(made.Image), made.Region)
                 : null;
             closeUpKey = key;

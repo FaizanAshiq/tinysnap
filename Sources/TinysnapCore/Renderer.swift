@@ -14,10 +14,12 @@ public enum Renderer {
 
     /// Draws `region` of the document, in capture pixels, at `outputScale` output pixels
     /// per capture pixel, the whole extent unless told otherwise. `hidden` leaves out
-    /// annotations, used for the text being typed. `sharpPixels` enlarges the capture as
-    /// squares, as the canvas shows it past 100%, rather than smoothing it as an export does.
+    /// annotations. `typing` is the text being typed, whose letters the editor's text field
+    /// shows, so only its box is drawn. `sharpPixels` enlarges the capture as squares, as the
+    /// canvas shows it past 100%, rather than smoothing it as an export does.
     public static func render(_ document: Document, region: CGRect? = nil, outputScale: CGFloat = 1,
-                              hiding hidden: Set<Annotation.ID> = [], sharpPixels: Bool = false) -> CGImage? {
+                              hiding hidden: Set<Annotation.ID> = [], typing: Annotation.ID? = nil,
+                              sharpPixels: Bool = false) -> CGImage? {
         let region = region ?? document.extent
         let size = pixelSize(of: region, outputScale: outputScale)
         let width = Int(size.width), height = Int(size.height)
@@ -33,7 +35,7 @@ public enum Renderer {
 
         let canvas = Canvas(context: context, region: region, outputScale: outputScale,
                             deviceSize: CGSize(width: width, height: height), scale: document.scale,
-                            anchor: document.extent.origin)
+                            anchor: document.extent.origin, typing: typing)
         // Past the capture, the canvas carries on in the capture's edge colour.
         if !document.capture.bounds.contains(region) {
             context.setFillColor(document.capture.edgeColor)
@@ -68,6 +70,8 @@ struct Canvas {
     /// Where the whole render starts, so a redaction's grain lies the same in a render of
     /// part of the document as in the whole.
     let anchor: CGPoint
+    /// The text being typed: its box is drawn, its letters are left to the text field.
+    let typing: Annotation.ID?
 
     private static let imageContext = CIContext(options: [.useSoftwareRenderer: false])
 
@@ -127,7 +131,15 @@ struct Canvas {
                 context.strokeEllipse(in: rect)
             }
         case let .text(origin, string):
-            TextLayout.draw(string, at: origin, points: size / scale, scale: scale, color: color,
+            if annotation.style.filled {
+                let corner = TextLayout.boxCorner(points: size / scale) * scale
+                context.addPath(CGPath(roundedRect: annotation.bounds(scale: scale), cornerWidth: corner, cornerHeight: corner,
+                                       transform: nil))
+                context.setFillColor(color)
+                context.fillPath()
+            }
+            guard annotation.id != typing else { break }
+            TextLayout.draw(string, at: origin, points: size / scale, scale: scale, color: TextLayout.letterColor(annotation.style),
                             align: annotation.style.align, in: context)
         case let .highlighter(from, to):
             context.setBlendMode(.multiply)
