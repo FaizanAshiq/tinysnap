@@ -44,7 +44,7 @@ public sealed record Style
     public string ColorHex { get; init; }
     public StyleSize Size { get; init; }
 
-    /// <summary>Rectangles and ovals only: filled instead of outlined.</summary>
+    /// <summary>Rectangles and ovals filled instead of outlined, and text set on a box in its colour.</summary>
     public bool Filled { get; init; }
 
     /// <summary>Rectangles, spotlights, blurs, pixelates and pasted images.</summary>

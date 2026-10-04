@@ -383,11 +383,10 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         // sizes; cache the annotations below the one being dragged if 5K captures lag.
         let framed = self.framed
         if rendered == nil || renderedDocument != session.display || renderedHidden != hidden || renderedFramed != framed {
-            let hiding: Set<Annotation.ID> = hidden.map { [$0] } ?? []
             // With a backdrop, the canvas shows exactly what an export gives, drawn over the
             // kept ground so only a new size or backdrop pays for the shadow.
-            rendered = framed ? Renderer.renderFramed(session.display, hiding: hiding, ground: &frameGround)
-                : Renderer.render(session.display, hiding: hiding)
+            rendered = framed ? Renderer.renderFramed(session.display, typing: hidden, ground: &frameGround)
+                : Renderer.render(session.display, typing: hidden)
             renderedDocument = session.display
             renderedHidden = hidden
             renderedFramed = framed
@@ -432,7 +431,7 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
                              outputScale: magnification * window.backingScaleFactor / scale, framed: framed)
         if key != closeUpKey {
             closeUp = Renderer.renderCloseUp(key.document, visible: key.visible, outputScale: key.outputScale, framed: key.framed,
-                                             hiding: key.hidden.map { [$0] } ?? [])
+                                             typing: key.hidden)
             closeUpKey = key
         }
         guard let closeUp else { return }
@@ -758,8 +757,8 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         session.finishTyping()
     }
 
-    /// A text field sits over the annotation while it is typed, and the renderer leaves
-    /// that annotation out so it is not drawn twice.
+    /// A text field sits over the annotation while it is typed, and the renderer leaves its
+    /// letters out, drawing only a filled text's box, so nothing is drawn twice.
     private func syncTextView() {
         guard let id = session.typingID, let annotation = session.display.annotation(id),
               case let .text(origin, string) = annotation.kind else {
@@ -774,7 +773,7 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         let fontSize = annotation.pixelSize(scale: scale) / scale
         let field = textView ?? makeTextView()
         field.font = TextLayout.font(points: fontSize) as NSFont
-        field.textColor = NSColor(cgColor: Palette.color(hex: annotation.style.colorHex))
+        field.textColor = NSColor(cgColor: TextLayout.letterColor(annotation.style))
         field.insertionPointColor = field.textColor ?? .labelColor
         if field.string != string { field.string = string }
         field.setFrameOrigin(CGPoint(x: (origin.x - shown.minX) / scale, y: (origin.y - shown.minY) / scale))

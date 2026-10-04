@@ -38,7 +38,7 @@ public enum TextAlign: String, Codable, Sendable, CaseIterable {
 public struct Style: Equatable, Codable, Sendable {
     public var colorHex: String
     public var size: StyleSize
-    /// Rectangles and ovals only: filled instead of outlined.
+    /// Rectangles and ovals filled instead of outlined, and text set on a box in its colour.
     public var filled: Bool
     /// Rectangles, spotlights, blurs, pixelates and pasted images.
     public var corners: CornerSize
