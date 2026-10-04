@@ -160,8 +160,9 @@ public class LayersPanelTests
         var passed = editor.Layers.Rows[0].Item;
         Assert.Contains(passed.Transitions!, t => t is TransformOperationsTransition);
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-        // Somewhere between where it was and its new place: how far depends on the machine's clock.
-        Assert.InRange(((TransformOperations)passed.RenderTransform!).Value.M32, 0.5, 32);
+        // Somewhere from where it was to its new place, ends included: transitions run on the real
+        // clock, and a busy CI runner had it all but home, at 0.18, by the first frame.
+        Assert.InRange(((TransformOperations)passed.RenderTransform!).Value.M32, 0, 32);
     }
 
     [AvaloniaFact]
