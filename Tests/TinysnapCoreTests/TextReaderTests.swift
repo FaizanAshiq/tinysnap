@@ -29,6 +29,18 @@ struct TextReaderTests {
         #expect(try TextReader.read(sample, for: .text).lines == ["Tinysnap reads text"])
     }
 
+    /// Redact needs each word's place: an email read from a page sits where it was drawn.
+    @Test func eachWordComesWithItsBox() throws {
+        let capture = page([("Email marcus@example.com", CGPoint(x: 40, y: 60))])
+        let lines = try TextReader.lines(in: capture.image)
+        let email = try #require(lines.flatMap(\.words).first { $0.text.contains("@") })
+        // Drawn from 40 pixels in and 60 down, 48 tall: right of the word Email, on that row.
+        let label = try #require(lines.first?.words.first)
+        #expect(label.text == "Email")
+        #expect(email.box.minX > label.box.maxX && email.box.maxX < 900)
+        #expect(email.box.minY > 50 && email.box.maxY < 140)
+    }
+
     @Test func readsLinesTopToBottom() throws {
         let capture = page([("Order shipped today", CGPoint(x: 40, y: 60)), ("Tracking arrives soon", CGPoint(x: 40, y: 200))])
         let reading = try TextReader.read(capture.image, for: .text)

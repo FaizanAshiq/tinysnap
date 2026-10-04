@@ -35,9 +35,17 @@ internal sealed class LinuxTextReader(string? tessdata = null) : ITextReader
     };
 
     public Task<TextReading?> Read(SKImage image, bool codes) =>
-        codes ? Task.FromResult<TextReading?>(QrCodes.Read(image)) : Task.Run(() => ReadText(image));
+        codes
+            ? Task.FromResult<TextReading?>(QrCodes.Read(image))
+            : Task.Run(() => Recognized(image, (api, pixels, width, height, scale) =>
+                new TextReading([], Tinysnap.Core.TextReader.InReadingOrder(Lines(api, pixels, width, height, scale)))));
 
-    private TextReading? ReadText(SKImage image)
+    public Task<IReadOnlyList<TextLine>?> Lines(SKImage image) =>
+        Task.Run(() => Recognized<IReadOnlyList<TextLine>>(image, Words));
+
+    /// <summary>What <paramref name="read"/> makes of <paramref name="image"/>, prepared as Tesseract
+    /// reads best; null when there is no language to read with or Tesseract cannot load.</summary>
+    private T? Recognized<T>(SKImage image, Func<nint, byte[], int, int, double, T> read) where T : class
     {
         var folder = tessdata ?? DefaultFolder.Value;
         var languages = TesseractLanguages.For(Environment.GetEnvironmentVariable("LANGUAGE"), Environment.GetEnvironmentVariable("LANG"),
@@ -50,7 +58,7 @@ internal sealed class LinuxTextReader(string? tessdata = null) : ITextReader
             lock (Gate)
             {
                 if (Engine(folder, languages) is not { } api) return null;
-                return new TextReading([], Tinysnap.Core.TextReader.InReadingOrder(Lines(api, pixels, width, height, scale)));
+                return read(api, pixels, width, height, scale);
             }
         }
         catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
@@ -101,6 +109,48 @@ internal sealed class LinuxTextReader(string? tessdata = null) : ITextReader
                     lines.Add((text, new Rect((left - Margin) / scale, (top - Margin) / scale, (right - left) / scale, (bottom - top) / scale)));
                 }
                 while (Tesseract.TessResultIteratorNext(iterator, Tesseract.TextLine) != 0);
+            }
+            finally { Tesseract.TessResultIteratorDelete(iterator); }
+        }
+        finally { Tesseract.TessBaseAPIClear(api); }
+        return lines;
+    }
+
+    /// <summary>Every word with its box in the capture's own pixels, grouped into the lines Tesseract
+    /// found them on, for Redact.</summary>
+    private static unsafe IReadOnlyList<TextLine> Words(nint api, byte[] pixels, int width, int height, double scale)
+    {
+        fixed (byte* data = pixels) Tesseract.TessBaseAPISetImage(api, data, width, height, 1, width);
+        Tesseract.TessBaseAPISetSourceResolution(api, 200);
+        var lines = new List<TextLine>();
+        var current = new List<TextWord>();
+        try
+        {
+            if (Tesseract.TessBaseAPIRecognize(api, 0) != 0) return lines;
+            var iterator = Tesseract.TessBaseAPIGetIterator(api);
+            if (iterator == 0) return lines;
+            try
+            {
+                var page = Tesseract.TessResultIteratorGetPageIterator(iterator);
+                do
+                {
+                    // A word that starts a line closes the one before it.
+                    if (current.Count > 0 && Tesseract.TessPageIteratorIsAtBeginningOf(page, Tesseract.TextLine) != 0)
+                    {
+                        lines.Add(new TextLine([.. current]));
+                        current.Clear();
+                    }
+                    var raw = Tesseract.TessResultIteratorGetUTF8Text(iterator, Tesseract.Word);
+                    if (raw == 0) continue;
+                    var text = Marshal.PtrToStringUTF8(raw)?.Trim() ?? "";
+                    Tesseract.TessDeleteText(raw);
+                    if (text.Length == 0 || Tesseract.TessPageIteratorBoundingBox(page, Tesseract.Word, out var left, out var top, out var right, out var bottom) == 0)
+                        continue;
+                    // Back from the scaled, margined picture to the capture's own pixels.
+                    current.Add(new TextWord(text, new Rect((left - Margin) / scale, (top - Margin) / scale, (right - left) / scale, (bottom - top) / scale)));
+                }
+                while (Tesseract.TessResultIteratorNext(iterator, Tesseract.Word) != 0);
+                if (current.Count > 0) lines.Add(new TextLine([.. current]));
             }
             finally { Tesseract.TessResultIteratorDelete(iterator); }
         }

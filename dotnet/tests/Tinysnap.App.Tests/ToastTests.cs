@@ -22,6 +22,22 @@ public class ToastTests
 
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
+    /// <summary>Redact finds the email among the words read and says how many it erased.</summary>
+    [AvaloniaFact]
+    public async Task RedactFindsTheEmailAndSaysSo()
+    {
+        var setup = Launch();
+        var email = new TextWord("marcus@example.com", new Rect(80, 10, 140, 16));
+        ((FakeTextReader)setup.Platform.Text).Words = [new TextLine([new TextWord("Email", new Rect(10, 10, 60, 16)), email])];
+        var boxes = await setup.Controller.RedactText(CanvasHost.Blank(400, 300).Image, RedactTarget.Emails, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal([email.Box], boxes);
+        Assert.Equal("Erased 1 email", setup.Controller.Toast!.Heading);
+        boxes = await setup.Controller.RedactText(CanvasHost.Blank(400, 300).Image, RedactTarget.Phones, null);
+        Assert.Empty(boxes);
+        Assert.Equal("No phone numbers found", setup.Controller.Toast!.Heading);
+    }
+
     [AvaloniaFact]
     public async Task ASlowReadSaysItIsWorkingUntilTheTextLands()
     {

@@ -59,6 +59,8 @@ final class StyleBar: NSVisualEffectView {
         case fraction(CGFloat), width(Int), height(Int)
     }
     var onSize: ((SizeRequest) -> Void)?
+    /// One of the Erase tool's chips: find all of these in the capture and erase them.
+    var onRedact: ((RedactTarget) -> Void)?
     /// The step tool's minus or plus: where the capture's steps start counting.
     var onStepStart: ((Int) -> Void)?
     /// Custom colours picked lately, for the palette's second row.
@@ -124,7 +126,7 @@ final class StyleBar: NSVisualEffectView {
 
     /// Whether this tool has anything to set, and so whether the bar shows at all.
     static func shows(_ tool: Tool) -> Bool {
-        tool.hasColor || tool.hasSize || tool.hasFill || tool.hasCorners || tool.hasOverlay || tool.hasRatio
+        tool.hasColor || tool.hasSize || tool.hasFill || tool.hasCorners || tool.hasOverlay || tool.hasRatio || tool.hasRedact
     }
 
     /// `locked` shows a locked shape's style dimmed, with nothing to press. Deleting is the
@@ -173,6 +175,7 @@ final class StyleBar: NSVisualEffectView {
         if tool.hasFreehand { row.addArrangedSubview(group(freehandChips())) }
         if tool.hasOutsideBlur { row.addArrangedSubview(group(outsideChips())) }
         if tool.hasRatio { row.addArrangedSubview(group(ratioChips())) }
+        if tool.hasRedact { row.addArrangedSubview(group(redactChips())) }
         if tool.hasCorners { row.addArrangedSubview(group(cornerChips())) }
         if tool.hasAlign { row.addArrangedSubview(group(alignChips())) }
         if tool.hasBold { row.addArrangedSubview(group([boldChip()])) }
@@ -441,6 +444,33 @@ final class StyleBar: NSVisualEffectView {
 
     @objc private func pickOutside(_ sender: NSButton) {
         change { $0.blurOutside = sender.tag == 1 }
+    }
+
+    /// Buttons, not settings: each reads the capture and erases what it finds.
+    private func redactChips() -> [NSView] {
+        let names = ["Emails", "Phones", "Numbers", "All text"]
+        let tips = ["Erase every email address", "Erase every phone number", "Erase every number of four digits or more",
+                    "Erase every line of text"]
+        return RedactTarget.allCases.enumerated().map { index, _ in
+            let name = names[index]
+            let chip = ChipButton(label: tips[index], width: name == "All text" ? 58 : 62) { box, color in
+                let text = NSAttributedString(string: name, attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: color,
+                ])
+                let size = text.size()
+                text.draw(at: NSPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2))
+            }
+            chip.target = self
+            chip.action = #selector(pickRedact(_:))
+            chip.tag = index
+            return chip
+        }
+    }
+
+    @objc private func pickRedact(_ sender: NSButton) {
+        let targets = RedactTarget.allCases
+        guard targets.indices.contains(sender.tag) else { return }
+        onRedact?(targets[sender.tag])
     }
 
     /// Free, 1:1, 4:3 and 16:9, written out.

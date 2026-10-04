@@ -103,6 +103,9 @@ public static class ToolInfo
     /// <summary>The crop only: any shape, or a ratio it keeps.</summary>
     public static bool HasRatio(this Tool tool) => tool is Tool.Crop;
 
+    /// <summary>Erase only: cover every email, phone number, number or line of text the reader finds.</summary>
+    public static bool HasRedact(this Tool tool) => tool is Tool.Erase;
+
     /// <summary>Pasted images: opacity and the difference blend, for comparing against the capture.</summary>
     public static bool HasOverlay(this Tool tool) => tool is Tool.Image;
 
