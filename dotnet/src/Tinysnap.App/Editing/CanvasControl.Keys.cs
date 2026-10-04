@@ -145,6 +145,13 @@ internal sealed partial class CanvasControl
         SessionChanged();
     }
 
+    /// <summary>For Redact: an erase box over each of <paramref name="boxes"/>, as one undo step.</summary>
+    public void Redact(IReadOnlyList<Tinysnap.Core.Rect> boxes)
+    {
+        Session.Redact(boxes);
+        SessionChanged();
+    }
+
     /// <summary>For the step tool's minus and plus: where this capture's steps start counting.</summary>
     public void SetStepStart(int start)
     {

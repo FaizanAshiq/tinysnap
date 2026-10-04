@@ -145,6 +145,11 @@ public sealed class FakeTextReader : ITextReader
         Asked.Add((image.Width, image.Height, codes));
         return Holding?.Task ?? Task.FromResult(Reading);
     }
+
+    /// <summary>The next lines with their words, for Redact; null reads as could not read.</summary>
+    public IReadOnlyList<TextLine>? Words { get; set; } = [];
+
+    public Task<IReadOnlyList<TextLine>?> Lines(SkiaSharp.SKImage image) => Task.FromResult(Words);
 }
 
 /// <summary>Global hotkeys that go nowhere: what is registered is recorded, a binding in

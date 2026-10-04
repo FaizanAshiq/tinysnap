@@ -66,7 +66,9 @@ A window capture keeps the window's rounded corners transparent and leaves its s
 | Measure | `D` | | | |
 
 Blur and pixelate can be partly reversed by a determined reader. Erase paints over the
-pixels and is the only redaction to trust with a password or a card number.
+pixels and is the only redaction to trust with a password or a card number. With Erase in
+hand, Emails, Phones, Numbers and All text read the capture on the device and erase every
+match at once, each as an erase box of its own to delete if it covers too much.
 
 | Input | Effect |
 | --- | --- |

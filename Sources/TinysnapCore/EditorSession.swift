@@ -182,6 +182,22 @@ public struct EditorSession {
         history.commit(display)
     }
 
+    // MARK: Redact
+
+    /// An erase box over each of `boxes`, a little past each so no edge of a letter shows, all as
+    /// one undoable step. Each stays a box of its own, to delete if it covers too much.
+    public mutating func redact(_ boxes: [CGRect]) {
+        guard !boxes.isEmpty else { return }
+        finishTyping()
+        let margin = 2 * scale
+        let style = style(for: .erase)
+        for box in boxes {
+            display.annotations.append(Annotation(kind: .erase(box.insetBy(dx: -margin, dy: -margin).wholePixels), style: style))
+        }
+        selection = nil
+        history.commit(display)
+    }
+
     // MARK: Steps
 
     /// Sets where the steps start counting, as one undoable step, held to the limits.

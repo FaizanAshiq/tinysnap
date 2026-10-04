@@ -232,6 +232,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             self.window?.makeFirstResponder(self.canvas)
         }
         styleBar.recentColors = { [weak self] in self?.preferences().recentColors ?? [] }
+        styleBar.onRedact = { [weak self] target in self?.redact(target) }
         styleBar.onStepStart = { [weak self] start in
             guard let self else { return }
             self.canvas.session.setStepStart(start)
@@ -617,6 +618,29 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     @objc func showSizePanel(_ sender: Any?) {
         panel = (.size, canvas.session.tool, canvas.session.selection)
         refreshToolbar()
+    }
+
+    // MARK: Redact
+
+    /// Reads the capture's words off the main thread, then covers each match with an erase
+    /// box, all as one undo step, and says how many.
+    private func redact(_ target: RedactTarget) {
+        let image = canvas.session.display.capture.image
+        let screen = window?.screen
+        let (one, many) = switch target {
+        case .emails: ("email", "emails")
+        case .phones: ("phone number", "phone numbers")
+        case .numbers: ("number", "numbers")
+        case .allText: ("line of text", "lines of text")
+        }
+        TextCopy.say("Finding \(many)…", on: screen, working: true)
+        Task { @MainActor [weak self] in
+            let lines = await Task.detached(priority: .userInitiated) { (try? TextReader.lines(in: image)) ?? [] }.value
+            guard let self else { return }
+            let boxes = TextRedaction.boxes(in: lines, for: target)
+            self.canvas.session.redact(boxes)
+            TextCopy.say(boxes.isEmpty ? "No \(many) found" : "Erased \(boxes.count) \(boxes.count == 1 ? one : many)", on: screen)
+        }
     }
 
     /// Written when a change is finished, not on every tick of the colour panel, each of

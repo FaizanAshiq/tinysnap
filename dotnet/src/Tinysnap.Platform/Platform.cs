@@ -100,6 +100,10 @@ public interface ITextReader
     /// caption beside a code is never taken for it. Null when the image could not be read, for
     /// example with no recogniser for the person's languages.</summary>
     Task<TextReading?> Read(SKImage image, bool codes);
+
+    /// <summary>Every line of text in <paramref name="image"/>, each word with its box in the
+    /// image's pixels, for Redact. Null when the image could not be read.</summary>
+    Task<IReadOnlyList<TextLine>?> Lines(SKImage image);
 }
 
 public interface IPlatform

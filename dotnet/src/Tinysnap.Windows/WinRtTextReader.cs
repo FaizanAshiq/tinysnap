@@ -28,17 +28,40 @@ internal sealed class WinRtTextReader : ITextReader
         }
     }
 
-    private static async Task<TextReading> Text(OcrEngine engine, SKImage image)
+    public async Task<IReadOnlyList<TextLine>?> Lines(SKImage image)
     {
-        // The recogniser takes nothing past its limit on either side, so a very large capture is
-        // read shrunk to fit, and its boxes need no mapping back, only their order.
+        try
+        {
+            if (OcrEngine.TryCreateFromUserProfileLanguages() is not { } engine) return null;
+            var (result, fit) = await Recognized(engine, image);
+            // Boxes from a capture read shrunk are scaled back to its own pixels.
+            return [.. result.Lines.Where(line => line.Words.Count > 0).Select(line => new TextLine([.. line.Words.Select(word =>
+                new TextWord(word.Text, new Rect(word.BoundingRect.X / fit, word.BoundingRect.Y / fit,
+                                                 word.BoundingRect.Width / fit, word.BoundingRect.Height / fit)))]))];
+        }
+        catch (Exception error) when (error is COMException or ArgumentException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The recogniser takes nothing past its limit on either side, so a very large capture
+    /// is read shrunk to fit; <c>Fit</c> is how far.</summary>
+    private static async Task<(OcrResult Result, double Fit)> Recognized(OcrEngine engine, SKImage image)
+    {
         var limit = (int)OcrEngine.MaxImageDimension;
         var fit = Math.Min(1.0, (double)limit / Math.Max(image.Width, image.Height));
         using var sized = fit < 1 ? Shrunk(image, fit) : null;
         var source = sized ?? image;
         using var bitmap = SoftwareBitmap.CreateCopyFromBuffer(QrCodes.Pixels(source).AsBuffer(), BitmapPixelFormat.Bgra8, source.Width, source.Height,
                                                                BitmapAlphaMode.Premultiplied);
-        var result = await engine.RecognizeAsync(bitmap);
+        return (await engine.RecognizeAsync(bitmap), fit);
+    }
+
+    private static async Task<TextReading> Text(OcrEngine engine, SKImage image)
+    {
+        // Read shrunk when large, and the line boxes need no mapping back, only their order.
+        var (result, _) = await Recognized(engine, image);
         var lines = result.Lines
             .Where(line => line.Words.Count > 0)
             .Select(line => (line.Text, Box: Union(line.Words.Select(word => word.BoundingRect))))

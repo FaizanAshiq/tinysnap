@@ -24,6 +24,12 @@ enum TextCopy {
         }
     }
 
+    /// A toast with a title alone, for a result that has no text to show.
+    static func say(_ title: String, on screen: NSScreen?, working: Bool = false) {
+        toast?.dismiss()
+        toast = TextToast(title: title, preview: "", reading: nil, on: screen, working: working)
+    }
+
     private static func show(_ reading: TextReading?, for target: TextReader.Target, on screen: NSScreen?) {
         toast?.dismiss()
         let scanning = target == .codes

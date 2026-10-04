@@ -27,6 +27,21 @@ public class LinuxTextReaderTests
         Assert.Contains("Tinysnap reads this line", await Read(page));
     }
 
+    /// <summary>Redact needs each word's place: an email read from a page sits where it was drawn,
+    /// right of the word before it, on that line.</summary>
+    [Fact]
+    public async Task EachWordComesWithItsBox()
+    {
+        Linux.Only();
+        using var page = Page("Email marcus@example.com", 48, 1100, 240, SKColors.White, SKColors.Black);
+        var lines = await new LinuxTextReader().Lines(page);
+        var words = Assert.Single(lines!).Words;
+        var email = Assert.Single(words, word => word.Text.Contains('@'));
+        Assert.Equal("Email", words[0].Text);
+        Assert.True(email.Box.MinX > words[0].Box.MaxX && email.Box.MaxX < 1100);
+        Assert.True(email.Box.MinY > 60 && email.Box.MaxY < 180);
+    }
+
     [Fact]
     public async Task TheWarmUpSampleHasWordsToRead()
     {

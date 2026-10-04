@@ -98,6 +98,10 @@ internal sealed partial class StyleBar : Border
     public IReadOnlyList<ToggleButton> FreehandChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> OutsideChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> RatioChips { get; private set; } = [];
+    public IReadOnlyList<Button> RedactChips { get; private set; } = [];
+
+    /// <summary>One of the Erase tool's buttons: find all of these in the capture and erase them.</summary>
+    public Action<RedactTarget>? Redact { get; set; }
     public IReadOnlyList<ToggleButton> CornerChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> AlignChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> OpacityChips { get; private set; } = [];
@@ -144,7 +148,8 @@ internal sealed partial class StyleBar : Border
 
     /// <summary>Whether a tool has anything to set, and so whether the bar shows at all.</summary>
     public static bool Shows(Tool tool) =>
-        tool.HasColor() || tool.HasSize() || tool.HasFill() || tool.HasCorners() || tool.HasOverlay() || tool.HasRatio();
+        tool.HasColor() || tool.HasSize() || tool.HasFill() || tool.HasCorners() || tool.HasOverlay() || tool.HasRatio()
+        || tool.HasRedact();
 
     public void Refresh()
     {
@@ -208,6 +213,7 @@ internal sealed partial class StyleBar : Border
         colorSwatch = null;
         (DifferenceChip, BoldChip) = (null, null);
         (CounterChips, LowerStart, RaiseStart, StartLabel) = ([], null, null, null);
+        RedactChips = [];
         (AcrossChip, DownChip, LowerContrast, RaiseContrast, ContrastLabel, HelpChip) = (null, null, null, null, null, null);
         (SizeChips, FillChips, DashChips, FreehandChips, OutsideChips, RatioChips, CornerChips, AlignChips, OpacityChips) =
             ([], [], [], [], [], [], [], [], []);
@@ -228,6 +234,7 @@ internal sealed partial class StyleBar : Border
         FreehandChips = tool.HasFreehand() ? Group(MakeFreehandChips(style)) : [];
         OutsideChips = tool.HasOutsideBlur() ? Group(MakeOutsideChips(style)) : [];
         RatioChips = tool.HasRatio() ? Group(MakeRatioChips(style)) : [];
+        if (tool.HasRedact()) AddRedactChips();
         CornerChips = tool.HasCorners() ? Group(MakeCornerChips(style)) : [];
         AlignChips = tool.HasAlign() ? Group(MakeAlignChips(style)) : [];
         if (tool.HasBold())
@@ -652,6 +659,24 @@ internal sealed partial class StyleBar : Border
         [.. new[] { false, true }.Select(blur =>
             Chip(Glyphs.Icon(OutsideGlyphs[blur ? 1 : 0], 16), blur ? "Blur what is outside" : "Dim what is outside",
                  style.BlurOutside == blur, () => canvas.Restyle(s => s with { BlurOutside = blur })))];
+
+    /// <summary>Buttons, not settings: each reads the capture and erases what it finds.</summary>
+    private void AddRedactChips()
+    {
+        string[] names = ["Emails", "Phones", "Numbers", "All text"];
+        string[] tips = ["Erase every email address", "Erase every phone number", "Erase every number of four digits or more",
+                         "Erase every line of text"];
+        RedactChips = [.. Enum.GetValues<RedactTarget>().Select((target, index) =>
+        {
+            var chip = PlainChip(new TextBlock { Text = names[index], FontSize = 11, FontWeight = FontWeight.SemiBold }, tips[index],
+                                 () => Redact?.Invoke(target));
+            chip.Width = 62;
+            return chip;
+        })];
+        var group = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+        foreach (var chip in RedactChips) group.Children.Add(chip);
+        row.Children.Add(group);
+    }
 
     /// <summary>Free, 1:1, 4:3 and 16:9, written out.</summary>
     private List<ToggleButton> MakeRatioChips(Style style) =>

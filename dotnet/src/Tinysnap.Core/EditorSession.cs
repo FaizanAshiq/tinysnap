@@ -199,6 +199,26 @@ public sealed class EditorSession
         History.Commit(Display);
     }
 
+    // Redact
+
+    /// <summary>An erase box over each of <paramref name="boxes"/>, a little past each so no edge of a
+    /// letter shows, all as one undoable step. Each stays a box of its own, to delete if it covers
+    /// too much.</summary>
+    public void Redact(IReadOnlyList<Rect> boxes)
+    {
+        if (boxes.Count == 0) return;
+        FinishTyping();
+        var margin = 2 * Scale;
+        var style = StyleFor(Tool.Erase);
+        Display = Display with
+        {
+            Annotations = Display.Annotations.AddRange(boxes.Select(box =>
+                Annotation.New(new AnnotationKind.Erase(box.Inset(-margin, -margin).WholePixels), style))),
+        };
+        Selection = null;
+        History.Commit(Display);
+    }
+
     // Steps
 
     /// <summary>Sets where the steps start counting, as one undoable step, held to the limits.</summary>
