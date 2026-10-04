@@ -36,8 +36,8 @@ internal sealed class WinRtTextReader : ITextReader
             var (result, fit) = await Recognized(engine, image);
             // Boxes from a capture read shrunk are scaled back to its own pixels.
             return [.. result.Lines.Where(line => line.Words.Count > 0).Select(line => new TextLine([.. line.Words.Select(word =>
-                new TextWord(word.Text, new Rect(word.BoundingRect.X / fit, word.BoundingRect.Y / fit,
-                                                 word.BoundingRect.Width / fit, word.BoundingRect.Height / fit)))]))];
+                new TextWord(word.Text, new Rect(word.BoundingRect.X, word.BoundingRect.Y,
+                                                 word.BoundingRect.Width, word.BoundingRect.Height)))]))];
         }
         catch (Exception error) when (error is COMException or ArgumentException or InvalidOperationException)
         {
