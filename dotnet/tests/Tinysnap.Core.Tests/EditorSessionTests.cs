@@ -274,7 +274,8 @@ public class EditorSessionTests
     {
         var editor = Session(Tool.Rectangle);
         Drag(editor, new Point(10, 10), new Point(110, 110));
-        Drag(editor, new Point(30, 10), new Point(40, 10));
+        // Ctrl, so the box near the capture's top edge is not lined up on it.
+        Drag(editor, new Point(30, 10), new Point(40, 10), Modifiers.Command);
         Assert.Equal(new AnnotationKind.Rectangle(new Rect(20, 10, 100, 100)), editor.Display.Annotations[0].Kind);
         Assert.Single(editor.Display.Annotations);
     }
@@ -528,7 +529,8 @@ public class EditorSessionTests
         var pasted = editor.Display.Annotations[0];
         Assert.Equal(pasted.Id, editor.Selection);
         var before = pasted.Bounds(editor.Scale);
-        Drag(editor, new Point(before.MidX, before.MidY), new Point(before.MidX + 30, before.MidY));
+        // Ctrl, so the image is not lined up on the capture's middle on the way.
+        Drag(editor, new Point(before.MidX, before.MidY), new Point(before.MidX + 30, before.MidY), Modifiers.Command);
         Assert.Single(editor.Display.Annotations);
         Assert.Equal(before.MinX + 30, editor.Display.Annotations[0].Bounds(editor.Scale).MinX);
     }
