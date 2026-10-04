@@ -74,6 +74,37 @@ public class TextReaderTests
         Assert.Equal(new[] { "Left top", "Right top", "Left low", "Right low" }, (await Read(capture.Image)).Lines.ToArray());
     }
 
+    /// <summary>Redact needs each word's place: an email read from a page sits where it was drawn,
+    /// right of the word before it, on that line.</summary>
+    [Fact]
+    public async Task EachWordComesWithItsBox()
+    {
+        NeedsARecogniser();
+        var capture = Page([("Email marcus@example.com", new SKPoint(40, 100))], 1100, 300);
+        var words = Assert.Single((await Reader.Lines(capture.Image))!).Words;
+        var email = Assert.Single(words, word => word.Text.Contains('@'));
+        Assert.Equal("Email", words[0].Text);
+        Assert.True(email.Box.MinX > words[0].Box.MaxX && email.Box.MaxX < 1100, $"{email.Box}");
+        Assert.True(email.Box.MinY > 80 && email.Box.MaxY < 200, $"{email.Box}");
+    }
+
+    /// <summary>A capture past the recogniser's limit is read shrunk, and its words' boxes are scaled
+    /// back to the capture's pixels, so an erase lands on the word rather than short of it.</summary>
+    [Fact]
+    public async Task AWordOnACapturePastTheLimitKeepsItsPlace()
+    {
+        NeedsARecogniser();
+        // As wide as three screens side by side, past the limit.
+        var width = (int)OcrEngine.MaxImageDimension + 800;
+        var capture = Page([("Shipped today", new SKPoint(40, 600)), ("Order 10482", new SKPoint(width - 700, 600))], width, 1600);
+        var lines = (await Reader.Lines(capture.Image))!;
+        var words = lines.SelectMany(line => line.Words).ToList();
+        var read = $"limit {OcrEngine.MaxImageDimension}, read: {string.Join(" | ", words.Select(word => $"{word.Text} {word.Box}"))}";
+        Assert.True(words.Any(word => word.Text == "Shipped"), read);
+        var number = Assert.Single(words, word => word.Text.Contains("10482"));
+        Assert.True(number.Box.MinX > width - 600 && number.Box.MinX < width - 100, read);
+    }
+
     [Fact]
     public async Task CopyingTextReadsOnlyTheTextAndScanningReadsOnlyTheCode()
     {
