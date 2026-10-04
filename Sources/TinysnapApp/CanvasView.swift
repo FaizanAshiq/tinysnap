@@ -690,9 +690,9 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
         }
 
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.shift, .capsLock])
-        // Digits set a selected pasted image's opacity, 1 to 9 for 10% to 90% and 0 for
+        // Digits set a selected box, oval or pasted image's opacity, 1 to 9 for 10% to 90% and 0 for
         // solid, as on pins.
-        if flags.isEmpty, session.selectedAnnotation?.tool == .image,
+        if flags.isEmpty, session.selectedAnnotation?.tool.hasOpacity == true,
            let digit = event.charactersIgnoringModifiers.flatMap(Int.init), (0...9).contains(digit) {
             session.restyle { $0.opacity = digit == 0 ? 1 : CGFloat(digit) / 10 }
             onStylesCommitted?()

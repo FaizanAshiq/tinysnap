@@ -220,7 +220,7 @@ internal sealed partial class StyleBar : Border
             Group([bold]);
             BoldChip = bold;
         }
-        OpacityChips = tool.HasOverlay() ? Group(MakeOpacityChips(style)) : [];
+        OpacityChips = tool.HasOpacity() ? Group(MakeOpacityChips(style)) : [];
         if (tool.HasOverlay())
         {
             var difference = Chip(Glyphs.Difference(), "Difference: what matches goes black", style.Difference,

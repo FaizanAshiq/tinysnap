@@ -92,9 +92,9 @@ internal sealed partial class CanvasControl
         }
 
         if (e.KeyModifiers.HasFlag(KeyModifiers.Alt)) return false;
-        // Digits set a selected pasted image's opacity, 1 to 9 for 10% to 90% and 0 for solid,
-        // as on pins.
-        if (Session.SelectedAnnotation?.Tool == Tool.Image && Digit(e.Key) is { } digit)
+        // Digits set a selected box, oval or pasted image's opacity, 1 to 9 for 10% to 90% and 0 for
+        // solid, as on pins.
+        if (Session.SelectedAnnotation?.Tool.HasOpacity() == true && Digit(e.Key) is { } digit)
         {
             Session.Restyle(style => style with { Opacity = digit == 0 ? 1 : digit / 10.0 });
             StylesCommitted?.Invoke();

@@ -113,6 +113,7 @@ struct Canvas {
             MeasureShape.draw(from: from, to: to, width: size / scale, color: color, scale: scale,
                               at: annotation.labelAt, in: context)
         case let .rectangle(rect):
+            context.setAlpha(annotation.style.opacity)
             // Half the stroke again, so the inside of an outline is as round as the outside.
             let radius = radius(annotation.style.corners, for: rect, extra: annotation.style.filled ? 0 : size / 2)
             context.addPath(CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil))
@@ -126,6 +127,7 @@ struct Canvas {
                 context.strokePath()
             }
         case let .oval(rect):
+            context.setAlpha(annotation.style.opacity)
             if annotation.style.filled {
                 context.setFillColor(color)
                 context.fillEllipse(in: rect)
