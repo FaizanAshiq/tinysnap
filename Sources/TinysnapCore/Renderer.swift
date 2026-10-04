@@ -261,42 +261,35 @@ struct Canvas {
     static let spotlightBlurPoints: CGFloat = 6
 
     func spotlight(_ rects: [(CGRect, CornerSize)], blurring: Bool) {
+        var blurred: CGImage?
         if blurring {
-            blurOutside(rects)
-            return
+            // Everything drawn so far, out of focus, to show outside the lit boxes.
+            guard let snapshot = context.makeImage() else { return }
+            let whole = CGRect(origin: .zero, size: deviceSize)
+            let soft = CIImage(cgImage: snapshot).clampedToExtent()
+                .applyingGaussianBlur(sigma: Self.spotlightBlurPoints * scale * outputScale)
+                .cropped(to: whole)
+            guard let image = Self.imageContext.createCGImage(soft, from: whole) else { return }
+            blurred = image
         }
         context.saveGState()
-        context.beginTransparencyLayer(auxiliaryInfo: nil)
-        context.setFillColor(CGColor(gray: 0, alpha: 0.5))
-        context.fill(region)
-        context.setBlendMode(.clear)
+        // One clip per lit box, each leaving that box out of the last: what is left is outside
+        // all of them, overlaps included. One even-odd path round them all counted an overlap
+        // twice and put it back outside.
         for (rect, corners) in rects where rect.width > 0 && rect.height > 0 {
             let corner = radius(corners, for: rect)
-            context.addPath(CGPath(roundedRect: rect, cornerWidth: corner, cornerHeight: corner, transform: nil))
-            context.fillPath()
-        }
-        context.endTransparencyLayer()
-        context.restoreGState()
-    }
-
-    /// Everything drawn so far, blurred, shown only outside the lit boxes.
-    private func blurOutside(_ rects: [(CGRect, CornerSize)]) {
-        guard let snapshot = context.makeImage() else { return }
-        let whole = CGRect(origin: .zero, size: deviceSize)
-        let blurred = CIImage(cgImage: snapshot).clampedToExtent()
-            .applyingGaussianBlur(sigma: Self.spotlightBlurPoints * scale * outputScale)
-            .cropped(to: whole)
-        guard let image = Self.imageContext.createCGImage(blurred, from: whole) else { return }
-        let outside = CGMutablePath()
-        outside.addRect(region)
-        for (rect, corners) in rects where rect.width > 0 && rect.height > 0 {
-            let corner = radius(corners, for: rect)
+            let outside = CGMutablePath()
+            outside.addRect(region.union(rect))
             outside.addRoundedRect(in: rect, cornerWidth: corner, cornerHeight: corner)
+            context.addPath(outside)
+            context.clip(using: .evenOdd)
         }
-        context.saveGState()
-        context.addPath(outside)
-        context.clip(using: .evenOdd)
-        draw(image, in: region)
+        if let blurred {
+            draw(blurred, in: region)
+        } else {
+            context.setFillColor(CGColor(gray: 0, alpha: 0.5))
+            context.fill(region)
+        }
         context.restoreGState()
     }
 

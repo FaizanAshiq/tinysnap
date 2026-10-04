@@ -28,6 +28,22 @@ public class SpotlightBlurTests
         Assert.True(Fixture.IsClose(Fixture.Pixel(image, 142, 50), (255, 255, 255)));
     }
 
+    /// <summary>Where two spotlights overlap, the overlap is lit, blurring or dimming. Clipped by one
+    /// even-odd path round them all, an overlap counted twice came out blurred.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void WhereTwoSpotlightsOverlapItStaysLit(bool blur)
+    {
+        using var image = Renderer.Render(new Document(Stripes(), annotations: [Spot(blur, 40), Spot(blur, 70)]))!;
+        // In the overlap, still black and white.
+        Assert.True(Fixture.IsClose(Fixture.Pixel(image, 80, 50), (0, 0, 0)), $"{Fixture.Pixel(image, 80, 50)}");
+        Assert.True(Fixture.IsClose(Fixture.Pixel(image, 82, 50), (255, 255, 255)), $"{Fixture.Pixel(image, 82, 50)}");
+        // In each one alone too.
+        Assert.True(Fixture.IsClose(Fixture.Pixel(image, 50, 50), (255, 255, 255)), $"{Fixture.Pixel(image, 50, 50)}");
+        Assert.True(Fixture.IsClose(Fixture.Pixel(image, 122, 50), (255, 255, 255)), $"{Fixture.Pixel(image, 122, 50)}");
+    }
+
     [Fact]
     public void ADimmingSpotlightIsAsItWas()
     {

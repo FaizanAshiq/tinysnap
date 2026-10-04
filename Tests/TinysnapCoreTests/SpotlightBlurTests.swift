@@ -27,6 +27,23 @@ struct SpotlightBlurTests {
         #expect(Fixture.isClose(Fixture.pixel(image, 142, 50), (255, 255, 255)))
     }
 
+    /// Where two spotlights overlap, the overlap is lit, blurring or dimming. Clipped by one
+    /// even-odd path round them all, an overlap counted twice came out blurred.
+    @Test func whereTwoSpotlightsOverlapItStaysLit() throws {
+        for blur in [true, false] {
+            let style = Style(colorHex: Palette.red, corners: .square, blurOutside: blur)
+            let spots = [Fixture.annotation(.spotlight(CGRect(x: 40, y: 20, width: 60, height: 60)), style: style),
+                         Fixture.annotation(.spotlight(CGRect(x: 70, y: 20, width: 60, height: 60)), style: style)]
+            let image = try #require(Renderer.render(Document(capture: stripes, annotations: spots)))
+            // In the overlap, still black and white.
+            #expect(Fixture.isClose(Fixture.pixel(image, 80, 50), (0, 0, 0)), "blur \(blur)")
+            #expect(Fixture.isClose(Fixture.pixel(image, 82, 50), (255, 255, 255)), "blur \(blur)")
+            // In each one alone too.
+            #expect(Fixture.isClose(Fixture.pixel(image, 50, 50), (255, 255, 255)), "blur \(blur)")
+            #expect(Fixture.isClose(Fixture.pixel(image, 122, 50), (255, 255, 255)), "blur \(blur)")
+        }
+    }
+
     @Test func aDimmingSpotlightIsAsItWas() throws {
         let image = try #require(Renderer.render(Document(capture: stripes, annotations: [spot(blur: false)])))
         // White outside, at half: still a sharp column, only darker.
