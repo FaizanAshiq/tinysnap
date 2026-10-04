@@ -1,0 +1,22 @@
+name: swift
+
+# The Mac app. The .NET workflow only runs for dotnet/, so without this a change to the
+# Swift side was never built or tested before it merged.
+on:
+  pull_request:
+    paths: ['Sources/**', 'Tests/**', 'Resources/**', 'Package.swift', 'build.sh', 'test.sh', '.github/workflows/swift.yml']
+  push:
+    branches: [main]
+    paths: ['Sources/**', 'Tests/**', 'Resources/**', 'Package.swift', 'build.sh', 'test.sh', '.github/workflows/swift.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: swift build --product TinysnapApp
+      # test.sh wires in the Swift Testing macro plugin when only Command Line Tools are there.
+      - run: ./test.sh
