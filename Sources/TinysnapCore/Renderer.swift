@@ -35,7 +35,7 @@ public enum Renderer {
 
         let canvas = Canvas(context: context, region: region, outputScale: outputScale,
                             deviceSize: CGSize(width: width, height: height), scale: document.scale,
-                            anchor: document.extent.origin, typing: typing)
+                            anchor: document.extent.origin, typing: typing, capture: document.capture)
         // Past the capture, the canvas carries on in the capture's edge colour.
         if !document.capture.bounds.contains(region) {
             context.setFillColor(document.capture.edgeColor)
@@ -72,6 +72,8 @@ struct Canvas {
     let anchor: CGPoint
     /// The text being typed: its box is drawn, its letters are left to the text field.
     let typing: Annotation.ID?
+    /// What a highlight reads to choose between darkening and lightening.
+    let capture: Capture
 
     private static let imageContext = CIContext(options: [.useSoftwareRenderer: false])
 
@@ -142,7 +144,9 @@ struct Canvas {
             TextLayout.draw(string, at: origin, points: size / scale, scale: scale, color: TextLayout.letterColor(annotation.style),
                             align: annotation.style.align, in: context)
         case let .highlighter(from, to):
-            context.setBlendMode(.multiply)
+            // Darkens a light capture like a marker, and lightens a dark one, where darkening
+            // would hardly show. Read from the screenshot, so it never changes with the zoom.
+            context.setBlendMode(capture.isDark(under: annotation.bounds(scale: scale)) ? .screen : .multiply)
             context.setLineCap(.round)
             context.setStrokeColor(Palette.color(hex: annotation.style.colorHex, alpha: 0.4))
             context.setLineWidth(size)

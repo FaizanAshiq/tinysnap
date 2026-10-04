@@ -27,6 +27,15 @@ public final class Capture: Equatable, Sendable {
 
     public static func == (lhs: Capture, rhs: Capture) -> Bool { lhs === rhs }
 
+    /// Whether the capture is mostly dark under `rect`, in capture pixels. Past the capture
+    /// it reads the edge colour the canvas is grown with there.
+    func isDark(under rect: CGRect) -> Bool {
+        let shown = rect.integral.intersection(bounds)
+        guard !shown.isNull, shown.width >= 1, shown.height >= 1, let patch = image.cropping(to: shown),
+              let luminance = PixelBuffer(image: patch)?.meanLuminance else { return Palette.luminance(of: edgeColor) < 0.5 }
+        return luminance < 0.5
+    }
+
     /// The part of a frozen display under `rect`, given in points from the display's
     /// top left corner. Clipped to the image, and nil when nothing of it is left.
     public static func crop(_ image: CGImage, points rect: CGRect, scale: CGFloat) -> Capture? {

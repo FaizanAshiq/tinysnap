@@ -30,6 +30,18 @@ public sealed class Capture
     }
 
     public Size PixelSize => new(Image.Width, Image.Height);
+
+    /// <summary>Whether the capture is mostly dark under <paramref name="rect"/>, in capture pixels.
+    /// Past the capture it reads the edge colour the canvas is grown with there.</summary>
+    internal bool IsDark(Rect rect)
+    {
+        var shown = rect.Integral.Intersection(Bounds);
+        if (shown.IsNull || shown.Width < 1 || shown.Height < 1) return Palette.Luminance(EdgeColor) < 0.5;
+        using var patch = Image.Subset(shown.ToSKRectI());
+        return patch is not null && PixelBuffer.From(patch)?.MeanLuminance is { } luminance
+            ? luminance < 0.5
+            : Palette.Luminance(EdgeColor) < 0.5;
+    }
     public Rect Bounds => new(Point.Zero, PixelSize);
     public Size PointSize => new(PixelSize.Width / Scale, PixelSize.Height / Scale);
 

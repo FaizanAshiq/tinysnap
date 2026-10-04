@@ -127,6 +127,9 @@ public static class Palette
         return (((value >> 16) & 0xFF) / 255.0, ((value >> 8) & 0xFF) / 255.0, (value & 0xFF) / 255.0);
     }
 
+    /// <summary>How bright a colour looks, 0 to 1, from its sRGB components.</summary>
+    internal static double Luminance(SKColor color) => (0.2126 * color.Red + 0.7152 * color.Green + 0.0722 * color.Blue) / 255;
+
     public static SKColor Color(string hex, double alpha = 1)
     {
         var rgb = Components(hex) ?? (1, 59 / 255.0, 48 / 255.0);

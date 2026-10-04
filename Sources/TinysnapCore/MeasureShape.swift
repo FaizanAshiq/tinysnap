@@ -126,9 +126,6 @@ public enum MeasureShape {
 
     /// White on a dark colour, black on a light one, so the length always reads.
     static func textColor(on color: CGColor) -> CGColor {
-        let parts = color.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil)?
-            .components ?? [0, 0, 0]
-        let luminance = 0.2126 * parts[0] + 0.7152 * parts[1] + 0.0722 * parts[2]
-        return luminance > 0.6 ? CGColor(gray: 0, alpha: 1) : CGColor(gray: 1, alpha: 1)
+        Palette.luminance(of: color) > 0.6 ? CGColor(gray: 0, alpha: 1) : CGColor(gray: 1, alpha: 1)
     }
 }

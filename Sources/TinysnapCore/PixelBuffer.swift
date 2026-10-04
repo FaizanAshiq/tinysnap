@@ -33,6 +33,18 @@ struct PixelBuffer {
         }
     }
 
+    /// How bright the pixels are on average, 0 to 1, each counted by how opaque it is, so a
+    /// window's see-through corners do not read as black. Nil when every pixel is see-through.
+    var meanLuminance: Double? {
+        var sum = 0.0, weight = 0.0
+        for index in stride(from: 0, to: bytes.count, by: 4) {
+            // Premultiplied, so each pixel's brightness already comes scaled by its alpha.
+            sum += 0.2126 * Double(bytes[index]) + 0.7152 * Double(bytes[index + 1]) + 0.0722 * Double(bytes[index + 2])
+            weight += Double(bytes[index + 3])
+        }
+        return weight > 0 ? sum / weight : nil
+    }
+
     func pixel(x: Int, y: Int) -> (r: UInt8, g: UInt8, b: UInt8, a: UInt8) {
         let index = (y * width + x) * 4
         return (bytes[index], bytes[index + 1], bytes[index + 2], bytes[index + 3])

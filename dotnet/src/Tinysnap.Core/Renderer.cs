@@ -34,7 +34,8 @@ public static partial class Renderer
         canvas.Scale((float)outputScale);
         canvas.Translate((float)-area.MinX, (float)-area.MinY);
 
-        var painter = new Canvas(surface, area, outputScale, size, document.Scale, document.Extent.Origin, typing);
+        var painter = new Canvas(surface, area, outputScale, size, document.Scale, document.Extent.Origin, document.Capture,
+                                 typing);
         // Past the capture, the canvas carries on in the capture's edge colour.
         if (!document.Capture.Bounds.Contains(area))
         {
@@ -69,7 +70,7 @@ public static partial class Renderer
 /// <param name="anchor">Where the whole render starts, so a redaction's grain lies the same in a
 /// render of part of the document as in the whole.</param>
 internal sealed class Canvas(SKSurface surface, Rect region, double outputScale, Size deviceSize, double scale, Point anchor,
-                             Guid? typing = null)
+                             Capture capture, Guid? typing = null)
 {
     private SKCanvas Context => surface.Canvas;
     public Rect Region { get; } = region;
@@ -159,7 +160,9 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
                 case AnnotationKind.Highlighter(var from, var to):
                 {
                     using var paint = Stroke(Palette.Color(annotation.Style.ColorHex, 0.4), size);
-                    paint.BlendMode = SKBlendMode.Multiply;
+                    // Darkens a light capture like a marker, and lightens a dark one, where darkening
+                    // would hardly show. Read from the screenshot, so it never changes with the zoom.
+                    paint.BlendMode = capture.IsDark(annotation.Bounds(Scale)) ? SKBlendMode.Screen : SKBlendMode.Multiply;
                     Context.DrawLine(from.ToSK(), to.ToSK(), paint);
                     break;
                 }

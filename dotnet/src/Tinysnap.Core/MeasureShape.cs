@@ -137,9 +137,5 @@ public static partial class MeasureShape
     }
 
     /// <summary>White on a dark colour, black on a light one, so the length always reads.</summary>
-    internal static SKColor TextColor(SKColor color)
-    {
-        var luminance = (0.2126 * color.Red + 0.7152 * color.Green + 0.0722 * color.Blue) / 255;
-        return luminance > 0.6 ? SKColors.Black : SKColors.White;
-    }
+    internal static SKColor TextColor(SKColor color) => Palette.Luminance(color) > 0.6 ? SKColors.Black : SKColors.White;
 }
