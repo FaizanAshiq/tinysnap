@@ -149,13 +149,13 @@ struct Canvas {
             TextLayout.draw(string, at: origin, points: size / scale, scale: scale, color: TextLayout.letterColor(annotation.style),
                             bold: annotation.style.bold, align: annotation.style.align, in: context)
         case let .highlighter(from, to):
-            // Darkens a light capture like a marker, and lightens a dark one, where darkening
-            // would hardly show. Read from the screenshot, so it never changes with the zoom.
-            context.setBlendMode(capture.isDark(under: annotation.bounds(scale: scale)) ? .screen : .multiply)
-            context.setLineCap(.round)
-            context.setStrokeColor(Palette.color(hex: annotation.style.colorHex, alpha: 0.4))
-            context.setLineWidth(size)
+            highlight(annotation, width: size)
             context.strokeLineSegments(between: [from, to])
+        case let .highlighterPath(points):
+            highlight(annotation, width: size)
+            // One path, stroked once, so where it crosses itself it is no darker.
+            context.addPath(Smoothing.path(through: points))
+            context.strokePath()
         case let .freehand(points):
             context.setStrokeColor(color)
             context.setLineWidth(size)
@@ -181,6 +181,14 @@ struct Canvas {
         case .spotlight:
             break
         }
+    }
+
+    /// Darkens a light capture like a marker, and lightens a dark one, where darkening would
+    /// hardly show. Read from the screenshot, so it never changes with the zoom.
+    private func highlight(_ annotation: Annotation, width: CGFloat) {
+        context.setBlendMode(capture.isDark(under: annotation.bounds(scale: scale)) ? .screen : .multiply)
+        context.setStrokeColor(Palette.color(hex: annotation.style.colorHex, alpha: 0.4))
+        context.setLineWidth(width)
     }
 
     /// Dashes two widths long with three between: the round ends take half a width off each

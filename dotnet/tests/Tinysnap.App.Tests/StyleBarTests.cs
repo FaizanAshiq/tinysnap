@@ -149,6 +149,19 @@ public class StyleBarTests
     }
 
     [AvaloniaFact]
+    public void TheFreehandChipMakesTheNextHighlightFollowThePointer()
+    {
+        var session = new EditorSession(new Document(CanvasHost.Blank(400, 300)), Tool.Highlighter);
+        var editor = new EditorWindow(session, DateTimeOffset.Now, TestServices.Make());
+        editor.Show();
+        Assert.Equal(2, editor.StyleBar.FreehandChips.Count);
+        Click(editor.StyleBar.FreehandChips[1]);
+        Assert.True(session.StyleFor(Tool.Highlighter).Freehand);
+        editor.Canvas.Choose(Tool.Line);
+        Assert.Empty(editor.StyleBar.FreehandChips);
+    }
+
+    [AvaloniaFact]
     public void ADigitMakesASelectedBoxSeeThrough()
     {
         var editor = WithShape(Tool.Rectangle);

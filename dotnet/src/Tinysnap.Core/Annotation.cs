@@ -22,6 +22,13 @@ public abstract record AnnotationKind
     public sealed record Text(Point Origin, string String) : AnnotationKind;
     public sealed record Highlighter(Point From, Point To) : AnnotationKind;
 
+    /// <summary>A highlight that follows the pointer.</summary>
+    public sealed record HighlighterPath(ImmutableArray<Point> Points) : AnnotationKind
+    {
+        public bool Equals(HighlighterPath? other) => other is not null && Points.SequenceEqual(other.Points);
+        public override int GetHashCode() => Points.Aggregate(0, (hash, p) => HashCode.Combine(hash, p));
+    }
+
     public sealed record Freehand(ImmutableArray<Point> Points) : AnnotationKind
     {
         // An immutable array compares by reference; two strokes with the same points are
@@ -68,7 +75,7 @@ public sealed record Annotation(Guid Id, AnnotationKind Kind, Style Style, doubl
         AnnotationKind.Rectangle => Tool.Rectangle,
         AnnotationKind.Oval => Tool.Oval,
         AnnotationKind.Text => Tool.Text,
-        AnnotationKind.Highlighter => Tool.Highlighter,
+        AnnotationKind.Highlighter or AnnotationKind.HighlighterPath => Tool.Highlighter,
         AnnotationKind.Freehand => Tool.Freehand,
         AnnotationKind.Step => Tool.Step,
         AnnotationKind.Spotlight => Tool.Spotlight,
@@ -106,7 +113,8 @@ public sealed record Annotation(Guid Id, AnnotationKind Kind, Style Style, doubl
                 var padding = TextLayout.BoxPadding(size / scale);
                 return letters.Inset(-padding.Width * scale, -padding.Height * scale);
             }
-            case AnnotationKind.Freehand(var points):
+            case AnnotationKind.Freehand or AnnotationKind.HighlighterPath:
+                var points = PathOf(Kind)!.Value;
                 if (points.IsEmpty) return Rect.Null;
                 var box = points.Aggregate(new Rect(points[0], Size.Zero), (box, p) => box.Union(new Rect(p, Size.Zero)));
                 return box.Inset(-size / 2, -size / 2);
@@ -120,6 +128,14 @@ public sealed record Annotation(Guid Id, AnnotationKind Kind, Style Style, doubl
     }
 
     /// <summary>The box of every kind that is a box.</summary>
+    /// <summary>The points of a stroke that follows the pointer: a freehand line or a highlight.</summary>
+    private static ImmutableArray<Point>? PathOf(AnnotationKind kind) => kind switch
+    {
+        AnnotationKind.Freehand(var points) => points,
+        AnnotationKind.HighlighterPath(var points) => points,
+        _ => null,
+    };
+
     private static Rect? BoxOf(AnnotationKind kind) => kind switch
     {
         AnnotationKind.Rectangle(var rect) => rect,
@@ -167,7 +183,8 @@ public sealed record Annotation(Guid Id, AnnotationKind Kind, Style Style, doubl
             }
             case AnnotationKind.Text or AnnotationKind.Step:
                 return Bounds(scale).Inset(-reach, -reach).Contains(point);
-            case AnnotationKind.Freehand(var points):
+            case AnnotationKind.Freehand or AnnotationKind.HighlighterPath:
+                var points = PathOf(Kind)!.Value;
                 if (points.Length == 1) return point.Distance(points[0]) <= reach;
                 return points.Zip(points.Skip(1)).Any(pair => point.DistanceToSegment(pair.First, pair.Second) <= reach);
             case AnnotationKind.Magnifier(var center, var radius, _):
@@ -203,6 +220,7 @@ public sealed record Annotation(Guid Id, AnnotationKind Kind, Style Style, doubl
             AnnotationKind.Image(var rect, var image) => new AnnotationKind.Image(Shift(rect), image),
             AnnotationKind.Text(var origin, var text) => new AnnotationKind.Text(origin.Offset(vector), text),
             AnnotationKind.Freehand(var points) => new AnnotationKind.Freehand([.. points.Select(p => p.Offset(vector))]),
+            AnnotationKind.HighlighterPath(var points) => new AnnotationKind.HighlighterPath([.. points.Select(p => p.Offset(vector))]),
             AnnotationKind.Step(var center) => new AnnotationKind.Step(center.Offset(vector)),
             AnnotationKind.Magnifier(var center, var radius, var zoom) => new AnnotationKind.Magnifier(center.Offset(vector), radius, zoom),
             _ => Kind,
@@ -218,7 +236,7 @@ public sealed record Annotation(Guid Id, AnnotationKind Kind, Style Style, doubl
         AnnotationKind.Highlighter(var from, var to) => [(Handle.Start, from), (Handle.End, to)],
         AnnotationKind.Measure(var from, var to) => [(Handle.Start, from), (Handle.End, to)],
         AnnotationKind.Magnifier => [.. Bounds(scale).HandlePoints.Take(4)],
-        AnnotationKind.Text or AnnotationKind.Freehand or AnnotationKind.Step => [],
+        AnnotationKind.Text or AnnotationKind.Freehand or AnnotationKind.HighlighterPath or AnnotationKind.Step => [],
         _ => BoxOf(Kind)!.Value.HandlePoints,
     };
 
@@ -271,6 +289,7 @@ public sealed record Annotation(Guid Id, AnnotationKind Kind, Style Style, doubl
             AnnotationKind.Highlighter(var from, var to) => from.Distance(to) < minimum,
             AnnotationKind.Measure(var from, var to) => from.Distance(to) < minimum,
             AnnotationKind.Freehand(var points) => points.Length < 2,
+            AnnotationKind.HighlighterPath(var points) => points.Length < 2,
             AnnotationKind.Text(_, var text) => string.IsNullOrWhiteSpace(text),
             AnnotationKind.Step or AnnotationKind.Magnifier => false,
             _ => BoxOf(Kind)!.Value is var rect && (rect.Size.Width < minimum || rect.Size.Height < minimum),

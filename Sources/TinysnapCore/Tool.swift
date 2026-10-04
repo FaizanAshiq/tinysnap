@@ -96,6 +96,9 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
     /// Steps only: numbers or letters, from a start the capture keeps.
     public var hasCounter: Bool { self == .step }
 
+    /// The highlighter only: a straight stroke, or one that follows the pointer.
+    public var hasFreehand: Bool { self == .highlighter }
+
     /// Pasted images: opacity and the difference blend, for comparing against the capture.
     public var hasOverlay: Bool { self == .image }
 
