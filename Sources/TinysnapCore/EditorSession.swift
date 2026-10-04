@@ -202,7 +202,14 @@ public struct EditorSession {
         guard !fresh.isEmpty else { return 0 }
         finishTyping()
         let style = style(for: .erase)
-        for box in fresh { display.annotations.append(Annotation(kind: .erase(box), style: style)) }
+        // Just above the capture and any erases already there, under every shape: a redaction
+        // covers the capture's own pixels, so a box drawn round the text stays whole, and its
+        // outline never streaks into the erase, which fills from the pixels around it.
+        let bottom = display.annotations.prefix { annotation in
+            if case .erase = annotation.kind { return true }
+            return false
+        }.count
+        display.annotations.insert(contentsOf: fresh.map { Annotation(kind: .erase($0), style: style) }, at: bottom)
         selection = nil
         history.commit(display)
         return fresh.count

@@ -217,9 +217,13 @@ public sealed class EditorSession
         if (fresh.Count == 0) return 0;
         FinishTyping();
         var style = StyleFor(Tool.Erase);
+        // Just above the capture and any erases already there, under every shape: a redaction
+        // covers the capture's own pixels, so a box drawn round the text stays whole, and its
+        // outline never streaks into the erase, which fills from the pixels around it.
+        var bottom = Display.Annotations.TakeWhile(a => a.Kind is AnnotationKind.Erase).Count();
         Display = Display with
         {
-            Annotations = Display.Annotations.AddRange(fresh.Select(box => Annotation.New(new AnnotationKind.Erase(box), style))),
+            Annotations = Display.Annotations.InsertRange(bottom, fresh.Select(box => Annotation.New(new AnnotationKind.Erase(box), style))),
         };
         Selection = null;
         History.Commit(Display);

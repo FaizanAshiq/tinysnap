@@ -57,6 +57,23 @@ struct TextRedactionTests {
         #expect(session.display.annotations.isEmpty)
     }
 
+    /// A redaction is about the capture's own pixels, so its boxes go under the shapes already
+    /// drawn. On top, a box drawn round the card number had its outline cut, and its side, running
+    /// along the erase's edge, streaked red across the erased text.
+    @Test func aRedactionBesideABoxNeitherCutsItNorTakesItsColour() throws {
+        let rectangle = Fixture.annotation(.rectangle(CGRect(x: 52, y: 60, width: 120, height: 40)))
+        var session = EditorSession(document: Document(capture: Fixture.capture(width: 400, height: 200), annotations: [rectangle]),
+                                    tool: .erase)
+        // Padded by 2, the erase's left edge lies along the box's left side.
+        session.redact([CGRect(x: 54, y: 70, width: 200, height: 20)])
+        #expect(session.display.annotations.last?.id == rectangle.id)
+        let image = try #require(Renderer.render(session.display, outputScale: 1, sharpPixels: true))
+        // Inside the erase, just clear of the box's left side: white, not pink.
+        #expect(Fixture.isClose(Fixture.pixel(image, 62, 80), (255, 255, 255), within: 6))
+        // The box's right side runs on across the erase.
+        #expect(Fixture.pixel(image, 172, 80).g < 100)
+    }
+
     /// The reader sees the capture under the erases, so a second pass finds the same text again.
     @Test func redactingAgainSkipsWhatIsAlreadyErased() {
         var session = EditorSession(document: Document(capture: Fixture.capture(width: 400, height: 200)), tool: .erase)

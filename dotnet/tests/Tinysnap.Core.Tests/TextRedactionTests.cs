@@ -68,6 +68,24 @@ public class TextRedactionTests
         Assert.Empty(session.Display.Annotations);
     }
 
+    /// <summary>A redaction is about the capture's own pixels, so its boxes go under the shapes already
+    /// drawn. On top, a box drawn round the card number had its outline cut, and its side, running
+    /// along the erase's edge, streaked red across the erased text.</summary>
+    [Fact]
+    public void ARedactionBesideABoxNeitherCutsItNorTakesItsColour()
+    {
+        var rectangle = Fixture.Annotation(new AnnotationKind.Rectangle(new Rect(52, 60, 120, 40)));
+        var session = new EditorSession(new Document(Fixture.Capture(400, 200), annotations: [rectangle]), Tool.Erase);
+        // Padded by 2, the erase's left edge lies along the box's left side.
+        session.Redact([new Rect(54, 70, 200, 20)]);
+        using var image = Renderer.Render(session.Display, sharpPixels: true)!;
+        // Inside the erase, just clear of the box's left side: white, not pink.
+        Assert.True(Fixture.IsClose(Fixture.Pixel(image, 62, 80), (255, 255, 255), 6), $"{Fixture.Pixel(image, 62, 80)}");
+        // The box's right side runs on across the erase.
+        Assert.True(Fixture.Pixel(image, 172, 80).G < 100, $"{Fixture.Pixel(image, 172, 80)}");
+        Assert.Equal(rectangle.Id, session.Display.Annotations[^1].Id);
+    }
+
     /// <summary>The reader sees the capture under the erases, so a second pass finds the same text again.</summary>
     [Fact]
     public void RedactingAgainSkipsWhatIsAlreadyErased()
