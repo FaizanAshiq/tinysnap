@@ -174,6 +174,27 @@ public class StyleBarTests
     }
 
     [AvaloniaFact]
+    public async Task TheEraseBarRedactsWhatTheReaderFinds()
+    {
+        var found = new Tinysnap.Core.Rect(40, 40, 120, 20);
+        var services = TestServices.Make() with
+        {
+            Redact = (_, target, _, erase) =>
+            {
+                erase(target == RedactTarget.Numbers ? [found] : []);
+                return Task.CompletedTask;
+            },
+        };
+        var editor = TestServices.Editor(services, Tool.Erase);
+        Assert.True(editor.StyleBar.IsVisible);
+        Assert.Equal(4, editor.StyleBar.RedactChips.Count);
+        Click(editor.StyleBar.RedactChips[2]);
+        await editor.WhenRedacted();
+        var erase = Assert.Single(editor.Canvas.Session.Display.Annotations);
+        Assert.True(((AnnotationKind.Erase)erase.Kind).Rect.Contains(found));
+    }
+
+    [AvaloniaFact]
     public void TheCropToolShowsRatios()
     {
         var session = new EditorSession(new Document(CanvasHost.Blank(400, 300)), Tool.Crop);

@@ -35,6 +35,29 @@ public enum TextReader {
         case text, codes
     }
 
+    /// Every line Vision reads, split into words at the spaces, each with its box in pixels, y
+    /// down, for Redact. Read as accurately as Copy Text reads.
+    public static func lines(in image: CGImage) throws -> [TextLine] {
+        let handler = VNImageRequestHandler(cgImage: image, options: [:])
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+        request.automaticallyDetectsLanguage = true
+        try handler.perform([request])
+        let width = CGFloat(image.width), height = CGFloat(image.height)
+        return (request.results ?? []).compactMap { observation in
+            guard let candidate = observation.topCandidates(1).first else { return nil }
+            let string = candidate.string
+            let words = string.split(whereSeparator: \.isWhitespace).compactMap { part -> TextWord? in
+                // Vision boxes in 0 to 1, y up.
+                guard let box = (try? candidate.boundingBox(for: part.startIndex..<part.endIndex))??.boundingBox else { return nil }
+                return TextWord(text: String(part), box: CGRect(x: box.minX * width, y: (1 - box.maxY) * height,
+                                                                 width: box.width * width, height: box.height * height))
+            }
+            return words.isEmpty ? nil : TextLine(words: words)
+        }
+    }
+
     public static func read(_ image: CGImage, for target: Target) throws -> TextReading {
         let handler = VNImageRequestHandler(cgImage: image, options: [:])
         switch target {

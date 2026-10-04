@@ -201,6 +201,35 @@ public sealed class EditorSession
         History.Commit(Display);
     }
 
+    // Redact
+
+    /// <summary>An erase box over each of <paramref name="boxes"/>, a little past each so no edge of a
+    /// letter shows, all as one undoable step. Each stays a box of its own, to delete if it covers
+    /// too much. A box an erase already covers is skipped: the reader sees the text under the erases
+    /// and finds it again, and a second box under the first would make deleting it look like it did
+    /// nothing. Returns how many it added.</summary>
+    public int Redact(IReadOnlyList<Rect> boxes)
+    {
+        var margin = 2 * Scale;
+        var erased = Display.Annotations.Select(a => a.Kind).OfType<AnnotationKind.Erase>().Select(e => e.Rect).ToList();
+        var fresh = boxes.Select(box => box.Inset(-margin, -margin).WholePixels)
+            .Where(box => !erased.Any(rect => rect.Contains(box))).ToList();
+        if (fresh.Count == 0) return 0;
+        FinishTyping();
+        var style = StyleFor(Tool.Erase);
+        // Just above the capture and any erases already there, under every shape: a redaction
+        // covers the capture's own pixels, so a box drawn round the text stays whole, and its
+        // outline never streaks into the erase, which fills from the pixels around it.
+        var bottom = Display.Annotations.TakeWhile(a => a.Kind is AnnotationKind.Erase).Count();
+        Display = Display with
+        {
+            Annotations = Display.Annotations.InsertRange(bottom, fresh.Select(box => Annotation.New(new AnnotationKind.Erase(box), style))),
+        };
+        Selection = null;
+        History.Commit(Display);
+        return fresh.Count;
+    }
+
     // Steps
 
     /// <summary>Sets where the steps start counting, as one undoable step, held to the limits.</summary>

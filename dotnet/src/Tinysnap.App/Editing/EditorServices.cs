@@ -24,6 +24,9 @@ namespace Tinysnap.App.Editing;
 /// near the given point; the image stays the caller's.</param>
 /// <param name="ReduceMotion">The system asks for less motion: layer rows change places without
 /// sliding.</param>
+/// <param name="Redact">Reads an image's words, hands every one of a kind to the given erase, which
+/// says how many it added, and says that near the given point; the boxes are in the image's pixels,
+/// and the image stays the caller's.</param>
 internal sealed record EditorServices(IClipboard Clipboard, Func<Preferences> Preferences, IDialogs Dialogs,
                                       Action<ExportedImage, bool, LibraryEntry?>? Pin = null,
                                       Action<IReadOnlyDictionary<Tool, Style>, string>? RememberStyles = null,
@@ -31,4 +34,5 @@ internal sealed record EditorServices(IClipboard Clipboard, Func<Preferences> Pr
                                       Action? OpenLibrary = null, Func<SKImage, bool, PixelPoint?, Task>? Read = null,
                                       Action<MeasureSettings>? RememberMeasure = null, Action<Backdrop>? RememberBackdrop = null,
                                       Func<BackdropWallpaper?>? ReadWallpaper = null, Action<bool>? RememberLayers = null,
-                                      WindowTabs? Tabs = null, bool ReduceMotion = false);
+                                      WindowTabs? Tabs = null, bool ReduceMotion = false,
+                                      Func<SKImage, RedactTarget, PixelPoint?, Func<IReadOnlyList<Tinysnap.Core.Rect>, int>, Task>? Redact = null);

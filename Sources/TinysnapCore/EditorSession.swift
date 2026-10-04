@@ -183,6 +183,38 @@ public struct EditorSession {
         history.commit(display)
     }
 
+    // MARK: Redact
+
+    /// An erase box over each of `boxes`, a little past each so no edge of a letter shows, all as
+    /// one undoable step. Each stays a box of its own, to delete if it covers too much. A box an
+    /// erase already covers is skipped: the reader sees the text under the erases and finds it
+    /// again, and a second box under the first would make deleting it look like it did nothing.
+    /// Returns how many it added.
+    @discardableResult
+    public mutating func redact(_ boxes: [CGRect]) -> Int {
+        let margin = 2 * scale
+        let erased = display.annotations.compactMap { annotation -> CGRect? in
+            guard case let .erase(rect) = annotation.kind else { return nil }
+            return rect
+        }
+        let fresh = boxes.map { $0.insetBy(dx: -margin, dy: -margin).wholePixels }
+            .filter { box in !erased.contains { $0.contains(box) } }
+        guard !fresh.isEmpty else { return 0 }
+        finishTyping()
+        let style = style(for: .erase)
+        // Just above the capture and any erases already there, under every shape: a redaction
+        // covers the capture's own pixels, so a box drawn round the text stays whole, and its
+        // outline never streaks into the erase, which fills from the pixels around it.
+        let bottom = display.annotations.prefix { annotation in
+            if case .erase = annotation.kind { return true }
+            return false
+        }.count
+        display.annotations.insert(contentsOf: fresh.map { Annotation(kind: .erase($0), style: style) }, at: bottom)
+        selection = nil
+        history.commit(display)
+        return fresh.count
+    }
+
     // MARK: Steps
 
     /// Sets where the steps start counting, as one undoable step, held to the limits.

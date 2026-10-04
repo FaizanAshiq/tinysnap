@@ -49,7 +49,7 @@ public sealed class CaptureController
                                       measure => preferences.Update(p => p with { Measure = measure }),
                                       backdrop => preferences.Update(p => p with { Backdrop = backdrop }), ReadWallpaper,
                                       shows => preferences.Update(p => p with { ShowsLayers = shows }), Tabs,
-                                      platform.ReduceMotion);
+                                      platform.ReduceMotion, RedactText);
         // A Measure setting changed in one editor reaches every other.
         preferences.Changed += changed =>
         {
@@ -567,6 +567,34 @@ public sealed class CaptureController
             title = !codes ? "Text copied" : reading.Codes.Length == 1 ? "QR code copied" : $"{reading.Codes.Length} QR codes copied";
         }
         Toast = new TextToast(title, shown, shown.Length > 0 ? reading : null, services.Clipboard, platform.Files, on, time);
+        Toast.Show();
+    }
+
+    /// <summary>Reads <paramref name="image"/>'s words on a worker thread, hands every
+    /// <paramref name="target"/> among them to <paramref name="erase"/>, and says how many it added in a
+    /// toast at the top of the monitor holding <paramref name="on"/>. The boxes are in the image's
+    /// pixels; the image stays the caller's.</summary>
+    internal async Task RedactText(SKImage image, RedactTarget target, PixelPoint? on, Func<IReadOnlyList<Rect>, int> erase)
+    {
+        var (one, many) = target switch
+        {
+            RedactTarget.Emails => ("email", "emails"),
+            RedactTarget.Phones => ("phone number", "phone numbers"),
+            RedactTarget.Numbers => ("number", "numbers"),
+            _ => ("line of text", "lines of text"),
+        };
+        Toast?.Dismiss();
+        Toast = new TextToast($"Finding {many}…", "", null, services.Clipboard, platform.Files, on, time, working: true);
+        Toast.Show();
+        var lines = await Task.Run(() => platform.Text.Lines(image));
+        IReadOnlyList<Rect> boxes = lines is null ? [] : TextRedaction.Boxes(lines, target);
+        var added = boxes.Count == 0 ? 0 : erase(boxes);
+        Toast?.Dismiss();
+        var title = lines is null ? "Could not read text"
+            : boxes.Count == 0 ? $"No {many} found"
+            : added == 0 ? "Already erased"
+            : $"Erased {added} {(added == 1 ? one : many)}";
+        Toast = new TextToast(title, "", null, services.Clipboard, platform.Files, on, time);
         Toast.Show();
     }
 

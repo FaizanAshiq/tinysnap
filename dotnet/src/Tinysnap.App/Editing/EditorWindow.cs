@@ -139,6 +139,11 @@ internal sealed class EditorWindow : Window
     /// <summary>The text or codes last asked for, read.</summary>
     internal Task WhenRead() => reading;
 
+    private Task redacting = Task.CompletedTask;
+
+    /// <summary>Done when the last Redact has read the capture and placed its erase boxes, for tests.</summary>
+    internal Task WhenRedacted() => redacting;
+
     /// <param name="around">Where the capture was taken, in physical pixels, so the editor opens
     /// on that monitor.</param>
     /// <param name="title">The file's name for a picture opened from disk; a capture is named for
@@ -179,6 +184,7 @@ internal sealed class EditorWindow : Window
             ReadWallpaper = services.ReadWallpaper,
             Remember = services.RememberBackdrop,
         };
+        StyleBar.Redact = target => redacting = Redact(target);
 
         var buttons = new List<(Tool, ToggleButton)>();
         var bar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
@@ -855,6 +861,16 @@ internal sealed class EditorWindow : Window
                 image.Dispose();
             }
         }
+    }
+
+    /// <summary>Reads the capture's own pixels for every <paramref name="target"/>, then covers each
+    /// with an erase box, all as one undo step.</summary>
+    private async Task Redact(RedactTarget target)
+    {
+        if (services.Redact is not { } redact) return;
+        var center = new PixelPoint(Position.X + (int)(Bounds.Width * DesktopScaling / 2),
+                                    Position.Y + (int)(Bounds.Height * DesktopScaling / 2));
+        await redact(Canvas.Session.Display.Capture.Image, target, center, Canvas.Redact);
     }
 
     // Library

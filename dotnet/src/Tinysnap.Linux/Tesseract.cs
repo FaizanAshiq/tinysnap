@@ -12,6 +12,9 @@ internal static unsafe partial class Tesseract
     /// <summary>Iterator level for a line of text.</summary>
     public const int TextLine = 2;
 
+    /// <summary>Iterator level for a word.</summary>
+    public const int Word = 3;
+
     static Tesseract() => NativeLibrary.SetDllImportResolver(typeof(Tesseract).Assembly, Resolve);
 
     private static nint Resolve(string name, Assembly assembly, DllImportSearchPath? path) =>
@@ -31,4 +34,7 @@ internal static unsafe partial class Tesseract
     [LibraryImport(Lib)] public static partial void TessResultIteratorDelete(nint iterator);
     [LibraryImport(Lib)] public static partial int TessPageIteratorBoundingBox(nint iterator, int level, out int left, out int top, out int right, out int bottom);
     [LibraryImport(Lib)] public static partial void TessDeleteText(nint text);
+    /// <summary>Non-zero when the iterator stands at the start of an item of <paramref name="level"/>,
+    /// a line, say, while it walks the words.</summary>
+    [LibraryImport(Lib)] public static partial int TessPageIteratorIsAtBeginningOf(nint iterator, int level);
 }
