@@ -12,6 +12,10 @@ swift build -c "$CONFIG" --disable-sandbox
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+# Kept out of Spotlight, so macOS never takes a test build here for the installed app: it
+# opens an app by its bundle id, the login item included, and picks the newest copy it knows.
+# The marker sits beside the app, so a copy of the app itself carries nothing.
+touch dist/.metadata_never_index
 
 cp ".build/$CONFIG/TinysnapApp" "$APP/Contents/MacOS/Tinysnap"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
