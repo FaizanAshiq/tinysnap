@@ -162,6 +162,7 @@ final class StyleBar: NSVisualEffectView {
         if tool.hasSize { row.addArrangedSubview(group(sizeChips())) }
         if tool.hasFill { row.addArrangedSubview(group(fillChips())) }
         if tool.hasDash { row.addArrangedSubview(group(dashChips())) }
+        if tool.hasFreehand { row.addArrangedSubview(group(freehandChips())) }
         if tool.hasCorners { row.addArrangedSubview(group(cornerChips())) }
         if tool.hasAlign { row.addArrangedSubview(group(alignChips())) }
         if tool.hasBold { row.addArrangedSubview(group([boldChip()])) }
@@ -361,6 +362,36 @@ final class StyleBar: NSVisualEffectView {
 
     @objc private func pickDash(_ sender: NSButton) {
         change { $0.dashed = sender.tag == 1 }
+    }
+
+    /// A straight stroke, and one that wanders as the pointer did.
+    private func freehandChips() -> [NSView] {
+        [false, true].map { freehand in
+            let chip = ChipButton(label: freehand ? "Freehand: follows the pointer" : "Straight") { box, color in
+                let stroke = NSBezierPath()
+                stroke.move(to: NSPoint(x: box.minX + 8, y: box.midY - 4))
+                if freehand {
+                    stroke.curve(to: NSPoint(x: box.maxX - 8, y: box.midY + 4),
+                                 controlPoint1: NSPoint(x: box.midX, y: box.midY + 10),
+                                 controlPoint2: NSPoint(x: box.midX, y: box.midY - 10))
+                } else {
+                    stroke.line(to: NSPoint(x: box.maxX - 8, y: box.midY + 4))
+                }
+                stroke.lineWidth = 3
+                stroke.lineCapStyle = .round
+                color.setStroke()
+                stroke.stroke()
+            }
+            chip.isChosen = style.freehand == freehand
+            chip.target = self
+            chip.action = #selector(pickFreehand(_:))
+            chip.tag = freehand ? 1 : 0
+            return chip
+        }
+    }
+
+    @objc private func pickFreehand(_ sender: NSButton) {
+        change { $0.freehand = sender.tag == 1 }
     }
 
     /// Two lines of text, alone or cut out of a box.

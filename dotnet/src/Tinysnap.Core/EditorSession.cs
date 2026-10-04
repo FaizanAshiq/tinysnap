@@ -354,7 +354,11 @@ public sealed class EditorSession
         {
             case Tool.Arrow: kind = new AnnotationKind.Arrow(point, point); break;
             case Tool.Line: kind = new AnnotationKind.Line(point, point); break;
-            case Tool.Highlighter: kind = new AnnotationKind.Highlighter(point, point); break;
+            case Tool.Highlighter:
+                kind = StyleFor(Tool.Highlighter).Freehand
+                    ? new AnnotationKind.HighlighterPath([point])
+                    : new AnnotationKind.Highlighter(point, point);
+                break;
             case Tool.Rectangle: kind = new AnnotationKind.Rectangle(zero); break;
             case Tool.Oval: kind = new AnnotationKind.Oval(zero); break;
             case Tool.Spotlight: kind = new AnnotationKind.Spotlight(zero); break;
@@ -404,6 +408,9 @@ public sealed class EditorSession
             AnnotationKind.Freehand(var points) => points.IsEmpty || points[^1].Distance(point) < 1
                 ? kind
                 : new AnnotationKind.Freehand(points.Add(point)),
+            AnnotationKind.HighlighterPath(var points) => points.IsEmpty || points[^1].Distance(point) < 1
+                ? kind
+                : new AnnotationKind.HighlighterPath(points.Add(point)),
             AnnotationKind.Step => new AnnotationKind.Step(point),
             AnnotationKind.Magnifier(_, var radius, var zoom) => new AnnotationKind.Magnifier(point, radius, zoom),
             _ => kind,

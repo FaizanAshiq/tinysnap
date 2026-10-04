@@ -68,6 +68,11 @@ public static class DocumentArchive
                     item["kind"] = "freehand";
                     item["points"] = new JsonArray([.. points.Select(p => (JsonNode)Pair(p))]);
                     break;
+                case AnnotationKind.HighlighterPath(var points):
+                    // The ends as well, so an older Tinysnap draws it as a straight highlight.
+                    Ends("highlighter", points.IsEmpty ? Point.Zero : points[0], points.IsEmpty ? Point.Zero : points[^1]);
+                    item["points"] = new JsonArray([.. points.Select(p => (JsonNode)Pair(p))]);
+                    break;
                 case AnnotationKind.Step(var center):
                     item["kind"] = "step";
                     item["center"] = Pair(center);
@@ -187,6 +192,8 @@ public static class DocumentArchive
             "arrow" => new AnnotationKind.Arrow(Pt(from, "from"), Pt(to, "to")),
             "line" => new AnnotationKind.Line(Pt(from, "from"), Pt(to, "to")),
             "measure" => new AnnotationKind.Measure(Pt(from, "from"), Pt(to, "to")),
+            "highlighter" when points is { Length: >= 2 } =>
+                new AnnotationKind.HighlighterPath([.. points.Select(p => Pt(p, "points"))]),
             "highlighter" => new AnnotationKind.Highlighter(Pt(from, "from"), Pt(to, "to")),
             "rectangle" => new AnnotationKind.Rectangle(Box()),
             "oval" => new AnnotationKind.Oval(Box()),

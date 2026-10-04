@@ -49,6 +49,10 @@ public enum DocumentArchive {
             case let .erase(rect): item.kind = "erase"; item.rect = Box(rect)
             case let .text(origin, string): item.kind = "text"; item.origin = pair(origin); item.string = string
             case let .freehand(points): item.kind = "freehand"; item.points = points.map(pair)
+            case let .highlighterPath(points):
+                // The ends as well, so an older Tinysnap draws it as a straight highlight.
+                item.kind = "highlighter"; item.points = points.map(pair)
+                item.from = pair(points.first ?? .zero); item.to = pair(points.last ?? .zero)
             case let .step(center): item.kind = "step"; item.center = pair(center)
             case let .magnifier(center, radius, zoom):
                 item.kind = "magnifier"; item.center = pair(center); item.radius = radius; item.zoom = zoom
@@ -123,7 +127,9 @@ public enum DocumentArchive {
         case "arrow": return .arrow(from: try point(item.from, "from"), to: try point(item.to, "to"))
         case "line": return .line(from: try point(item.from, "from"), to: try point(item.to, "to"))
         case "measure": return .measure(from: try point(item.from, "from"), to: try point(item.to, "to"))
-        case "highlighter": return .highlighter(from: try point(item.from, "from"), to: try point(item.to, "to"))
+        case "highlighter":
+            if let points = item.points, points.count >= 2 { return .highlighterPath(try points.map { try point($0, "points") }) }
+            return .highlighter(from: try point(item.from, "from"), to: try point(item.to, "to"))
         case "rectangle": return .rectangle(try rect())
         case "oval": return .oval(try rect())
         case "spotlight": return .spotlight(try rect())

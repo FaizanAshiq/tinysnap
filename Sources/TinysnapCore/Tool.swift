@@ -93,6 +93,9 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
     /// Lines, boxes and ovals: drawn in dashes. A filled box or oval has no outline to dash.
     public var hasDash: Bool { self == .line || self == .rectangle || self == .oval }
 
+    /// The highlighter only: a straight stroke, or one that follows the pointer.
+    public var hasFreehand: Bool { self == .highlighter }
+
     /// Pasted images: opacity and the difference blend, for comparing against the capture.
     public var hasOverlay: Bool { self == .image }
 

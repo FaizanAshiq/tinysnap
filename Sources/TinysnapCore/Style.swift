@@ -53,12 +53,14 @@ public struct Style: Equatable, Codable, Sendable {
     public var bold: Bool
     /// Lines, and outlined boxes and ovals: drawn in dashes.
     public var dashed: Bool
+    /// The highlighter only: following the pointer instead of drawing a straight stroke.
+    public var freehand: Bool
 
     public static let opacityRange: ClosedRange<CGFloat> = 0.1...1
 
     public init(colorHex: String, size: StyleSize = .medium, filled: Bool = false, corners: CornerSize = .medium,
                 opacity: CGFloat = 1, difference: Bool = false, align: TextAlign = .left, bold: Bool = false,
-                dashed: Bool = false) {
+                dashed: Bool = false, freehand: Bool = false) {
         self.colorHex = colorHex
         self.size = size
         self.filled = filled
@@ -68,10 +70,11 @@ public struct Style: Equatable, Codable, Sendable {
         self.align = align
         self.bold = bold
         self.dashed = dashed
+        self.freehand = freehand
     }
 
     private enum CodingKeys: String, CodingKey {
-        case colorHex, size, filled, corners, opacity, difference, align, bold, dashed
+        case colorHex, size, filled, corners, opacity, difference, align, bold, dashed, freehand
         /// Read only: the square corner switch this replaced.
         case sharpCorners
     }
@@ -87,6 +90,7 @@ public struct Style: Equatable, Codable, Sendable {
         try container.encode(align, forKey: .align)
         try container.encode(bold, forKey: .bold)
         try container.encode(dashed, forKey: .dashed)
+        try container.encode(freehand, forKey: .freehand)
     }
 
     /// Every key is optional and a bad value falls back on its own, so one hand edited
@@ -106,6 +110,7 @@ public struct Style: Equatable, Codable, Sendable {
         align = (try? container.decodeIfPresent(TextAlign.self, forKey: .align)) ?? .left
         bold = (try? container.decodeIfPresent(Bool.self, forKey: .bold)) ?? false
         dashed = (try? container.decodeIfPresent(Bool.self, forKey: .dashed)) ?? false
+        freehand = (try? container.decodeIfPresent(Bool.self, forKey: .freehand)) ?? false
     }
 }
 

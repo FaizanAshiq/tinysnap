@@ -71,9 +71,13 @@ public sealed record Style
     /// <summary>Lines, and outlined boxes and ovals: drawn in dashes.</summary>
     public bool Dashed { get; init; }
 
+    /// <summary>The highlighter only: following the pointer instead of drawing a straight stroke.</summary>
+    public bool Freehand { get; init; }
+
     public Style(string colorHex, StyleSize size = StyleSize.Medium, bool filled = false,
                  CornerSize corners = CornerSize.Medium, double opacity = 1, bool difference = false,
-                 TextAlign align = TextAlign.Left, bool bold = false, bool dashed = false)
+                 TextAlign align = TextAlign.Left, bool bold = false, bool dashed = false,
+                 bool freehand = false)
     {
         ColorHex = colorHex;
         Size = size;
@@ -84,6 +88,7 @@ public sealed record Style
         Align = align;
         Bold = bold;
         Dashed = dashed;
+        Freehand = freehand;
     }
 
     public JsonObject ToJson() => new()
@@ -97,6 +102,7 @@ public sealed record Style
         ["align"] = Json.Wire(Align),
         ["bold"] = Bold,
         ["dashed"] = Dashed,
+        ["freehand"] = Freehand,
     };
 
     /// <summary>Every key is optional and a bad value falls back on its own, so one hand
@@ -117,7 +123,8 @@ public sealed record Style
         var align = Json.Enum<TextAlign>(o, "align") ?? TextAlign.Left;
         var bold = Json.Bool(o, "bold") ?? false;
         var dashed = Json.Bool(o, "dashed") ?? false;
-        return new Style(colorHex, size, filled, corners, opacity, difference, align, bold, dashed);
+        var freehand = Json.Bool(o, "freehand") ?? false;
+        return new Style(colorHex, size, filled, corners, opacity, difference, align, bold, dashed, freehand);
     }
 }
 

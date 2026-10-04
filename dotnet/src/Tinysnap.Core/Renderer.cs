@@ -98,6 +98,15 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
     private static SKPathEffect? Dashes(Annotation annotation, double width) =>
         annotation.Style.Dashed ? SKPathEffect.CreateDash([(float)(width * 2), (float)(width * 3)], 0) : null;
 
+    /// <summary>Darkens a light capture like a marker, and lightens a dark one, where darkening would
+    /// hardly show. Read from the screenshot, so it never changes with the zoom.</summary>
+    private SKPaint Highlight(Annotation annotation, double width)
+    {
+        var paint = Stroke(Palette.Color(annotation.Style.ColorHex, 0.4), width);
+        paint.BlendMode = capture.IsDark(annotation.Bounds(Scale)) ? SKBlendMode.Screen : SKBlendMode.Multiply;
+        return paint;
+    }
+
     /// <summary>A box or oval's colour at its opacity, so a filled one tints what is under it.</summary>
     private static SKColor SeeThrough(SKColor color, double opacity) => color.WithAlpha((byte)Geometry.Round(color.Alpha * opacity));
 
@@ -175,11 +184,16 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
                     break;
                 case AnnotationKind.Highlighter(var from, var to):
                 {
-                    using var paint = Stroke(Palette.Color(annotation.Style.ColorHex, 0.4), size);
-                    // Darkens a light capture like a marker, and lightens a dark one, where darkening
-                    // would hardly show. Read from the screenshot, so it never changes with the zoom.
-                    paint.BlendMode = capture.IsDark(annotation.Bounds(Scale)) ? SKBlendMode.Screen : SKBlendMode.Multiply;
+                    using var paint = Highlight(annotation, size);
                     Context.DrawLine(from.ToSK(), to.ToSK(), paint);
+                    break;
+                }
+                case AnnotationKind.HighlighterPath(var points):
+                {
+                    // One path, stroked once, so where it crosses itself it is no darker.
+                    using var path = Smoothing.Path(points);
+                    using var paint = Highlight(annotation, size);
+                    Context.DrawPath(path, paint);
                     break;
                 }
                 case AnnotationKind.Freehand(var points):

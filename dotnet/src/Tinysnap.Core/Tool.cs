@@ -91,6 +91,9 @@ public static class ToolInfo
     /// <summary>Lines, boxes and ovals: drawn in dashes. A filled box or oval has no outline to dash.</summary>
     public static bool HasDash(this Tool tool) => tool is Tool.Line or Tool.Rectangle or Tool.Oval;
 
+    /// <summary>The highlighter only: a straight stroke, or one that follows the pointer.</summary>
+    public static bool HasFreehand(this Tool tool) => tool is Tool.Highlighter;
+
     /// <summary>Pasted images: opacity and the difference blend, for comparing against the capture.</summary>
     public static bool HasOverlay(this Tool tool) => tool is Tool.Image;
 

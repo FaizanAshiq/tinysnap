@@ -316,7 +316,8 @@ public struct EditorSession {
         switch tool {
         case .arrow: kind = .arrow(from: point, to: point)
         case .line: kind = .line(from: point, to: point)
-        case .highlighter: kind = .highlighter(from: point, to: point)
+        case .highlighter:
+            kind = style(for: .highlighter).freehand ? .highlighterPath([point]) : .highlighter(from: point, to: point)
         case .rectangle: kind = .rectangle(zero)
         case .oval: kind = .oval(zero)
         case .spotlight: kind = .spotlight(zero)
@@ -360,6 +361,9 @@ public struct EditorSession {
         case let .freehand(points):
             guard let last = points.last, last.distance(to: point) >= 1 else { return kind }
             return .freehand(points + [point])
+        case let .highlighterPath(points):
+            guard let last = points.last, last.distance(to: point) >= 1 else { return kind }
+            return .highlighterPath(points + [point])
         case .step: return .step(center: point)
         case let .magnifier(_, radius, zoom): return .magnifier(center: point, radius: radius, zoom: zoom)
         case .text, .image: return kind
