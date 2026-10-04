@@ -772,7 +772,7 @@ final class CanvasView: NSView, NSTextViewDelegate, NSMenuItemValidation {
 
         let fontSize = annotation.pixelSize(scale: scale) / scale
         let field = textView ?? makeTextView()
-        field.font = TextLayout.font(points: fontSize) as NSFont
+        field.font = TextLayout.font(points: fontSize, bold: annotation.style.bold) as NSFont
         field.textColor = NSColor(cgColor: TextLayout.letterColor(annotation.style))
         field.insertionPointColor = field.textColor ?? .labelColor
         if field.string != string { field.string = string }

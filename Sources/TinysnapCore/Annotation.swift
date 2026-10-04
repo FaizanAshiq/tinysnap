@@ -100,7 +100,8 @@ public struct Annotation: Equatable, Identifiable, Sendable {
              let .blur(rect), let .pixelate(rect), let .erase(rect), let .image(rect, _):
             return rect
         case let .text(origin, string):
-            let letters = CGRect(origin: origin, size: TextLayout.size(of: string, points: size / scale, scale: scale))
+            let letters = CGRect(origin: origin, size: TextLayout.size(of: string, points: size / scale, scale: scale,
+                                                                      bold: style.bold))
             guard style.filled else { return letters }
             let padding = TextLayout.boxPadding(points: size / scale)
             return letters.insetBy(dx: -padding.width * scale, dy: -padding.height * scale)

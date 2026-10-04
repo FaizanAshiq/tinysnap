@@ -46,8 +46,8 @@ public enum TextLayout {
 
     /// The box the text fills in capture pixels, measured from its top left corner. An
     /// empty string still gets a narrow box, so text being typed can be clicked and found.
-    static func size(of string: String, points: CGFloat, scale: CGFloat) -> CGSize {
-        let font = font(points: points)
+    static func size(of string: String, points: CGFloat, scale: CGFloat, bold: Bool = false) -> CGSize {
+        let font = font(points: points, bold: bold)
         let lines = lines(of: string, font: font, color: CGColor(gray: 0, alpha: 1))
         let widest = lines.map { CGFloat(CTLineGetTypographicBounds($0, nil, nil, nil)) }.max() ?? 0
         return CGSize(width: max(widest, points / 2) * scale, height: lineHeight(of: font) * CGFloat(lines.count) * scale)
@@ -55,8 +55,8 @@ public enum TextLayout {
 
     /// How far in from the box's left edge each line starts, in points: none when set left,
     /// half the room the line leaves when centred, all of it when set right.
-    static func lineOffsets(of string: String, points: CGFloat, align: TextAlign) -> [CGFloat] {
-        let font = font(points: points)
+    static func lineOffsets(of string: String, points: CGFloat, align: TextAlign, bold: Bool = false) -> [CGFloat] {
+        let font = font(points: points, bold: bold)
         let widths = lines(of: string, font: font, color: CGColor(gray: 0, alpha: 1))
             .map { CGFloat(CTLineGetTypographicBounds($0, nil, nil, nil)) }
         let box = max(widths.max() ?? 0, points / 2)
@@ -82,7 +82,7 @@ public enum TextLayout {
         // Glyphs are drawn y up. Flipping the text matrix turns them the right way up
         // inside the y down user space.
         context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
-        let offsets = align == .left ? [] : lineOffsets(of: string, points: points, align: align)
+        let offsets = align == .left ? [] : lineOffsets(of: string, points: points, align: align, bold: bold)
         for (index, line) in lines(of: string, font: font, color: color).enumerated() {
             context.textPosition = CGPoint(x: offsets.indices.contains(index) ? offsets[index] : 0, y: ascent + CGFloat(index) * height)
             CTLineDraw(line, context)

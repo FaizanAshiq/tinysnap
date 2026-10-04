@@ -49,11 +49,13 @@ public struct Style: Equatable, Codable, Sendable {
     public var difference: Bool
     /// Text only: each line set left, centred or right.
     public var align: TextAlign
+    /// Text only: set in the bold face.
+    public var bold: Bool
 
     public static let opacityRange: ClosedRange<CGFloat> = 0.1...1
 
     public init(colorHex: String, size: StyleSize = .medium, filled: Bool = false, corners: CornerSize = .medium,
-                opacity: CGFloat = 1, difference: Bool = false, align: TextAlign = .left) {
+                opacity: CGFloat = 1, difference: Bool = false, align: TextAlign = .left, bold: Bool = false) {
         self.colorHex = colorHex
         self.size = size
         self.filled = filled
@@ -61,10 +63,11 @@ public struct Style: Equatable, Codable, Sendable {
         self.opacity = min(max(opacity, Self.opacityRange.lowerBound), Self.opacityRange.upperBound)
         self.difference = difference
         self.align = align
+        self.bold = bold
     }
 
     private enum CodingKeys: String, CodingKey {
-        case colorHex, size, filled, corners, opacity, difference, align
+        case colorHex, size, filled, corners, opacity, difference, align, bold
         /// Read only: the square corner switch this replaced.
         case sharpCorners
     }
@@ -78,6 +81,7 @@ public struct Style: Equatable, Codable, Sendable {
         try container.encode(opacity, forKey: .opacity)
         try container.encode(difference, forKey: .difference)
         try container.encode(align, forKey: .align)
+        try container.encode(bold, forKey: .bold)
     }
 
     /// Every key is optional and a bad value falls back on its own, so one hand edited
@@ -95,6 +99,7 @@ public struct Style: Equatable, Codable, Sendable {
         self.opacity = opacity.flatMap { $0 > 1 ? nil : max($0, Self.opacityRange.lowerBound) } ?? 1
         difference = (try? container.decodeIfPresent(Bool.self, forKey: .difference)) ?? false
         align = (try? container.decodeIfPresent(TextAlign.self, forKey: .align)) ?? .left
+        bold = (try? container.decodeIfPresent(Bool.self, forKey: .bold)) ?? false
     }
 }
 

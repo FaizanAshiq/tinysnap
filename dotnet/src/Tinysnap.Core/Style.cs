@@ -65,9 +65,12 @@ public sealed record Style
     /// <summary>Text only: each line set left, centred or right.</summary>
     public TextAlign Align { get; init; }
 
+    /// <summary>Text only: set in the bold face.</summary>
+    public bool Bold { get; init; }
+
     public Style(string colorHex, StyleSize size = StyleSize.Medium, bool filled = false,
                  CornerSize corners = CornerSize.Medium, double opacity = 1, bool difference = false,
-                 TextAlign align = TextAlign.Left)
+                 TextAlign align = TextAlign.Left, bool bold = false)
     {
         ColorHex = colorHex;
         Size = size;
@@ -76,6 +79,7 @@ public sealed record Style
         Opacity = opacity;
         Difference = difference;
         Align = align;
+        Bold = bold;
     }
 
     public JsonObject ToJson() => new()
@@ -87,6 +91,7 @@ public sealed record Style
         ["opacity"] = Opacity,
         ["difference"] = Difference,
         ["align"] = Json.Wire(Align),
+        ["bold"] = Bold,
     };
 
     /// <summary>Every key is optional and a bad value falls back on its own, so one hand
@@ -105,7 +110,8 @@ public sealed record Style
         var opacity = read is { } value && value <= 1 ? Math.Max(value, OpacityMin) : 1;
         var difference = Json.Bool(o, "difference") ?? false;
         var align = Json.Enum<TextAlign>(o, "align") ?? TextAlign.Left;
-        return new Style(colorHex, size, filled, corners, opacity, difference, align);
+        var bold = Json.Bool(o, "bold") ?? false;
+        return new Style(colorHex, size, filled, corners, opacity, difference, align, bold);
     }
 }
 

@@ -101,7 +101,7 @@ public sealed record Annotation(Guid Id, AnnotationKind Kind, Style Style, doubl
                 return MeasureShape.Extent(from, to, size / scale, scale, LabelAt);
             case AnnotationKind.Text(var origin, var text):
             {
-                var letters = new Rect(origin, TextLayout.Size(text, size / scale, scale));
+                var letters = new Rect(origin, TextLayout.Size(text, size / scale, scale, Style.Bold));
                 if (!Style.Filled) return letters;
                 var padding = TextLayout.BoxPadding(size / scale);
                 return letters.Inset(-padding.Width * scale, -padding.Height * scale);
