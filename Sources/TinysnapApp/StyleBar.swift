@@ -173,10 +173,8 @@ final class StyleBar: NSVisualEffectView {
             row.addArrangedSubview(group(counterChips()))
             row.addArrangedSubview(startControl())
         }
-        if tool.hasOverlay {
-            row.addArrangedSubview(group(opacityChips()))
-            row.addArrangedSubview(group([differenceChip()]))
-        }
+        if tool.hasOpacity { row.addArrangedSubview(group(opacityChips())) }
+        if tool.hasOverlay { row.addArrangedSubview(group([differenceChip()])) }
         if tool == .measure {
             row.addArrangedSubview(group(measureLineChips()))
             row.addArrangedSubview(contrastControl())

@@ -59,6 +59,8 @@ public class StyleBarTests
         Assert.Equal(2, bar.FillChips.Count);
         Assert.Equal(5, bar.CornerChips.Count);
         Assert.Equal(2, bar.DashChips.Count);
+        Assert.Equal(4, bar.OpacityChips.Count);
+        Assert.Null(bar.DifferenceChip);
         Assert.Null(bar.BoldChip);
 
         editor.Canvas.Choose(Tool.Image);
@@ -144,6 +146,14 @@ public class StyleBarTests
         editor.Canvas.Choose(Tool.Arrow);
         Assert.Empty(bar.CounterChips);
         Assert.Null(bar.StartLabel);
+    }
+
+    [AvaloniaFact]
+    public void ADigitMakesASelectedBoxSeeThrough()
+    {
+        var editor = WithShape(Tool.Rectangle);
+        editor.KeyPress(Key.D5, RawInputModifiers.None, PhysicalKey.Digit5, "5");
+        Assert.Equal(0.5, Selected(editor).Opacity, 3);
     }
 
     /// <summary>Red text on a box types in white, the colour its letters are drawn in.</summary>

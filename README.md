@@ -122,6 +122,9 @@ Paste an image with `Command+V` to lay it over the capture. With it selected, th
 sets its opacity, or keys `1` to `9` set 10% to 90% and `0` sets it solid. The Difference
 chip turns everything that matches the capture black, so only what changed shows.
 
+Boxes and ovals take the same opacity chips and keys, so a filled box can tint an area
+instead of hiding it.
+
 ## After a capture
 
 Settings chooses whether a capture opens the editor or waits as a thumbnail in the corner
