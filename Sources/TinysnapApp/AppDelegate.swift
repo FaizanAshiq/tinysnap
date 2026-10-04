@@ -562,6 +562,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var current = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? preferences
         for (tool, style) in styles { current.toolStyles[tool.rawValue] = style }
         current.colorHex = colorHex
+        current.recentColors = Palette.recent(adding: colorHex, to: current.recentColors)
         preferences = current
         try? current.save(to: Preferences.defaultFileURL)
     }

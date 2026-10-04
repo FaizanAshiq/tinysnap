@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.Json.Nodes;
 using SkiaSharp;
@@ -183,6 +184,20 @@ public static class Palette
     /// <summary>The eight swatches in the style popover, in the order shown.</summary>
     public static readonly IReadOnlyList<string> Swatches =
         ["#FF3B30", "#FF9500", "#FFCC00", "#34C759", "#007AFF", "#AF52DE", "#000000", "#FFFFFF"];
+
+    /// <summary>How many custom colours come back as swatches.</summary>
+    public const int RecentCount = 5;
+
+    /// <summary><paramref name="recent"/> with <paramref name="hex"/> put first: a custom colour
+    /// picked again moves up rather than showing twice, and one of the fixed swatches is left out,
+    /// as it is there already.</summary>
+    public static ImmutableArray<string> Recent(string hex, IEnumerable<string> recent)
+    {
+        var color = hex.ToUpperInvariant();
+        var list = recent.ToImmutableArray();
+        if (Components(color) is null || Swatches.Contains(color)) return list;
+        return [.. new[] { color }.Concat(list.Where(each => each.ToUpperInvariant() != color)).Take(RecentCount)];
+    }
 
     /// <summary>The sRGB components of "#RRGGBB", or null for anything else.</summary>
     public static (double Red, double Green, double Blue)? Components(string hex)

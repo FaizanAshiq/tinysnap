@@ -162,6 +162,18 @@ public class StyleBarTests
     }
 
     [AvaloniaFact]
+    public void ThePaletteOffersTheRecentColoursAndOneOfThemRecolours()
+    {
+        var services = TestServices.Make() with { Preferences = () => Preferences.Defaults with { RecentColors = ["#123ABC", "#00AA55"] } };
+        var editor = TestServices.Editor(services, Tool.Arrow);
+        var bar = editor.StyleBar;
+        bar.ColorButton!.Flyout!.ShowAt(bar.ColorButton);
+        Assert.Equal(["#123ABC", "#00AA55"], bar.RecentSwatches.Select(s => (string)s.Tag!));
+        Click(bar.RecentSwatches[1]);
+        Assert.Equal("#00AA55", editor.Canvas.Session.ColorHex);
+    }
+
+    [AvaloniaFact]
     public void TheCropToolShowsRatios()
     {
         var session = new EditorSession(new Document(CanvasHost.Blank(400, 300)), Tool.Crop);

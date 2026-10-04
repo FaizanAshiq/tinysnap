@@ -37,6 +37,7 @@ internal sealed class PreferencesStore(string path)
         ToolStyles = styles.Aggregate(p.ToolStyles.ToImmutableDictionary(),
                                       (all, pair) => all.SetItem(Json.Wire(pair.Key), pair.Value)),
         ColorHex = colorHex,
+        RecentColors = Palette.Recent(colorHex, p.RecentColors),
     });
 
     /// <summary><paramref name="fallback"/> when the file cannot be read, and the defaults when

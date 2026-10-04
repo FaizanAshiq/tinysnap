@@ -61,6 +61,8 @@ final class StyleBar: NSVisualEffectView {
     var onSize: ((SizeRequest) -> Void)?
     /// The step tool's minus or plus: where the capture's steps start counting.
     var onStepStart: ((Int) -> Void)?
+    /// Custom colours picked lately, for the palette's second row.
+    var recentColors: () -> [String] = { [] }
     /// Reads the desktop picture when the wallpaper fill is picked.
     var readWallpaper: (() -> Backdrop.Wallpaper?)?
 
@@ -230,7 +232,7 @@ final class StyleBar: NSVisualEffectView {
 
     @objc private func showPalette(_ sender: NSButton) {
         palette?.close()
-        let controller = ColorPaletteController(chosen: colorHex) { [weak self] hex, merging in
+        let controller = ColorPaletteController(chosen: colorHex, recent: recentColors()) { [weak self] hex, merging in
             self?.recolor(hex, merging: merging)
         }
         let popover = NSPopover()
@@ -1017,15 +1019,17 @@ final class StyleBar: NSVisualEffectView {
     }
 }
 
-/// The colour choices: eight swatches with room around them, and the system colour
-/// panel for anything else.
+/// The colour choices: eight swatches with room around them, the custom colours picked
+/// lately under them, and the system colour panel for anything else.
 final class ColorPaletteController: NSViewController {
     private var chosen: String
+    private let recent: [String]
     private let onPick: (_ hex: String, _ merging: Bool) -> Void
     private var swatches: [ChipButton] = []
 
-    init(chosen: String, onPick: @escaping (_ hex: String, _ merging: Bool) -> Void) {
+    init(chosen: String, recent: [String] = [], onPick: @escaping (_ hex: String, _ merging: Bool) -> Void) {
         self.chosen = chosen
+        self.recent = recent
         self.onPick = onPick
         super.init(nibName: nil, bundle: nil)
     }
@@ -1042,7 +1046,14 @@ final class ColorPaletteController: NSViewController {
         }
         let custom = NSButton(title: "Custom colour...", target: self, action: #selector(showColorPanel))
         custom.bezelStyle = .rounded
-        let column = NSStackView(views: rows + [custom])
+        var recentRow: [NSView] = []
+        if !recent.isEmpty {
+            let stack = NSStackView(views: recent.map(swatch))
+            stack.spacing = 10
+            stack.setAccessibilityLabel("Recent colours")
+            recentRow = [stack]
+        }
+        let column = NSStackView(views: rows + recentRow + [custom])
         column.orientation = .vertical
         column.spacing = 10
         column.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)

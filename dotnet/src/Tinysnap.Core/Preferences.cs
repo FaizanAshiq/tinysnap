@@ -214,6 +214,9 @@ public sealed record Preferences
     /// <summary>Whether editors open with the layers panel showing: the last choice made in any.</summary>
     public bool ShowsLayers { get; init; }
 
+    /// <summary>Custom colours picked lately, newest first, shown beside the fixed swatches.</summary>
+    public ImmutableArray<string> RecentColors { get; init; } = [];
+
     /// <summary>Tool styles compared by content, as the Mac's dictionary is.</summary>
     public bool Equals(Preferences? other) =>
         other is not null && HotKeys == other.HotKeys && SaveFolder == other.SaveFolder && ExportScale == other.ExportScale
@@ -221,7 +224,7 @@ public sealed record Preferences
         && ToolStyles.Count == other.ToolStyles.Count
         && ToolStyles.All(pair => other.ToolStyles.TryGetValue(pair.Key, out var style) && style == pair.Value)
         && AfterCapture == other.AfterCapture && KeepLibrary == other.KeepLibrary && Backdrop == other.Backdrop
-        && Measure == other.Measure && ShowsLayers == other.ShowsLayers;
+        && Measure == other.Measure && ShowsLayers == other.ShowsLayers && RecentColors.SequenceEqual(other.RecentColors);
 
     public override int GetHashCode() =>
         HashCode.Combine(HotKeys, SaveFolder, ExportScale, DelaySeconds, ColorHex, ToolStyles.Count, Backdrop, Measure);
@@ -288,6 +291,7 @@ public sealed record Preferences
         ["backdrop"] = Backdrop.ToJson(),
         ["measure"] = Measure.ToJson(),
         ["showsLayers"] = ShowsLayers,
+        ["recentColors"] = new JsonArray([.. RecentColors.Select(hex => (JsonNode)hex)]),
     };
 
     /// <summary>Every key is optional and a bad value falls back on its own, so a file written
@@ -319,6 +323,9 @@ public sealed record Preferences
             Backdrop = Json.Object(o, "backdrop") is { } backdrop ? Backdrop.FromJson(backdrop) : fallback.Backdrop,
             Measure = Json.Object(o, "measure") is { } measure ? MeasureSettings.FromJson(measure) : fallback.Measure,
             ShowsLayers = Json.Bool(o, "showsLayers") ?? fallback.ShowsLayers,
+            RecentColors = [.. (Json.Array(o, "recentColors") ?? [])
+                .Select(node => node is JsonValue value && value.TryGetValue<string>(out var hex) ? hex : null)
+                .OfType<string>().Where(hex => Palette.Components(hex) is not null)],
         };
     }
 }

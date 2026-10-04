@@ -174,6 +174,7 @@ internal sealed class EditorWindow : Window
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(12),
             Remembered = () => services.Preferences().Backdrop,
+            RecentColors = () => services.Preferences().RecentColors,
             ExportSetting = () => services.Preferences().ExportScale,
             ReadWallpaper = services.ReadWallpaper,
             Remember = services.RememberBackdrop,
