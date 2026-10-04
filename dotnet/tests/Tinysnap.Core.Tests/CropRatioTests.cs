@@ -63,6 +63,19 @@ public class CropRatioTests
     }
 
     [Fact]
+    public void PickingARatioWithNothingCroppedTrimsTheWholeCapture()
+    {
+        var session = Session(CropRatio.Free);
+        session.Restyle(s => s with { CropRatio = CropRatio.SixteenNine });
+        Assert.Equal(new Rect(0, 38, 400, 225), session.Display.Crop);
+        session.Undo();
+        Assert.Null(session.Display.Crop);
+        // A capture that already has the ratio stays uncropped.
+        session.Restyle(s => s with { CropRatio = CropRatio.FourThree });
+        Assert.Null(session.Display.Crop);
+    }
+
+    [Fact]
     public void TheRatioIsRememberedAndAStyleFromBeforeIsFree()
     {
         var style = new Style(Palette.Red, cropRatio: CropRatio.SixteenNine);

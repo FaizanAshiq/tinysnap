@@ -119,9 +119,11 @@ public sealed class EditorSession
             var style = change(StyleFor(Tool));
             styles[Tool] = style;
             ColorHex = style.ColorHex;
-            // A ratio picked with a crop already drawn trims that crop to it.
-            if (Tool == Tool.Crop && style.CropRatio != ratio && Display.Crop is { } crop && style.CropRatio.Value() is { } value
-                && crop.Trimmed(value).WholePixels is { Width: >= 1, Height: >= 1 } trimmed)
+            // A picked ratio trims the crop to it, or the whole capture when nothing is cropped
+            // yet, so the frame takes the ratio at once.
+            if (Tool == Tool.Crop && style.CropRatio != ratio && style.CropRatio.Value() is { } value
+                && Display.OutputRect.Trimmed(value).WholePixels is { Width: >= 1, Height: >= 1 } trimmed
+                && trimmed != Display.OutputRect)
             {
                 Display = Display with { Crop = trimmed };
                 History.Commit(Display);

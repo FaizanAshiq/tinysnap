@@ -106,10 +106,11 @@ public struct EditorSession {
             change(&style)
             styles[tool] = style
             colorHex = style.colorHex
-            // A ratio picked with a crop already drawn trims that crop to it.
-            if tool == .crop, style.cropRatio != ratio, let crop = display.crop, let value = style.cropRatio.value {
-                let trimmed = crop.trimmed(toRatio: value).wholePixels
-                if trimmed.width >= 1, trimmed.height >= 1 {
+            // A picked ratio trims the crop to it, or the whole capture when nothing is
+            // cropped yet, so the frame takes the ratio at once.
+            if tool == .crop, style.cropRatio != ratio, let value = style.cropRatio.value {
+                let trimmed = display.outputRect.trimmed(toRatio: value).wholePixels
+                if trimmed.width >= 1, trimmed.height >= 1, trimmed != display.outputRect {
                     display.crop = trimmed
                     history.commit(display)
                 }

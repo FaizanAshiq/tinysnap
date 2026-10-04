@@ -68,6 +68,9 @@ A window capture keeps the window's rounded corners transparent and leaves its s
 Blur and pixelate can be partly reversed by a determined reader. Erase paints over the
 pixels and is the only redaction to trust with a password or a card number.
 
+With Crop in hand, 1:1, 4:3 and 16:9 hold the crop to that shape, for slides and posts
+that want one. Picking one trims the frame to it straight away.
+
 | Input | Effect |
 | --- | --- |
 | `Command+C` | Copy the image and close the editor |

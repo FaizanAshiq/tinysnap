@@ -53,6 +53,17 @@ struct CropRatioTests {
         #expect(editor.display.crop == CGRect(x: 20, y: 20, width: 300, height: 200))
     }
 
+    @Test func pickingARatioWithNothingCroppedTrimsTheWholeCapture() throws {
+        var editor = session(.free)
+        editor.restyle { $0.cropRatio = .sixteenNine }
+        #expect(editor.display.crop == CGRect(x: 0, y: 38, width: 400, height: 225))
+        editor.undo()
+        #expect(editor.display.crop == nil)
+        // A capture that already has the ratio stays uncropped.
+        editor.restyle { $0.cropRatio = .fourThree }
+        #expect(editor.display.crop == nil)
+    }
+
     @Test func theRatioIsRememberedAndAStyleFromBeforeIsFree() throws {
         let style = Style(colorHex: Palette.red, cropRatio: .sixteenNine)
         #expect(try JSONDecoder().decode(Style.self, from: JSONEncoder().encode(style)) == style)
