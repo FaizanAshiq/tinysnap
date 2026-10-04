@@ -162,6 +162,18 @@ public class StyleBarTests
     }
 
     [AvaloniaFact]
+    public void TheCropToolShowsRatios()
+    {
+        var session = new EditorSession(new Document(CanvasHost.Blank(400, 300)), Tool.Crop);
+        var editor = new EditorWindow(session, DateTimeOffset.Now, TestServices.Make());
+        editor.Show();
+        Assert.True(editor.StyleBar.IsVisible);
+        Assert.Equal(4, editor.StyleBar.RatioChips.Count);
+        Click(editor.StyleBar.RatioChips[3]);
+        Assert.Equal(CropRatio.SixteenNine, session.StyleFor(Tool.Crop).CropRatio);
+    }
+
+    [AvaloniaFact]
     public void TheSpotlightBarDimsOrBlurs()
     {
         var session = new EditorSession(new Document(CanvasHost.Blank(400, 300)), Tool.Spotlight);

@@ -121,7 +121,9 @@ final class StyleBar: NSVisualEffectView {
     }
 
     /// Whether this tool has anything to set, and so whether the bar shows at all.
-    static func shows(_ tool: Tool) -> Bool { tool.hasColor || tool.hasSize || tool.hasFill || tool.hasCorners || tool.hasOverlay }
+    static func shows(_ tool: Tool) -> Bool {
+        tool.hasColor || tool.hasSize || tool.hasFill || tool.hasCorners || tool.hasOverlay || tool.hasRatio
+    }
 
     /// `locked` shows a locked shape's style dimmed, with nothing to press. Deleting is the
     /// layers panel's bin, or the Delete key.
@@ -168,6 +170,7 @@ final class StyleBar: NSVisualEffectView {
         if tool.hasDash { row.addArrangedSubview(group(dashChips())) }
         if tool.hasFreehand { row.addArrangedSubview(group(freehandChips())) }
         if tool.hasOutsideBlur { row.addArrangedSubview(group(outsideChips())) }
+        if tool.hasRatio { row.addArrangedSubview(group(ratioChips())) }
         if tool.hasCorners { row.addArrangedSubview(group(cornerChips())) }
         if tool.hasAlign { row.addArrangedSubview(group(alignChips())) }
         if tool.hasBold { row.addArrangedSubview(group([boldChip()])) }
@@ -436,6 +439,31 @@ final class StyleBar: NSVisualEffectView {
 
     @objc private func pickOutside(_ sender: NSButton) {
         change { $0.blurOutside = sender.tag == 1 }
+    }
+
+    /// Free, 1:1, 4:3 and 16:9, written out.
+    private func ratioChips() -> [NSView] {
+        CropRatio.allCases.enumerated().map { index, ratio in
+            let name = ratio == .free ? "Free" : ratio.rawValue
+            let chip = ChipButton(label: ratio == .free ? "Crop to any shape" : "Crop to \(ratio.rawValue)", width: 42) { box, color in
+                let text = NSAttributedString(string: name, attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: color,
+                ])
+                let size = text.size()
+                text.draw(at: NSPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2))
+            }
+            chip.isChosen = style.cropRatio == ratio
+            chip.target = self
+            chip.action = #selector(pickRatio(_:))
+            chip.tag = index
+            return chip
+        }
+    }
+
+    @objc private func pickRatio(_ sender: NSButton) {
+        let ratios = CropRatio.allCases
+        guard ratios.indices.contains(sender.tag) else { return }
+        change { $0.cropRatio = ratios[sender.tag] }
     }
 
     /// Two lines of text, alone or cut out of a box.
