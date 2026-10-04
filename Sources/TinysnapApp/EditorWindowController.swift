@@ -231,6 +231,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             }
             self.window?.makeFirstResponder(self.canvas)
         }
+        styleBar.onStepStart = { [weak self] start in
+            guard let self else { return }
+            self.canvas.session.setStepStart(start)
+            self.window?.makeFirstResponder(self.canvas)
+        }
         canvas.onPointerColor = { [weak self] hex in self?.showPointerColor(hex) }
         canvas.onCopyColor = { [weak self] in self?.copyPointerColor() }
         canvas.onClose = { [weak self] in self?.window?.performClose(nil) }
@@ -460,7 +465,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         styleBar.isHidden = !StyleBar.shows(target.tool) || session.phase != .idle && session.typingID == nil
         if !styleBar.isHidden {
             styleBar.show(tool: target.tool, style: target.style, measure: canvas.measure,
-                          locked: session.selectedAnnotation?.isLocked == true)
+                          stepStart: session.display.stepStart, locked: session.selectedAnnotation?.isLocked == true)
             placeStyleBar()
         }
         // The first time the Measure tool is picked, its guide opens from its button.

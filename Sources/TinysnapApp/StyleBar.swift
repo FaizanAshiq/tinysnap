@@ -59,6 +59,8 @@ final class StyleBar: NSVisualEffectView {
         case fraction(CGFloat), width(Int), height(Int)
     }
     var onSize: ((SizeRequest) -> Void)?
+    /// The step tool's minus or plus: where the capture's steps start counting.
+    var onStepStart: ((Int) -> Void)?
     /// Reads the desktop picture when the wallpaper fill is picked.
     var readWallpaper: (() -> Backdrop.Wallpaper?)?
 
@@ -76,6 +78,7 @@ final class StyleBar: NSVisualEffectView {
     private var mode = Mode.tool
     private var backdrop: Backdrop?
     private var measure = MeasureSettings.defaults
+    private var stepStart = 1
     /// A locked shape picked up: its style shows, but nothing in the bar changes it.
     private var locked = false
     /// The settings a backdrop starts from when it is turned on.
@@ -122,13 +125,14 @@ final class StyleBar: NSVisualEffectView {
 
     /// `locked` shows a locked shape's style dimmed, with nothing to press. Deleting is the
     /// layers panel's bin, or the Delete key.
-    func show(tool: Tool, style: Style, measure: MeasureSettings = .defaults, locked: Bool = false) {
+    func show(tool: Tool, style: Style, measure: MeasureSettings = .defaults, stepStart: Int = 1, locked: Bool = false) {
         guard mode != .tool || tool != self.tool || style != self.style || measure != self.measure
-                || locked != self.locked || row.arrangedSubviews.isEmpty else { return }
+                || stepStart != self.stepStart || locked != self.locked || row.arrangedSubviews.isEmpty else { return }
         mode = .tool
         self.tool = tool
         self.style = style
         self.measure = measure
+        self.stepStart = stepStart
         self.locked = locked
         rebuild()
     }
@@ -165,6 +169,10 @@ final class StyleBar: NSVisualEffectView {
         if tool.hasCorners { row.addArrangedSubview(group(cornerChips())) }
         if tool.hasAlign { row.addArrangedSubview(group(alignChips())) }
         if tool.hasBold { row.addArrangedSubview(group([boldChip()])) }
+        if tool.hasCounter {
+            row.addArrangedSubview(group(counterChips()))
+            row.addArrangedSubview(startControl())
+        }
         if tool.hasOverlay {
             row.addArrangedSubview(group(opacityChips()))
             row.addArrangedSubview(group([differenceChip()]))
@@ -834,6 +842,66 @@ final class StyleBar: NSVisualEffectView {
 
     @objc private func toggleDifference() {
         change { $0.difference.toggle() }
+    }
+
+    // MARK: Steps
+
+    /// 1 2 3 or A B C.
+    private func counterChips() -> [NSView] {
+        [false, true].map { letters in
+            let chip = ChipButton(label: letters ? "Count A, B, C" : "Count 1, 2, 3", width: 40) { box, color in
+                let text = NSAttributedString(string: letters ? "ABC" : "123", attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: color,
+                ])
+                let size = text.size()
+                text.draw(at: NSPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2))
+            }
+            chip.isChosen = style.letters == letters
+            chip.target = self
+            chip.action = #selector(pickCounter(_:))
+            chip.tag = letters ? 1 : 0
+            return chip
+        }
+    }
+
+    @objc private func pickCounter(_ sender: NSButton) {
+        change { $0.letters = sender.tag == 1 }
+    }
+
+    /// Minus, where the steps start, plus.
+    private func startControl() -> NSView {
+        func sign(_ plus: Bool) -> ChipButton {
+            let chip = ChipButton(label: plus ? "Start one higher" : "Start one lower") { box, color in
+                let sign = NSBezierPath()
+                sign.move(to: NSPoint(x: box.midX - 5, y: box.midY))
+                sign.line(to: NSPoint(x: box.midX + 5, y: box.midY))
+                if plus {
+                    sign.move(to: NSPoint(x: box.midX, y: box.midY - 5))
+                    sign.line(to: NSPoint(x: box.midX, y: box.midY + 5))
+                }
+                sign.lineWidth = 1.6
+                color.setStroke()
+                sign.stroke()
+            }
+            chip.target = self
+            chip.action = plus ? #selector(raiseStart) : #selector(lowerStart)
+            return chip
+        }
+        let value = NSTextField(labelWithString: "From \(stepStart)")
+        value.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        value.textColor = .secondaryLabelColor
+        value.alignment = .center
+        value.toolTip = "Where this capture's steps start counting"
+        value.setAccessibilityLabel("Steps start from \(stepStart)")
+        return group([sign(false), value, sign(true)])
+    }
+
+    @objc private func lowerStart() {
+        onStepStart?(stepStart - 1)
+    }
+
+    @objc private func raiseStart() {
+        onStepStart?(stepStart + 1)
     }
 
     /// A bold B, on and off.

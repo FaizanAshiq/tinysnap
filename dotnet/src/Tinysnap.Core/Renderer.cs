@@ -59,7 +59,7 @@ public static partial class Renderer
                     .ToList());
                 continue;
             }
-            painter.Draw(annotation, document.StepNumber(annotation.Id));
+            painter.Draw(annotation, document.StepLabel(annotation.Id));
         }
         return surface.Snapshot();
     }
@@ -110,7 +110,7 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
 
     private static SKPaint Fill(SKColor color) => new() { Color = color, IsAntialias = true, Style = SKPaintStyle.Fill };
 
-    public void Draw(Annotation annotation, int? stepNumber)
+    public void Draw(Annotation annotation, string? stepLabel)
     {
         var size = annotation.PixelSize(Scale);
         var color = Palette.Color(annotation.Style.ColorHex);
@@ -185,7 +185,7 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
                     break;
                 }
                 case AnnotationKind.Step(var center):
-                    DrawStep(stepNumber ?? 0, center, size, color);
+                    DrawStep(stepLabel ?? "", center, size, color);
                     break;
                 case AnnotationKind.Image(var rect, var pasted):
                 {
@@ -219,14 +219,16 @@ internal sealed class Canvas(SKSurface surface, Rect region, double outputScale,
         }
     }
 
-    private void DrawStep(int number, Point center, double diameter, SKColor color)
+    private void DrawStep(string label, Point center, double diameter, SKColor color)
     {
         using (var paint = Fill(color))
             Context.DrawOval(new SKRect((float)(center.X - diameter / 2), (float)(center.Y - diameter / 2),
                                         (float)(center.X + diameter / 2), (float)(center.Y + diameter / 2)), paint);
 
-        var label = number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // A long label, 100 or AA, is made smaller until it fits inside the disc.
         var points = diameter / Scale * 0.55;
+        var natural = TextLayout.Metrics(label, points, Scale, bold: true).Width;
+        if (natural > diameter * 0.78) points *= diameter * 0.78 / natural;
         var metrics = TextLayout.Metrics(label, points, Scale, bold: true);
         var origin = new Point(center.X - metrics.Width / 2, center.Y - (metrics.Ascent + metrics.Descent) / 2);
         TextLayout.Draw(Context, label, origin, points, Scale, MeasureShape.TextColor(color), bold: true);

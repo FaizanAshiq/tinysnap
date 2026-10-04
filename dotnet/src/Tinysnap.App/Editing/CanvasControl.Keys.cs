@@ -145,6 +145,14 @@ internal sealed partial class CanvasControl
         SessionChanged();
     }
 
+    /// <summary>For the step tool's minus and plus: where this capture's steps start counting.</summary>
+    public void SetStepStart(int start)
+    {
+        Session.SetStepStart(start);
+        SessionChanged();
+        Focus();
+    }
+
     private void Nudge(double dx, double dy)
     {
         Session.Nudge(dx, dy);

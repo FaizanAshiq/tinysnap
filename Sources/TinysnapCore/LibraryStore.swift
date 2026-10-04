@@ -118,7 +118,8 @@ public struct LibraryStore: Sendable {
                return Self.readImage(entry.folder.appendingPathComponent(name))?.image
            }) {
             let capture = Capture(image: original.image, scale: edits.scale)
-            var document = Document(capture: capture, crop: edits.crop, annotations: edits.annotations, backdrop: edits.backdrop)
+            var document = Document(capture: capture, crop: edits.crop, annotations: edits.annotations, backdrop: edits.backdrop,
+                                    stepStart: edits.stepStart)
             // Held to the limits the Size panel holds it to, whatever the file asks for.
             document.resize = edits.resize.map(document.clampedResize)
             return OpenedEntry(document: document, isEditable: true)
