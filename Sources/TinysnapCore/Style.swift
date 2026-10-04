@@ -154,6 +154,17 @@ public enum Palette {
         "#FF3B30", "#FF9500", "#FFCC00", "#34C759", "#007AFF", "#AF52DE", "#000000", "#FFFFFF",
     ]
 
+    /// How many custom colours come back as swatches.
+    public static let recentCount = 5
+
+    /// `recent` with `hex` put first: a custom colour picked again moves up rather than
+    /// showing twice, and one of the fixed swatches is left out, as it is there already.
+    public static func recent(adding hex: String, to recent: [String]) -> [String] {
+        let color = hex.uppercased()
+        guard components(of: color) != nil, !swatches.contains(color) else { return recent }
+        return Array(([color] + recent.filter { $0.uppercased() != color }).prefix(recentCount))
+    }
+
     /// The sRGB components of "#RRGGBB", or nil for anything else.
     public static func components(of hex: String) -> (red: CGFloat, green: CGFloat, blue: CGFloat)? {
         var digits = Substring(hex)

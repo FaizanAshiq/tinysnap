@@ -88,6 +88,10 @@ internal sealed partial class StyleBar : Border
 
     public Button? ColorButton { get; private set; }
     public IReadOnlyList<Button> Swatches { get; private set; } = [];
+    public IReadOnlyList<Button> RecentSwatches { get; private set; } = [];
+
+    /// <summary>Custom colours picked lately, for the palette's second row.</summary>
+    public Func<IReadOnlyList<string>> RecentColors { get; init; } = () => [];
     public IReadOnlyList<ToggleButton> SizeChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> FillChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> DashChips { get; private set; } = [];
@@ -465,7 +469,7 @@ internal sealed partial class StyleBar : Border
 
     private Button MakeColorButton(string hex)
     {
-        var swatches = Palette.Swatches.Select(swatch =>
+        Button Swatch(string swatch)
         {
             var button = new Button
             {
@@ -481,8 +485,21 @@ internal sealed partial class StyleBar : Border
             AutomationProperties.SetName(button, swatch);
             button.Click += (_, _) => ChooseColor(swatch);
             return button;
-        }).ToArray();
+        }
+        var swatches = Palette.Swatches.Select(Swatch).ToArray();
         Swatches = swatches;
+        // The custom colours picked lately, in a row under the fixed ones, read again each time
+        // the palette opens: one picked a moment ago is there the next time.
+        var recentRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        AutomationProperties.SetName(recentRow, "Recent colours");
+        void FillRecent()
+        {
+            RecentSwatches = [.. RecentColors().Select(Swatch)];
+            recentRow.Children.Clear();
+            foreach (var swatch in RecentSwatches) recentRow.Children.Add(swatch);
+            recentRow.IsVisible = RecentSwatches.Count > 0;
+        }
+        FillRecent();
 
         var field = new TextBox { PlaceholderText = "#RRGGBB", Width = 116 };
         field.KeyDown += (_, e) =>
@@ -510,7 +527,7 @@ internal sealed partial class StyleBar : Border
             var picked = $"#{e.NewColor.R:X2}{e.NewColor.G:X2}{e.NewColor.B:X2}";
             ApplyColor(picked, merging: true);
         };
-        var palette = new StackPanel { Spacing = 10, Margin = new Thickness(4), Children = { grid, field, CustomColor } };
+        var palette = new StackPanel { Spacing = 10, Margin = new Thickness(4), Children = { grid, recentRow, field, CustomColor } };
 
         var button = new Button
         {
@@ -528,6 +545,7 @@ internal sealed partial class StyleBar : Border
             BorderThickness = new Thickness(0),
             Flyout = new Flyout { Content = palette },
         };
+        button.Flyout.Opened += (_, _) => FillRecent();
         // A spectrum drag is remembered once, when the palette closes.
         button.Flyout.Closed += (_, _) =>
         {
