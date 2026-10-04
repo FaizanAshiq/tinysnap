@@ -56,4 +56,16 @@ struct TextRedactionTests {
         session.undo()
         #expect(session.display.annotations.isEmpty)
     }
+
+    /// The reader sees the capture under the erases, so a second pass finds the same text again.
+    @Test func redactingAgainSkipsWhatIsAlreadyErased() {
+        var session = EditorSession(document: Document(capture: Fixture.capture(width: 400, height: 200)), tool: .erase)
+        #expect(session.redact(TextRedaction.boxes(in: page, for: .numbers)) == 3)
+        // The phone number was one of the numbers.
+        #expect(session.redact(TextRedaction.boxes(in: page, for: .phones)) == 0)
+        #expect(session.display.annotations.count == 3)
+        // A line reaches past any number on it, so every line is new.
+        #expect(session.redact(TextRedaction.boxes(in: page, for: .allText)) == 4)
+        #expect(session.display.annotations.count == 7)
+    }
 }
