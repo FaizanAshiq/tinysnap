@@ -92,6 +92,7 @@ internal sealed partial class StyleBar : Border
     public IReadOnlyList<ToggleButton> FillChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> DashChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> FreehandChips { get; private set; } = [];
+    public IReadOnlyList<ToggleButton> OutsideChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> CornerChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> AlignChips { get; private set; } = [];
     public IReadOnlyList<ToggleButton> OpacityChips { get; private set; } = [];
@@ -197,7 +198,8 @@ internal sealed partial class StyleBar : Border
         colorSwatch = null;
         (DifferenceChip, BoldChip) = (null, null);
         (AcrossChip, DownChip, LowerContrast, RaiseContrast, ContrastLabel, HelpChip) = (null, null, null, null, null, null);
-        (SizeChips, FillChips, DashChips, FreehandChips, CornerChips, AlignChips, OpacityChips) = ([], [], [], [], [], [], []);
+        (SizeChips, FillChips, DashChips, FreehandChips, OutsideChips, CornerChips, AlignChips, OpacityChips) =
+            ([], [], [], [], [], [], [], []);
         (BackdropFillChips, PaddingChips, BackdropCornerChips, ShadowChips) = ([], [], [], []);
         WallpaperNote = null;
         ClearSize();
@@ -213,6 +215,7 @@ internal sealed partial class StyleBar : Border
         FillChips = tool.HasFill() ? Group(MakeFillChips(tool, style)) : [];
         DashChips = tool.HasDash() ? Group(MakeDashChips(style)) : [];
         FreehandChips = tool.HasFreehand() ? Group(MakeFreehandChips(style)) : [];
+        OutsideChips = tool.HasOutsideBlur() ? Group(MakeOutsideChips(style)) : [];
         CornerChips = tool.HasCorners() ? Group(MakeCornerChips(style)) : [];
         AlignChips = tool.HasAlign() ? Group(MakeAlignChips(style)) : [];
         if (tool.HasBold())
@@ -573,6 +576,19 @@ internal sealed partial class StyleBar : Border
         [.. new[] { false, true }.Select(freehand =>
             Chip(Glyphs.Icon(FreehandGlyphs[freehand ? 1 : 0], 16), freehand ? "Freehand: follows the pointer" : "Straight",
                  style.Freehand == freehand, () => canvas.Restyle(s => s with { Freehand = freehand })))];
+
+    /// <summary>A frame round a clear middle: solid for dimming, broken into dots for blurring, as
+    /// the Mac's chips draw them.</summary>
+    private static readonly string[] OutsideGlyphs =
+    [
+        "F0 M4 5H16V15H4ZM8.5 8.5V11.5H11.5V8.5Z",
+        "M4 5H6V7H4ZM7 5H9V7H7ZM11 5H13V7H11ZM14 5H16V7H14ZM4 9H6V11H4ZM14 9H16V11H14ZM4 13H6V15H4ZM7 13H9V15H7ZM11 13H13V15H11ZM14 13H16V15H14Z",
+    ];
+
+    private List<ToggleButton> MakeOutsideChips(Style style) =>
+        [.. new[] { false, true }.Select(blur =>
+            Chip(Glyphs.Icon(OutsideGlyphs[blur ? 1 : 0], 16), blur ? "Blur what is outside" : "Dim what is outside",
+                 style.BlurOutside == blur, () => canvas.Restyle(s => s with { BlurOutside = blur })))];
 
     private List<ToggleButton> MakeAlignChips(Style style) =>
         [.. Enum.GetValues<TextAlign>().Select((align, index) =>

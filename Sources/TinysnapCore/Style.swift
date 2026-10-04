@@ -55,12 +55,14 @@ public struct Style: Equatable, Codable, Sendable {
     public var dashed: Bool
     /// The highlighter only: following the pointer instead of drawing a straight stroke.
     public var freehand: Bool
+    /// The spotlight only: what is outside it blurred instead of dimmed.
+    public var blurOutside: Bool
 
     public static let opacityRange: ClosedRange<CGFloat> = 0.1...1
 
     public init(colorHex: String, size: StyleSize = .medium, filled: Bool = false, corners: CornerSize = .medium,
                 opacity: CGFloat = 1, difference: Bool = false, align: TextAlign = .left, bold: Bool = false,
-                dashed: Bool = false, freehand: Bool = false) {
+                dashed: Bool = false, freehand: Bool = false, blurOutside: Bool = false) {
         self.colorHex = colorHex
         self.size = size
         self.filled = filled
@@ -71,10 +73,11 @@ public struct Style: Equatable, Codable, Sendable {
         self.bold = bold
         self.dashed = dashed
         self.freehand = freehand
+        self.blurOutside = blurOutside
     }
 
     private enum CodingKeys: String, CodingKey {
-        case colorHex, size, filled, corners, opacity, difference, align, bold, dashed, freehand
+        case colorHex, size, filled, corners, opacity, difference, align, bold, dashed, freehand, blurOutside
         /// Read only: the square corner switch this replaced.
         case sharpCorners
     }
@@ -91,6 +94,7 @@ public struct Style: Equatable, Codable, Sendable {
         try container.encode(bold, forKey: .bold)
         try container.encode(dashed, forKey: .dashed)
         try container.encode(freehand, forKey: .freehand)
+        try container.encode(blurOutside, forKey: .blurOutside)
     }
 
     /// Every key is optional and a bad value falls back on its own, so one hand edited
@@ -111,6 +115,7 @@ public struct Style: Equatable, Codable, Sendable {
         bold = (try? container.decodeIfPresent(Bool.self, forKey: .bold)) ?? false
         dashed = (try? container.decodeIfPresent(Bool.self, forKey: .dashed)) ?? false
         freehand = (try? container.decodeIfPresent(Bool.self, forKey: .freehand)) ?? false
+        blurOutside = (try? container.decodeIfPresent(Bool.self, forKey: .blurOutside)) ?? false
     }
 }
 

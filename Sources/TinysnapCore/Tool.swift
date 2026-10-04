@@ -96,6 +96,9 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
     /// The highlighter only: a straight stroke, or one that follows the pointer.
     public var hasFreehand: Bool { self == .highlighter }
 
+    /// The spotlight only: dim what is outside it, or blur it.
+    public var hasOutsideBlur: Bool { self == .spotlight }
+
     /// Pasted images: opacity and the difference blend, for comparing against the capture.
     public var hasOverlay: Bool { self == .image }
 

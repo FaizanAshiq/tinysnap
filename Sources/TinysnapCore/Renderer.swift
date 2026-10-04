@@ -47,10 +47,12 @@ public enum Renderer {
         var spotlightDrawn = false
         for annotation in visible {
             if case .spotlight = annotation.kind {
-                // Every spotlight lights one shared area, drawn at the first one's place.
+                // Every spotlight lights one shared area, drawn at the first one's place and
+                // dimmed or blurred as the first one says.
                 guard !spotlightDrawn else { continue }
                 spotlightDrawn = true
-                canvas.spotlight(visible.compactMap { if case let .spotlight(rect) = $0.kind { (rect, $0.style.corners) } else { nil } })
+                canvas.spotlight(visible.compactMap { if case let .spotlight(rect) = $0.kind { (rect, $0.style.corners) } else { nil } },
+                                 blurring: annotation.style.blurOutside)
                 continue
             }
             canvas.draw(annotation, stepNumber: document.stepNumber(of: annotation.id))
@@ -219,7 +221,14 @@ struct Canvas {
         return points == 0 ? 0 : min(points * scale + extra, half)
     }
 
-    func spotlight(_ rects: [(CGRect, CornerSize)]) {
+    /// How far a blurring spotlight softens what is outside it, in points.
+    static let spotlightBlurPoints: CGFloat = 6
+
+    func spotlight(_ rects: [(CGRect, CornerSize)], blurring: Bool) {
+        if blurring {
+            blurOutside(rects)
+            return
+        }
         context.saveGState()
         context.beginTransparencyLayer(auxiliaryInfo: nil)
         context.setFillColor(CGColor(gray: 0, alpha: 0.5))
@@ -231,6 +240,27 @@ struct Canvas {
             context.fillPath()
         }
         context.endTransparencyLayer()
+        context.restoreGState()
+    }
+
+    /// Everything drawn so far, blurred, shown only outside the lit boxes.
+    private func blurOutside(_ rects: [(CGRect, CornerSize)]) {
+        guard let snapshot = context.makeImage() else { return }
+        let whole = CGRect(origin: .zero, size: deviceSize)
+        let blurred = CIImage(cgImage: snapshot).clampedToExtent()
+            .applyingGaussianBlur(sigma: Self.spotlightBlurPoints * scale * outputScale)
+            .cropped(to: whole)
+        guard let image = Self.imageContext.createCGImage(blurred, from: whole) else { return }
+        let outside = CGMutablePath()
+        outside.addRect(region)
+        for (rect, corners) in rects where rect.width > 0 && rect.height > 0 {
+            let corner = radius(corners, for: rect)
+            outside.addRoundedRect(in: rect, cornerWidth: corner, cornerHeight: corner)
+        }
+        context.saveGState()
+        context.addPath(outside)
+        context.clip(using: .evenOdd)
+        draw(image, in: region)
         context.restoreGState()
     }
 

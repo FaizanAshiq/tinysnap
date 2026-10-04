@@ -114,6 +114,13 @@ public struct EditorSession {
         // annotation's size leaves a blue shared colour alone.
         if annotation.style.colorHex != before { colorHex = annotation.style.colorHex }
         display.replace(annotation)
+        // Every spotlight lights one shared area, so all of them dim or all of them blur.
+        if case .spotlight = annotation.kind {
+            for index in display.annotations.indices {
+                guard case .spotlight = display.annotations[index].kind else { continue }
+                display.annotations[index].style.blurOutside = annotation.style.blurOutside
+            }
+        }
         // A text still being typed is committed when typing ends, as one step.
         if typingID == nil { history.commit(display, mergeKey: merging ? "style \(id)" : nil) }
     }

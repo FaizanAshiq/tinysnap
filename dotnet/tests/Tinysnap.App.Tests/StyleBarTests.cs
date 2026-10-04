@@ -142,6 +142,19 @@ public class StyleBarTests
     }
 
     [AvaloniaFact]
+    public void TheSpotlightBarDimsOrBlurs()
+    {
+        var session = new EditorSession(new Document(CanvasHost.Blank(400, 300)), Tool.Spotlight);
+        var editor = new EditorWindow(session, DateTimeOffset.Now, TestServices.Make());
+        editor.Show();
+        Assert.Equal(2, editor.StyleBar.OutsideChips.Count);
+        Click(editor.StyleBar.OutsideChips[1]);
+        Assert.True(session.StyleFor(Tool.Spotlight).BlurOutside);
+        editor.Canvas.Choose(Tool.Rectangle);
+        Assert.Empty(editor.StyleBar.OutsideChips);
+    }
+
+    [AvaloniaFact]
     public void ADigitMakesASelectedBoxSeeThrough()
     {
         var editor = WithShape(Tool.Rectangle);

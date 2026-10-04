@@ -163,6 +163,7 @@ final class StyleBar: NSVisualEffectView {
         if tool.hasFill { row.addArrangedSubview(group(fillChips())) }
         if tool.hasDash { row.addArrangedSubview(group(dashChips())) }
         if tool.hasFreehand { row.addArrangedSubview(group(freehandChips())) }
+        if tool.hasOutsideBlur { row.addArrangedSubview(group(outsideChips())) }
         if tool.hasCorners { row.addArrangedSubview(group(cornerChips())) }
         if tool.hasAlign { row.addArrangedSubview(group(alignChips())) }
         if tool.hasBold { row.addArrangedSubview(group([boldChip()])) }
@@ -392,6 +393,41 @@ final class StyleBar: NSVisualEffectView {
 
     @objc private func pickFreehand(_ sender: NSButton) {
         change { $0.freehand = sender.tag == 1 }
+    }
+
+    /// A frame round a clear middle: solid for dimming, soft for blurring.
+    private func outsideChips() -> [NSView] {
+        [false, true].map { blur in
+            let chip = ChipButton(label: blur ? "Blur what is outside" : "Dim what is outside") { box, color in
+                let frame = box.insetBy(dx: 6, dy: 5)
+                let middle = frame.insetBy(dx: 5, dy: 4)
+                if blur {
+                    // Rings fading inwards, which reads as soft.
+                    for (step, alpha) in [(0.0, 0.25), (1.0, 0.45), (2.0, 0.7)] {
+                        let ring = NSBezierPath(roundedRect: frame.insetBy(dx: step, dy: step), xRadius: 2, yRadius: 2)
+                        ring.append(NSBezierPath(rect: middle))
+                        ring.windingRule = .evenOdd
+                        color.withAlphaComponent(alpha).setFill()
+                        ring.fill()
+                    }
+                } else {
+                    let ring = NSBezierPath(roundedRect: frame, xRadius: 2, yRadius: 2)
+                    ring.append(NSBezierPath(rect: middle))
+                    ring.windingRule = .evenOdd
+                    color.setFill()
+                    ring.fill()
+                }
+            }
+            chip.isChosen = style.blurOutside == blur
+            chip.target = self
+            chip.action = #selector(pickOutside(_:))
+            chip.tag = blur ? 1 : 0
+            return chip
+        }
+    }
+
+    @objc private func pickOutside(_ sender: NSButton) {
+        change { $0.blurOutside = sender.tag == 1 }
     }
 
     /// Two lines of text, alone or cut out of a box.

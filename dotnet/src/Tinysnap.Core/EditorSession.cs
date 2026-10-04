@@ -127,6 +127,17 @@ public sealed class EditorSession
         // annotation's size leaves a blue shared colour alone.
         if (annotation.Style.ColorHex != before) ColorHex = annotation.Style.ColorHex;
         Display = Display.Replacing(annotation);
+        // Every spotlight lights one shared area, so all of them dim or all of them blur.
+        if (annotation.Kind is AnnotationKind.Spotlight)
+        {
+            var blur = annotation.Style.BlurOutside;
+            Display = Display with
+            {
+                Annotations = [.. Display.Annotations.Select(a => a.Kind is AnnotationKind.Spotlight && a.Style.BlurOutside != blur
+                    ? a with { Style = a.Style with { BlurOutside = blur } }
+                    : a)],
+            };
+        }
         // A text still being typed is committed when typing ends, as one step.
         if (TypingId is null) History.Commit(Display, merging ? $"style {id}" : null);
     }
