@@ -48,6 +48,16 @@ public class PreferencesStoreTests
         Assert.Equal("#007AFF", written.ColorHex);
     }
 
+    [Fact]
+    public void ACustomColourRememberedComesBackAsARecentOne()
+    {
+        var path = TemporaryFile();
+        var store = new PreferencesStore(path);
+        store.RememberStyles(new Dictionary<Tool, Style>(), "#123ABC");
+        store.RememberStyles(new Dictionary<Tool, Style>(), "#007AFF");
+        Assert.Equal<string>(["#123ABC"], Preferences.Load(path).RecentColors);
+    }
+
     [AvaloniaFact]
     public void ACommittedStyleIsRemembered()
     {

@@ -231,6 +231,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             }
             self.window?.makeFirstResponder(self.canvas)
         }
+        styleBar.recentColors = { [weak self] in self?.preferences().recentColors ?? [] }
         styleBar.onStepStart = { [weak self] start in
             guard let self else { return }
             self.canvas.session.setStepStart(start)
