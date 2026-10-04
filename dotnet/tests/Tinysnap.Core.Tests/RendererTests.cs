@@ -140,6 +140,45 @@ public class RendererTests
         Assert.True(Math.Abs(Fixture.Pixel(image, 128, 30).R - 128) <= 3);
     }
 
+    /// <summary>Erasing what is inside a box drawn round it: the erase's edges lie on the box's
+    /// outline, which it took for its surroundings and filled solid with.</summary>
+    [Fact]
+    public void AnEraseJustInsideABoxFillsFromTheCaptureNotTheOutline()
+    {
+        var capture = Fixture.Capture(300, 200);
+        var box = Fixture.Annotation(new AnnotationKind.Rectangle(new Rect(40, 40, 160, 80)));
+        var erase = Fixture.Annotation(new AnnotationKind.Erase(new Rect(42, 42, 156, 76)));
+        var image = Render(capture, [box, erase]);
+        Assert.True(Fixture.IsClose(Fixture.Pixel(image, 120, 80), White), $"{Fixture.Pixel(image, 120, 80)}");
+        // The outline's outer half, past the erase, still shows.
+        Assert.True(Fixture.Pixel(image, 39, 80).G < 100, $"{Fixture.Pixel(image, 39, 80)}");
+    }
+
+    /// <summary>A pasted image is part of the picture, so an erase in it fills from it, outlines or not.</summary>
+    [Fact]
+    public void AnEraseInAPastedImageTakesItsColourWithAnOutlineBeneath()
+    {
+        var capture = Fixture.Capture(300, 200);
+        var box = Fixture.Annotation(new AnnotationKind.Rectangle(new Rect(10, 10, 60, 60)));
+        var blue = new PastedImage(Fixture.CaptureImage(10, 10, Fixture.Blue));
+        var pasted = Annotation.New(new AnnotationKind.Image(new Rect(100, 40, 160, 120), blue),
+                                    new Style(Palette.Red, corners: CornerSize.Square));
+        var erase = Fixture.Annotation(new AnnotationKind.Erase(new Rect(140, 80, 60, 40)));
+        var image = Render(capture, [box, pasted, erase]);
+        Assert.True(Fixture.IsClose(Fixture.Pixel(image, 170, 100), (0, 0, 255)), $"{Fixture.Pixel(image, 170, 100)}");
+    }
+
+    /// <summary>Inside a filled box the erase still takes the fill, so it blends in.</summary>
+    [Fact]
+    public void AnEraseInsideAFilledBoxTakesItsColour()
+    {
+        var capture = Fixture.Capture(300, 200);
+        var box = Fixture.Annotation(new AnnotationKind.Rectangle(new Rect(40, 40, 160, 80)), new Style("#0000FF", filled: true));
+        var erase = Fixture.Annotation(new AnnotationKind.Erase(new Rect(80, 60, 40, 30)));
+        var image = Render(capture, [box, erase]);
+        Assert.True(Fixture.IsClose(Fixture.Pixel(image, 100, 75), (0, 0, 255)), $"{Fixture.Pixel(image, 100, 75)}");
+    }
+
     [Fact]
     public void ARedactionHidesWhatIsBelowAndLeavesWhatIsAbove()
     {
