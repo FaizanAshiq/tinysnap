@@ -19,6 +19,14 @@ public enum Modifiers
 
 public enum EscapeResult { FinishedTyping, Deselected, Close }
 
+public enum GuideAxis { Vertical, Horizontal }
+
+/// <summary>A line a dragged shape lines up on, in capture pixels: an edge or middle it shares with
+/// another shape or the output, drawn from one across to the other while the drag lasts.
+/// <paramref name="Position"/> is x for a vertical line and y for a horizontal one;
+/// <paramref name="From"/> and <paramref name="To"/> run along the line.</summary>
+public readonly record struct Guide(GuideAxis Axis, double Position, double From, double To);
+
 /// <summary>Where Bring to Front, Bring Forward, Send Backward and Send to Back put a shape.</summary>
 public enum Arrangement { Front, Forward, Backward, Back }
 
@@ -31,7 +39,9 @@ public abstract record EditorPhase
 
     public sealed record IdlePhase : EditorPhase;
     public sealed record Drawing(Guid Id, Point Anchor, Point Last) : EditorPhase;
-    public sealed record Moving(Guid Id, Point Last) : EditorPhase;
+    /// <summary><paramref name="Snap"/> is how far the shape has been nudged to line up, kept so
+    /// the next step of the drag starts from where the pointer alone would have put it.</summary>
+    public sealed record Moving(Guid Id, Point Last, Vector Snap = default) : EditorPhase;
     public sealed record Resizing(Annotation Original, Handle Handle) : EditorPhase;
     public sealed record Cropping(Rect Original, Handle Handle, Point Last) : EditorPhase;
     public sealed record Typing(Guid Id) : EditorPhase;
@@ -51,6 +61,9 @@ public sealed class EditorSession
     public Tool Tool { get; private set; }
     public Guid? Selection { get; private set; }
     public EditorPhase Phase { get; private set; } = EditorPhase.Idle;
+
+    /// <summary>The lines the shape being dragged lines up on, empty when it lines up on nothing.</summary>
+    public IReadOnlyList<Guide> Guides { get; private set; } = [];
 
     /// <summary>The last style used with each tool, so each one remembers its own.</summary>
     public IReadOnlyDictionary<Tool, Style> Styles => styles;
@@ -314,11 +327,17 @@ public sealed class EditorSession
                 Phase = new EditorPhase.Drawing(id, anchor, point);
                 break;
             }
-            case EditorPhase.Moving(var id, var last):
+            case EditorPhase.Moving(var id, var last, var snap):
             {
                 if (Display.Annotation(id) is not { } annotation) return;
-                Display = Display.Replacing(annotation.Moved(Delta(last)));
-                Phase = new EditorPhase.Moving(id, point);
+                // Moved from where the pointer alone would have it, so a snap lets go as soon as the
+                // pointer carries the shape past it. Ctrl drags freely.
+                var step = Delta(last);
+                var free = annotation.Moved(new Vector(step.Dx - snap.Dx, step.Dy - snap.Dy));
+                var lined = modifiers.HasFlag(Modifiers.Command) ? (Offset: default(Vector), Guides: []) : LiningUp(free);
+                Display = Display.Replacing(free.Moved(lined.Offset));
+                Guides = lined.Guides;
+                Phase = new EditorPhase.Moving(id, point, lined.Offset);
                 break;
             }
             case EditorPhase.Resizing(var original, var handle):
@@ -371,9 +390,42 @@ public sealed class EditorSession
                 break;
             case EditorPhase.Moving or EditorPhase.Resizing or EditorPhase.Cropping:
                 Phase = EditorPhase.Idle;
+                Guides = [];
                 History.Commit(Display);
                 break;
         }
+    }
+
+    /// <summary>How far to nudge <paramref name="moving"/> so an edge or its middle lies on another
+    /// shown shape's, or the output's, within five points on each axis; and the lines that show
+    /// what it lines up on.</summary>
+    private (Vector Offset, IReadOnlyList<Guide> Guides) LiningUp(Annotation moving)
+    {
+        var box = moving.Bounds(Scale);
+        var reach = 5 * Scale;
+        var others = Display.Annotations.Where(a => a.Id != moving.Id && !a.IsHidden).Select(a => a.Bounds(Scale))
+            .Append(Display.OutputRect).ToList();
+        double? Nudge(double[] mine, IEnumerable<double> theirs)
+        {
+            double? best = null;
+            foreach (var a in mine)
+                foreach (var b in theirs)
+                    if (Math.Abs(b - a) <= reach && Math.Abs(b - a) < Math.Abs(best ?? double.PositiveInfinity)) best = b - a;
+            return best;
+        }
+        var dx = Nudge([box.MinX, box.MidX, box.MaxX], others.SelectMany(o => new[] { o.MinX, o.MidX, o.MaxX }));
+        var dy = Nudge([box.MinY, box.MidY, box.MaxY], others.SelectMany(o => new[] { o.MinY, o.MidY, o.MaxY }));
+        var lined = box.Offset(dx ?? 0, dy ?? 0);
+        var guides = new List<Guide>();
+        if (dx is not null)
+            foreach (var x in new[] { lined.MinX, lined.MidX, lined.MaxX })
+                foreach (var other in others.Where(o => new[] { o.MinX, o.MidX, o.MaxX }.Any(v => Math.Abs(v - x) < 0.5)))
+                    guides.Add(new Guide(GuideAxis.Vertical, x, Math.Min(lined.MinY, other.MinY), Math.Max(lined.MaxY, other.MaxY)));
+        if (dy is not null)
+            foreach (var y in new[] { lined.MinY, lined.MidY, lined.MaxY })
+                foreach (var other in others.Where(o => new[] { o.MinY, o.MidY, o.MaxY }.Any(v => Math.Abs(v - y) < 0.5)))
+                    guides.Add(new Guide(GuideAxis.Horizontal, y, Math.Min(lined.MinX, other.MinX), Math.Max(lined.MaxX, other.MaxX)));
+        return (new Vector(dx ?? 0, dy ?? 0), guides);
     }
 
     private void StartDrawing(Point point)

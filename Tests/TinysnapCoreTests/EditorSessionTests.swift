@@ -231,7 +231,8 @@ struct EditorSessionTests {
     @Test func draggingTheSelectionsBodyMovesIt() {
         var editor = session(.rectangle)
         drag(&editor, from: CGPoint(x: 10, y: 10), to: CGPoint(x: 110, y: 110))
-        drag(&editor, from: CGPoint(x: 30, y: 10), to: CGPoint(x: 40, y: 10))
+        // Command, so the box near the capture's top edge is not lined up on it.
+        drag(&editor, from: CGPoint(x: 30, y: 10), to: CGPoint(x: 40, y: 10), modifiers: .command)
         #expect(editor.display.annotations[0].kind == .rectangle(CGRect(x: 20, y: 10, width: 100, height: 100)))
         #expect(editor.display.annotations.count == 1)
     }
@@ -447,7 +448,9 @@ struct EditorSessionTests {
         let pasted = editor.display.annotations[0]
         #expect(editor.selection == pasted.id)
         let before = pasted.bounds(scale: editor.scale)
-        drag(&editor, from: CGPoint(x: before.midX, y: before.midY), to: CGPoint(x: before.midX + 30, y: before.midY))
+        // Command, so the image is not lined up on the capture's middle on the way.
+        drag(&editor, from: CGPoint(x: before.midX, y: before.midY), to: CGPoint(x: before.midX + 30, y: before.midY),
+             modifiers: .command)
         #expect(editor.display.annotations.count == 1)
         #expect(editor.display.annotations[0].bounds(scale: editor.scale).minX == before.minX + 30)
     }

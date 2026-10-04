@@ -82,6 +82,7 @@ pixels and is the only redaction to trust with a password or a card number.
 | `[` and `]` | Thinner and thicker |
 | Arrow keys | Nudge the selection by 1 pixel, or 10 with `Shift` |
 | `Command` held | Show the border of everything drawn, and pick up anything under the pointer |
+| Dragging a shape | Line its edges and middle up on other shapes and the capture, with a guide; hold `Command` to place it freely |
 | `Delete` | Remove the selection, as the trash button in the panel does |
 | `Command+=`, `Command+-`, `Command+0`, `Command+1` | Zoom in, out, to fit, to actual size |
 | `Esc` | Deselect, then close |

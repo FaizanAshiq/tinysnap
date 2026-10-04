@@ -16,6 +16,18 @@ public struct Modifiers: OptionSet, Sendable {
     public static let command = Modifiers(rawValue: 1 << 3)
 }
 
+/// A line a dragged shape lines up on, in capture pixels: an edge or middle it shares with
+/// another shape or the output, drawn from one across to the other while the drag lasts.
+public struct Guide: Equatable, Sendable {
+    public enum Axis: Sendable { case vertical, horizontal }
+    public let axis: Axis
+    /// x for a vertical line, y for a horizontal one.
+    public let position: CGFloat
+    /// Where the line starts and ends along its own direction.
+    public let from: CGFloat
+    public let to: CGFloat
+}
+
 public enum EscapeResult: Equatable, Sendable {
     case finishedTyping, deselected, close
 }
@@ -26,7 +38,9 @@ public struct EditorSession {
     public enum Phase: Equatable {
         case idle
         case drawing(Annotation.ID, anchor: CGPoint, last: CGPoint)
-        case moving(Annotation.ID, last: CGPoint)
+        /// `snap` is how far the shape has been nudged to line up, kept so the next step of the
+        /// drag starts from where the pointer alone would have put it.
+        case moving(Annotation.ID, last: CGPoint, snap: CGVector = .zero)
         case resizing(original: Annotation, handle: Handle)
         case cropping(original: CGRect, handle: Handle, last: CGPoint)
         case typing(Annotation.ID)
@@ -38,6 +52,8 @@ public struct EditorSession {
     public private(set) var tool: Tool
     public private(set) var selection: Annotation.ID?
     public private(set) var phase: Phase = .idle
+    /// The lines the shape being dragged lines up on, empty when it lines up on nothing.
+    public private(set) var guides: [Guide] = []
     /// The last style used with each tool, so each one remembers its own.
     public private(set) var styles: [Tool: Style]
 
@@ -284,10 +300,15 @@ public struct EditorSession {
                                          fromCentre: modifiers.contains(.option))
             display.replace(annotation)
             phase = .drawing(id, anchor: anchor, last: point)
-        case let .moving(id, last):
+        case let .moving(id, last, snap):
             guard let annotation = display.annotation(id) else { return }
-            display.replace(annotation.moved(by: CGVector(dx: point.x - last.x, dy: point.y - last.y)))
-            phase = .moving(id, last: point)
+            // Moved from where the pointer alone would have it, so a snap lets go as soon as
+            // the pointer carries the shape past it. Command drags freely.
+            let free = annotation.moved(by: CGVector(dx: point.x - last.x - snap.dx, dy: point.y - last.y - snap.dy))
+            let lined = modifiers.contains(.command) ? (offset: CGVector.zero, guides: []) : lining(up: free)
+            display.replace(free.moved(by: lined.offset))
+            guides = lined.guides
+            phase = .moving(id, last: point, snap: lined.offset)
         case let .resizing(original, handle):
             display.replace(original.resized(dragging: handle, to: point, constrained: constrained))
         case let .cropping(original, handle, last):
@@ -331,10 +352,46 @@ public struct EditorSession {
             selection = id
         case .moving, .resizing, .cropping:
             phase = .idle
+            guides = []
             history.commit(display)
         case .idle, .typing:
             break
         }
+    }
+
+    /// How far to nudge `moving` so an edge or its middle lies on another shown shape's, or the
+    /// output's, within five points on each axis; and the lines that show what it lines up on.
+    private func lining(up moving: Annotation) -> (offset: CGVector, guides: [Guide]) {
+        let box = moving.bounds(scale: scale)
+        let reach = 5 * scale
+        let others = display.annotations.filter { $0.id != moving.id && !$0.isHidden }.map { $0.bounds(scale: scale) }
+            + [display.outputRect]
+        func nudge(_ mine: [CGFloat], _ theirs: [CGFloat]) -> CGFloat? {
+            var best: CGFloat?
+            for a in mine {
+                for b in theirs where abs(b - a) <= reach && abs(b - a) < abs(best ?? .infinity) { best = b - a }
+            }
+            return best
+        }
+        let dx = nudge([box.minX, box.midX, box.maxX], others.flatMap { [$0.minX, $0.midX, $0.maxX] })
+        let dy = nudge([box.minY, box.midY, box.maxY], others.flatMap { [$0.minY, $0.midY, $0.maxY] })
+        let lined = box.offsetBy(dx: dx ?? 0, dy: dy ?? 0)
+        var guides: [Guide] = []
+        if dx != nil {
+            for x in [lined.minX, lined.midX, lined.maxX] {
+                for other in others where [other.minX, other.midX, other.maxX].contains(where: { abs($0 - x) < 0.5 }) {
+                    guides.append(Guide(axis: .vertical, position: x, from: min(lined.minY, other.minY), to: max(lined.maxY, other.maxY)))
+                }
+            }
+        }
+        if dy != nil {
+            for y in [lined.minY, lined.midY, lined.maxY] {
+                for other in others where [other.minY, other.midY, other.maxY].contains(where: { abs($0 - y) < 0.5 }) {
+                    guides.append(Guide(axis: .horizontal, position: y, from: min(lined.minX, other.minX), to: max(lined.maxX, other.maxX)))
+                }
+            }
+        }
+        return (CGVector(dx: dx ?? 0, dy: dy ?? 0), guides)
     }
 
     private mutating func startDrawing(at point: CGPoint) {
