@@ -107,6 +107,7 @@ struct Canvas {
         case let .line(from, to):
             context.setStrokeColor(color)
             context.setLineWidth(size)
+            dash(annotation, width: size)
             context.strokeLineSegments(between: [from, to])
         case let .measure(from, to):
             MeasureShape.draw(from: from, to: to, width: size / scale, color: color, scale: scale,
@@ -121,6 +122,7 @@ struct Canvas {
             } else {
                 context.setStrokeColor(color)
                 context.setLineWidth(size)
+                dash(annotation, width: size)
                 context.strokePath()
             }
         case let .oval(rect):
@@ -130,6 +132,7 @@ struct Canvas {
             } else {
                 context.setStrokeColor(color)
                 context.setLineWidth(size)
+                dash(annotation, width: size)
                 context.strokeEllipse(in: rect)
             }
         case let .text(origin, string):
@@ -176,6 +179,13 @@ struct Canvas {
         case .spotlight:
             break
         }
+    }
+
+    /// Dashes two widths long with three between: the round ends take half a width off each
+    /// side of a gap, so dash and gap read about even.
+    private func dash(_ annotation: Annotation, width: CGFloat) {
+        guard annotation.style.dashed else { return }
+        context.setLineDash(phase: 0, lengths: [width * 2, width * 3])
     }
 
     private func drawStep(number: Int, center: CGPoint, diameter: CGFloat, color: CGColor) {

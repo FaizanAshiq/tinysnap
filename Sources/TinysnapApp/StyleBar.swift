@@ -161,6 +161,7 @@ final class StyleBar: NSVisualEffectView {
         if tool.hasColor { row.addArrangedSubview(colorButton()) }
         if tool.hasSize { row.addArrangedSubview(group(sizeChips())) }
         if tool.hasFill { row.addArrangedSubview(group(fillChips())) }
+        if tool.hasDash { row.addArrangedSubview(group(dashChips())) }
         if tool.hasCorners { row.addArrangedSubview(group(cornerChips())) }
         if tool.hasAlign { row.addArrangedSubview(group(alignChips())) }
         if tool.hasBold { row.addArrangedSubview(group([boldChip()])) }
@@ -337,6 +338,31 @@ final class StyleBar: NSVisualEffectView {
 
     @objc private func pickFill(_ sender: NSButton) {
         change { $0.filled = sender.tag == 1 }
+    }
+
+    /// A solid line and a dashed one.
+    private func dashChips() -> [NSView] {
+        [false, true].map { dashed in
+            let chip = ChipButton(label: dashed ? "Dashed" : "Solid") { box, color in
+                let line = NSBezierPath()
+                line.move(to: NSPoint(x: box.minX + 7, y: box.midY))
+                line.line(to: NSPoint(x: box.maxX - 7, y: box.midY))
+                line.lineWidth = 2
+                line.lineCapStyle = .round
+                if dashed { line.setLineDash([2, 4], count: 2, phase: 0) }
+                color.setStroke()
+                line.stroke()
+            }
+            chip.isChosen = style.dashed == dashed
+            chip.target = self
+            chip.action = #selector(pickDash(_:))
+            chip.tag = dashed ? 1 : 0
+            return chip
+        }
+    }
+
+    @objc private func pickDash(_ sender: NSButton) {
+        change { $0.dashed = sender.tag == 1 }
     }
 
     /// Two lines of text, alone or cut out of a box.
