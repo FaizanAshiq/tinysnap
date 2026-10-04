@@ -6,7 +6,7 @@
     <AssemblyName>Tinysnap</AssemblyName>
     <RootNamespace>Tinysnap.Linux</RootNamespace>
     <Product>Tinysnap</Product>
-    <Version>1.3.1</Version>
+    <Version>1.3.2</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- As on Windows: the shipped build leaves out the .NET code it never calls, and is compiled
          ahead for the processor so the first capture does not wait. CI runs the self-check and
