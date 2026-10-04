@@ -97,6 +97,9 @@ public static class ToolInfo
     /// <summary>The highlighter only: a straight stroke, or one that follows the pointer.</summary>
     public static bool HasFreehand(this Tool tool) => tool is Tool.Highlighter;
 
+    /// <summary>The spotlight only: dim what is outside it, or blur it.</summary>
+    public static bool HasOutsideBlur(this Tool tool) => tool is Tool.Spotlight;
+
     /// <summary>Pasted images: opacity and the difference blend, for comparing against the capture.</summary>
     public static bool HasOverlay(this Tool tool) => tool is Tool.Image;
 
