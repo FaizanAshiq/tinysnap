@@ -76,10 +76,13 @@ public sealed record Style
     /// <summary>The highlighter only: following the pointer instead of drawing a straight stroke.</summary>
     public bool Freehand { get; init; }
 
+    /// <summary>The spotlight only: what is outside it blurred instead of dimmed.</summary>
+    public bool BlurOutside { get; init; }
+
     public Style(string colorHex, StyleSize size = StyleSize.Medium, bool filled = false,
                  CornerSize corners = CornerSize.Medium, double opacity = 1, bool difference = false,
                  TextAlign align = TextAlign.Left, bool bold = false, bool dashed = false,
-                 bool letters = false, bool freehand = false)
+                 bool letters = false, bool freehand = false, bool blurOutside = false)
     {
         ColorHex = colorHex;
         Size = size;
@@ -92,6 +95,7 @@ public sealed record Style
         Dashed = dashed;
         Letters = letters;
         Freehand = freehand;
+        BlurOutside = blurOutside;
     }
 
     public JsonObject ToJson() => new()
@@ -107,6 +111,7 @@ public sealed record Style
         ["dashed"] = Dashed,
         ["letters"] = Letters,
         ["freehand"] = Freehand,
+        ["blurOutside"] = BlurOutside,
     };
 
     /// <summary>Every key is optional and a bad value falls back on its own, so one hand
@@ -129,7 +134,8 @@ public sealed record Style
         var dashed = Json.Bool(o, "dashed") ?? false;
         var letters = Json.Bool(o, "letters") ?? false;
         var freehand = Json.Bool(o, "freehand") ?? false;
-        return new Style(colorHex, size, filled, corners, opacity, difference, align, bold, dashed, letters, freehand);
+        var blurOutside = Json.Bool(o, "blurOutside") ?? false;
+        return new Style(colorHex, size, filled, corners, opacity, difference, align, bold, dashed, letters, freehand, blurOutside);
     }
 }
 

@@ -34,6 +34,14 @@ public static partial class Renderer
         var reaches = document.Annotations.Where(a => !a.IsHidden).Select(a => ReadBack(a, document.Scale))
             .OfType<Rect>().ToList();
         var region = shown.Integral;
+        // A blurring spotlight reads everything outside it, but only its blur's reach around
+        // what is in view changes what is in view.
+        if (document.Annotations.FirstOrDefault(a => a is { Kind: AnnotationKind.Spotlight, IsHidden: false }) is
+            { Style.BlurOutside: true })
+        {
+            var reach = Canvas.SpotlightBlurPoints * document.Scale * 3;
+            region = region.Inset(-reach, -reach).Integral;
+        }
         // A box taken in can reach another, as a magnifier over a blur does.
         var grown = true;
         while (grown)
