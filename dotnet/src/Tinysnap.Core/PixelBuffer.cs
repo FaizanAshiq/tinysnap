@@ -48,6 +48,23 @@ internal sealed class PixelBuffer
         finally { handle.Free(); }
     }
 
+    /// <summary>How bright the pixels are on average, 0 to 1, each counted by how opaque it is, so
+    /// a window's see-through corners do not read as black. Null when every pixel is see-through.</summary>
+    public double? MeanLuminance
+    {
+        get
+        {
+            double sum = 0, weight = 0;
+            for (var index = 0; index < Bytes.Length; index += 4)
+            {
+                // Premultiplied, so each pixel's brightness already comes scaled by its alpha.
+                sum += 0.2126 * Bytes[index] + 0.7152 * Bytes[index + 1] + 0.0722 * Bytes[index + 2];
+                weight += Bytes[index + 3];
+            }
+            return weight > 0 ? sum / weight : null;
+        }
+    }
+
     public (byte R, byte G, byte B, byte A) Pixel(int x, int y)
     {
         var index = (y * Width + x) * 4;

@@ -118,6 +118,13 @@ public enum Palette {
                 CGFloat(value & 0xFF) / 255)
     }
 
+    /// How bright a colour looks, 0 to 1, from its sRGB components.
+    static func luminance(of color: CGColor) -> CGFloat {
+        let parts = color.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil)?
+            .components ?? [0, 0, 0]
+        return 0.2126 * parts[0] + 0.7152 * parts[1] + 0.0722 * parts[2]
+    }
+
     public static func color(hex: String, alpha: CGFloat = 1) -> CGColor {
         let rgb = components(of: hex) ?? (1, 59 / 255, 48 / 255)
         return CGColor(srgbRed: rgb.red, green: rgb.green, blue: rgb.blue, alpha: alpha)
