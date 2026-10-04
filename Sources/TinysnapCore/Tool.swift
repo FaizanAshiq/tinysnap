@@ -93,6 +93,9 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
     /// Lines, boxes and ovals: drawn in dashes. A filled box or oval has no outline to dash.
     public var hasDash: Bool { self == .line || self == .rectangle || self == .oval }
 
+    /// Steps only: numbers or letters, from a start the capture keeps.
+    public var hasCounter: Bool { self == .step }
+
     /// Pasted images: opacity and the difference blend, for comparing against the capture.
     public var hasOverlay: Bool { self == .image }
 

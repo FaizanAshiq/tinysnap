@@ -150,6 +150,15 @@ public struct EditorSession {
         history.commit(display)
     }
 
+    // MARK: Steps
+
+    /// Sets where the steps start counting, as one undoable step, held to the limits.
+    public mutating func setStepStart(_ start: Int) {
+        let limits = Document.stepStartLimits
+        display.stepStart = min(max(start, limits.lowerBound), limits.upperBound)
+        history.commit(display)
+    }
+
     // MARK: Magnifier
 
     /// The topmost magnifier under `point` the scroll wheel may zoom: not a locked or

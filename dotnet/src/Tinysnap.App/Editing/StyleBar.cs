@@ -80,7 +80,7 @@ internal sealed partial class StyleBar : Border
 
     private readonly CanvasControl canvas;
     private readonly StackPanel row = new() { Orientation = Orientation.Horizontal, Spacing = 14 };
-    private (Tool Tool, Style Style, MeasureSettings Measure, bool Locked)? shown;
+    private (Tool Tool, Style Style, MeasureSettings Measure, int StepStart, bool Locked)? shown;
 
     /// <summary>The chips, for the tests: switched off as a whole while a locked shape is chosen.</summary>
     internal StackPanel Row => row;
@@ -101,6 +101,10 @@ internal sealed partial class StyleBar : Border
     public Button? LowerContrast { get; private set; }
     public Button? RaiseContrast { get; private set; }
     public TextBlock? ContrastLabel { get; private set; }
+    public IReadOnlyList<ToggleButton> CounterChips { get; private set; } = [];
+    public Button? LowerStart { get; private set; }
+    public Button? RaiseStart { get; private set; }
+    public TextBlock? StartLabel { get; private set; }
     public Button? HelpChip { get; private set; }
 
     /// <summary>The Measure guide's Got it, while the guide is open.</summary>
@@ -160,12 +164,13 @@ internal sealed partial class StyleBar : Border
         IsVisible = Shows(tool);
         var measure = canvas.MeasureSettings;
         var locked = selected?.IsLocked == true;
-        var now = (tool, style, measure, locked);
+        var stepStart = session.Display.StepStart;
+        var now = (tool, style, measure, stepStart, locked);
         if (shown == now) return;
         // Only the colour changed: redrawn where it stands. Rebuilding replaced the button the
         // palette hangs from, which closed the palette in the middle of a drag on the spectrum.
         if (shown is { } before && before.Tool == tool && before.Measure == measure
-            && before.Locked == locked
+            && before.StepStart == stepStart && before.Locked == locked
             && before.Style with { ColorHex = style.ColorHex } == style)
         {
             shown = now;
@@ -195,6 +200,7 @@ internal sealed partial class StyleBar : Border
         CustomColor = null;
         colorSwatch = null;
         (DifferenceChip, BoldChip) = (null, null);
+        (CounterChips, LowerStart, RaiseStart, StartLabel) = ([], null, null, null);
         (AcrossChip, DownChip, LowerContrast, RaiseContrast, ContrastLabel, HelpChip) = (null, null, null, null, null, null);
         (SizeChips, FillChips, DashChips, CornerChips, AlignChips, OpacityChips) = ([], [], [], [], [], []);
         (BackdropFillChips, PaddingChips, BackdropCornerChips, ShadowChips) = ([], [], [], []);
@@ -220,6 +226,7 @@ internal sealed partial class StyleBar : Border
             Group([bold]);
             BoldChip = bold;
         }
+        if (tool.HasCounter()) AddStepChips(style);
         OpacityChips = tool.HasOverlay() ? Group(MakeOpacityChips(style)) : [];
         if (tool.HasOverlay())
         {
@@ -293,6 +300,42 @@ internal sealed partial class StyleBar : Border
         };
         HelpChip = PlainChip(mark, "Show the Measure guide", ShowGuide);
         row.Children.Add(HelpChip);
+    }
+
+    // Steps
+
+    /// <summary>1 2 3 or A B C, then minus, where this capture's steps start, plus.</summary>
+    private void AddStepChips(Style style)
+    {
+        CounterChips = Group([.. new[] { false, true }.Select(letters =>
+        {
+            var chip = Chip(new TextBlock { Text = letters ? "ABC" : "123", FontSize = 11, FontWeight = FontWeight.SemiBold },
+                            letters ? "Count A, B, C" : "Count 1, 2, 3", style.Letters == letters,
+                            () => canvas.Restyle(s => s with { Letters = letters }));
+            chip.Width = 40;
+            return chip;
+        })]);
+        var start = canvas.Session.Display.StepStart;
+        LowerStart = PlainChip(Glyphs.Icon(MinusGlyph, 14), "Start one lower", () => canvas.SetStepStart(start - 1));
+        RaiseStart = PlainChip(Glyphs.Icon(PlusGlyph, 14), "Start one higher", () => canvas.SetStepStart(start + 1));
+        StartLabel = new TextBlock
+        {
+            Text = $"From {start}",
+            FontSize = 12,
+            FontWeight = FontWeight.Medium,
+            TextAlignment = TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            FontFeatures = FontFeatureCollection.Parse("tnum"),
+            [!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SystemControlForegroundBaseMediumBrush"),
+        };
+        ToolTip.SetTip(StartLabel, "Where this capture's steps start counting");
+        AutomationProperties.SetName(StartLabel, $"Steps start from {start}");
+        row.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 2,
+            Children = { LowerStart, StartLabel, RaiseStart },
+        });
     }
 
     private static Button PlainChip(Control glyph, string tip, Action pick)

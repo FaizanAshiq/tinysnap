@@ -83,14 +83,27 @@ public sealed record Document
     /// the Export setting.</summary>
     public double? Resize { get; init; }
 
+    public const int StepStartMin = 1;
+    public const int StepStartMax = 999;
+
+    private readonly int stepStart = StepStartMin;
+
+    /// <summary>Where the steps start counting: 1, or more to carry on from another capture.</summary>
+    public int StepStart
+    {
+        get => stepStart;
+        init => stepStart = Math.Clamp(value, StepStartMin, StepStartMax);
+    }
+
     public Document(Capture capture, Rect? crop = null, ImmutableArray<Annotation> annotations = default,
-                    Backdrop? backdrop = null, double? resize = null)
+                    Backdrop? backdrop = null, double? resize = null, int stepStart = StepStartMin)
     {
         Capture = capture;
         Crop = crop;
         Annotations = annotations;
         Backdrop = backdrop;
         Resize = resize;
+        StepStart = stepStart;
     }
 
     /// <summary>The same capture, crop, annotations, backdrop and size. The annotation
@@ -98,9 +111,10 @@ public sealed record Document
     /// and undo would record a step for every unchanged document.</summary>
     public bool Equals(Document? other) =>
         other is not null && ReferenceEquals(Capture, other.Capture) && Crop == other.Crop
-        && Annotations.SequenceEqual(other.Annotations) && Backdrop == other.Backdrop && Resize == other.Resize;
+        && Annotations.SequenceEqual(other.Annotations) && Backdrop == other.Backdrop && Resize == other.Resize
+        && StepStart == other.StepStart;
 
-    public override int GetHashCode() => HashCode.Combine(Capture, Crop, Annotations.Length, Backdrop, Resize);
+    public override int GetHashCode() => HashCode.Combine(Capture, Crop, Annotations.Length, Backdrop, Resize, StepStart);
 
     public double Scale => Capture.Scale;
 
@@ -154,19 +168,35 @@ public sealed record Document
 
     public Annotation? Annotation(Guid id) => Annotations.FirstOrDefault(a => a.Id == id);
 
-    /// <summary>Not stored: 1 plus the number of shown steps before this one, so deleting or
-    /// hiding a step renumbers every step after it. Null for a hidden step, which shows no
-    /// number.</summary>
+    /// <summary>Not stored: the start plus the number of shown steps of its kind before this one,
+    /// so deleting or hiding a step renumbers every step after it. Numbered and lettered steps
+    /// count apart. Null for a hidden step, which shows no number.</summary>
     public int? StepNumber(Guid id)
     {
-        var number = 0;
+        if (Annotation(id) is not { Kind: AnnotationKind.Step, IsHidden: false } step) return null;
+        var number = StepStart - 1;
         foreach (var annotation in Annotations)
         {
-            if (annotation.Kind is not AnnotationKind.Step || annotation.IsHidden) continue;
+            if (annotation.Kind is not AnnotationKind.Step || annotation.IsHidden || annotation.Style.Letters != step.Style.Letters)
+                continue;
             number++;
             if (annotation.Id == id) return number;
         }
         return null;
+    }
+
+    /// <summary>What a step shows: its number, or for a lettered step the letters at that place.</summary>
+    public string? StepLabel(Guid id) =>
+        StepNumber(id) is not { } number ? null
+        : Annotation(id)!.Style.Letters ? Letters(number)
+        : number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>1 is A, 26 is Z and 27 is AA, the way spreadsheet columns count.</summary>
+    internal static string Letters(int number)
+    {
+        var label = "";
+        for (var rest = number; rest > 0; rest = (rest - 1) / 26) label = (char)('A' + (rest - 1) % 26) + label;
+        return label;
     }
 
     /// <summary>What the layers panel calls a shape: its tool and its count among that tool's
@@ -185,7 +215,7 @@ public sealed record Document
         return annotation.Kind switch
         {
             AnnotationKind.Text(_, var text) => FirstLine(text) is { Length: > 0 } line ? line : "Text",
-            AnnotationKind.Step => StepNumber(id) is { } number ? $"Step {number}" : "Step",
+            AnnotationKind.Step => StepLabel(id) is { } label ? $"Step {label}" : "Step",
             AnnotationKind.Measure(var from, var to) => "Measure " + MeasureReading.Label(from.Distance(to), Scale),
             _ => "",
         };

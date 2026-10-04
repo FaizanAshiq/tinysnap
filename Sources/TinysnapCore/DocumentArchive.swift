@@ -10,6 +10,8 @@ public struct ArchivedEdits {
     public var annotations: [Annotation]
     public var backdrop: Backdrop?
     public var resize: CGFloat?
+    /// 1 for a file from before steps had a start.
+    public var stepStart: Int = 1
 }
 
 /// A document to and from `edits.json`, plus one PNG per pasted image. Coordinates stay
@@ -67,7 +69,8 @@ public enum DocumentArchive {
             backdrop?.file = name
         }
         let file = File(version: version, captured: captured, scale: document.scale,
-                        crop: document.crop.map(Box.init), annotations: items, backdrop: backdrop, resize: document.resize)
+                        crop: document.crop.map(Box.init), annotations: items, backdrop: backdrop, resize: document.resize,
+                        stepStart: document.stepStart == 1 ? nil : document.stepStart)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -90,7 +93,8 @@ public enum DocumentArchive {
                        isLocked: item.locked ?? false, isHidden: item.hidden ?? false, serial: max(0, item.serial ?? 0))
         }
         return ArchivedEdits(captured: file.captured, scale: file.scale, crop: file.crop?.rect, annotations: annotations,
-                             backdrop: file.backdrop.map { backdrop(from: $0, image: image) }, resize: file.resize)
+                             backdrop: file.backdrop.map { backdrop(from: $0, image: image) }, resize: file.resize,
+                             stepStart: file.stepStart ?? 1)
     }
 
     /// A wallpaper whose file is gone turns the fill into the gradient, rather than
@@ -157,15 +161,17 @@ public enum DocumentArchive {
         var annotations: [Item]
         var backdrop: StoredBackdrop?
         var resize: CGFloat?
+        /// Written only when it is not 1, so an older Tinysnap reads the file as before.
+        var stepStart: Int?
 
         init(version: Int, captured: Date, scale: CGFloat, crop: Box?, annotations: [Item], backdrop: StoredBackdrop?,
-             resize: CGFloat?) {
-            (self.version, self.captured, self.scale, self.crop, self.annotations, self.backdrop, self.resize) =
-                (version, captured, scale, crop, annotations, backdrop, resize)
+             resize: CGFloat?, stepStart: Int?) {
+            (self.version, self.captured, self.scale, self.crop, self.annotations, self.backdrop, self.resize, self.stepStart) =
+                (version, captured, scale, crop, annotations, backdrop, resize, stepStart)
         }
 
         private enum CodingKeys: String, CodingKey {
-            case version, captured, scale, crop, annotations, backdrop, resize
+            case version, captured, scale, crop, annotations, backdrop, resize, stepStart
         }
 
         /// Strict for everything the document needs, lenient for the backdrop and the size:
@@ -181,6 +187,8 @@ public enum DocumentArchive {
             // A size past the limits is as unreadable as a word.
             let resize = (try? container.decodeIfPresent(CGFloat.self, forKey: .resize)) ?? nil
             self.resize = resize.flatMap { Document.resizeLimits.contains($0) ? $0 : nil }
+            let start = (try? container.decodeIfPresent(Int.self, forKey: .stepStart)) ?? nil
+            stepStart = start.flatMap { Document.stepStartLimits.contains($0) ? $0 : nil }
         }
     }
 

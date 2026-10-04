@@ -77,14 +77,19 @@ public struct Document: Equatable, Sendable {
     /// The export's size as output pixels per capture pixel, 0.01 to 4. Nil follows the
     /// Export setting.
     public var resize: CGFloat?
+    /// Where the steps start counting: 1, or more to carry on from another capture.
+    public var stepStart: Int
+
+    public static let stepStartLimits = 1...999
 
     public init(capture: Capture, crop: CGRect? = nil, annotations: [Annotation] = [], backdrop: Backdrop? = nil,
-                resize: CGFloat? = nil) {
+                resize: CGFloat? = nil, stepStart: Int = 1) {
         self.capture = capture
         self.crop = crop
         self.annotations = annotations
         self.backdrop = backdrop
         self.resize = resize
+        self.stepStart = min(max(stepStart, Self.stepStartLimits.lowerBound), Self.stepStartLimits.upperBound)
         numberNewShapes()
     }
 
@@ -140,16 +145,35 @@ public struct Document: Equatable, Sendable {
         annotations.first { $0.id == id }
     }
 
-    /// Not stored: 1 plus the number of shown steps before this one, so deleting or hiding
-    /// a step renumbers every step after it. Nil for a hidden step, which shows no number.
+    /// Not stored: the start plus the number of shown steps of its kind before this one, so
+    /// deleting or hiding a step renumbers every step after it. Numbered and lettered steps
+    /// count apart. Nil for a hidden step, which shows no number.
     public func stepNumber(of id: Annotation.ID) -> Int? {
-        var number = 0
-        for annotation in annotations where !annotation.isHidden {
+        guard let step = annotation(id), case .step = step.kind, !step.isHidden else { return nil }
+        var number = stepStart - 1
+        for annotation in annotations where !annotation.isHidden && annotation.style.letters == step.style.letters {
             guard case .step = annotation.kind else { continue }
             number += 1
             if annotation.id == id { return number }
         }
         return nil
+    }
+
+    /// What a step shows: its number, or for a lettered step the letters at that place.
+    public func stepLabel(of id: Annotation.ID) -> String? {
+        guard let number = stepNumber(of: id) else { return nil }
+        return annotation(id)?.style.letters == true ? Self.letters(number) : String(number)
+    }
+
+    /// 1 is A, 26 is Z and 27 is AA, the way spreadsheet columns count.
+    static func letters(_ number: Int) -> String {
+        var rest = number, label = ""
+        while rest > 0 {
+            rest -= 1
+            label = String(UnicodeScalar(UInt8(65 + rest % 26))) + label
+            rest /= 26
+        }
+        return label
     }
 
     /// What the layers panel calls a shape: its tool and its count among that tool's shapes,
@@ -168,7 +192,7 @@ public struct Document: Equatable, Sendable {
             let line = string.split(whereSeparator: \.isNewline).first.map(String.init)?
                 .trimmingCharacters(in: .whitespaces) ?? ""
             return line.isEmpty ? "Text" : String(line.prefix(40))
-        case .step: return stepNumber(of: id).map { "Step \($0)" } ?? "Step"
+        case .step: return stepLabel(of: id).map { "Step \($0)" } ?? "Step"
         case let .measure(from, to): return "Measure " + MeasureReading.label(forPixels: from.distance(to: to), scale: scale)
         default: return ""
         }
