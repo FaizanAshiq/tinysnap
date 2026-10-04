@@ -31,4 +31,24 @@ public class PixelTests
         Assert.Equal(((byte)0, (byte)0, (byte)255, (byte)255), buffer.Pixel(1, 0));
         Assert.Equal(((byte)255, (byte)255, (byte)255, (byte)255), buffer.Pixel(1, 1));
     }
+
+    /// <summary>The erase fill smooths each edge with the median of the pixels within 16 of each one.
+    /// It slides one sorted window along the edge rather than sorting a fresh copy at every pixel.</summary>
+    [Fact]
+    public void EveryMedianMatchesSortingItsWindow()
+    {
+        var random = new Random(7);
+        foreach (var count in new[] { 1, 2, 5, 16, 33, 34, 40, 200 })
+        {
+            var values = new byte[count];
+            random.NextBytes(values);
+            var expected = Enumerable.Range(0, count).Select(i =>
+            {
+                var window = values[Math.Max(0, i - 16)..(Math.Min(count - 1, i + 16) + 1)];
+                Array.Sort(window);
+                return window[window.Length / 2];
+            }).ToArray();
+            Assert.Equal(expected, PixelBuffer.SlidingMedians(values, 16));
+        }
+    }
 }

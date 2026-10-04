@@ -24,6 +24,28 @@ struct PixelBuffer {
         bytes = buffer
     }
 
+    /// `rect`'s pixels, row 0 at the top, copied straight out of a bitmap `context` drawn in
+    /// this same format. A snapshot of the whole context cost a copy of all of it on the next
+    /// draw, which a redaction of every line paid once per line.
+    init?(context: CGContext, rect: CGRect) {
+        let x = Int(rect.minX), y = Int(rect.minY)
+        let pixelWidth = Int(rect.width), pixelHeight = Int(rect.height)
+        guard let data = context.data, context.bitsPerPixel == 32, pixelWidth > 0, pixelHeight > 0, x >= 0, y >= 0,
+              x + pixelWidth <= context.width, y + pixelHeight <= context.height else { return nil }
+        let source = data.assumingMemoryBound(to: UInt8.self)
+        let rowBytes = context.bytesPerRow
+        var buffer = [UInt8](repeating: 0, count: pixelWidth * pixelHeight * 4)
+        buffer.withUnsafeMutableBufferPointer { target in
+            for row in 0..<pixelHeight {
+                (target.baseAddress! + row * pixelWidth * 4)
+                    .update(from: source + (y + row) * rowBytes + x * 4, count: pixelWidth * 4)
+            }
+        }
+        width = pixelWidth
+        height = pixelHeight
+        bytes = buffer
+    }
+
     func makeImage() -> CGImage? {
         var copy = bytes
         let pixelWidth = width
@@ -118,15 +140,37 @@ struct PixelBuffer {
     /// The edge pixels at `index(0..<count)`, each the median, channel by channel, of
     /// those within 16 of it along the edge.
     private func smoothedEdge(count: Int, index: (Int) -> Int) -> [EdgePixel] {
-        let reach = 16
-        let channels = (0..<4).map { channel in (0..<count).map { bytes[index($0) + channel] } }
-        return (0..<count).map { i in
-            let window = max(0, i - reach)...min(count - 1, i + reach)
-            func median(_ channel: Int) -> UInt8 {
-                let sorted = channels[channel][window].sorted()
-                return sorted[sorted.count / 2]
+        let channels = (0..<4).map { channel in Self.slidingMedians((0..<count).map { bytes[index($0) + channel] }, reach: 16) }
+        return (0..<count).map { (channels[0][$0], channels[1][$0], channels[2][$0], channels[3][$0]) }
+    }
+
+    /// For each value, the median of those within `reach` of it, its window sorted as one: the
+    /// window slides along, one value in and one out at each step. Sorting a fresh copy at every
+    /// pixel made the medians most of an erase's cost.
+    static func slidingMedians(_ values: [UInt8], reach: Int) -> [UInt8] {
+        var window: [UInt8] = []
+        window.reserveCapacity(2 * reach + 1)
+        // Where `value` goes in the sorted window: before the first larger one.
+        func slot(_ value: UInt8) -> Int {
+            var low = 0, high = window.count
+            while low < high {
+                let middle = (low + high) / 2
+                if window[middle] <= value { low = middle + 1 } else { high = middle }
             }
-            return (median(0), median(1), median(2), median(3))
+            return low
+        }
+        var first = 0, last = -1
+        return values.indices.map { i in
+            while last < min(values.count - 1, i + reach) {
+                last += 1
+                window.insert(values[last], at: slot(values[last]))
+            }
+            while first < i - reach {
+                // The slot after the last copy of the value, so one before it is a copy.
+                window.remove(at: slot(values[first]) - 1)
+                first += 1
+            }
+            return window[window.count / 2]
         }
     }
 
