@@ -123,7 +123,8 @@ public sealed class LibraryStore(string? root = null)
     {
         if (ReadImage(entry.OriginalPath) is { } original && ReadEdits(entry) is { } edits)
         {
-            var document = new Document(new Capture(original.Image, edits.Scale), edits.Crop, edits.Annotations, edits.Backdrop);
+            var document = new Document(new Capture(original.Image, edits.Scale), edits.Crop, edits.Annotations, edits.Backdrop,
+                                        stepStart: edits.StepStart);
             // Held to the limits the Size panel holds it to, whatever the file asks for.
             return new OpenedEntry(document with { Resize = edits.Resize is { } r ? document.ClampedResize(r) : null }, true);
         }

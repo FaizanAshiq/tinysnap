@@ -53,7 +53,7 @@ public enum Renderer {
                 canvas.spotlight(visible.compactMap { if case let .spotlight(rect) = $0.kind { (rect, $0.style.corners) } else { nil } })
                 continue
             }
-            canvas.draw(annotation, stepNumber: document.stepNumber(of: annotation.id))
+            canvas.draw(annotation, stepLabel: document.stepLabel(of: annotation.id))
         }
         return context.makeImage()
     }
@@ -87,7 +87,7 @@ struct Canvas {
         context.restoreGState()
     }
 
-    func draw(_ annotation: Annotation, stepNumber: Int?) {
+    func draw(_ annotation: Annotation, stepLabel: String?) {
         let size = annotation.pixelSize(scale: scale)
         let color = Palette.color(hex: annotation.style.colorHex)
         context.saveGState()
@@ -160,7 +160,7 @@ struct Canvas {
             context.addPath(Smoothing.path(through: points))
             context.strokePath()
         case let .step(center):
-            drawStep(number: stepNumber ?? 0, center: center, diameter: size, color: color)
+            drawStep(label: stepLabel ?? "", center: center, diameter: size, color: color)
         case let .image(rect, pasted):
             let corner = radius(annotation.style.corners, for: rect)
             context.addPath(CGPath(roundedRect: rect, cornerWidth: corner, cornerHeight: corner, transform: nil))
@@ -188,13 +188,15 @@ struct Canvas {
         context.setLineDash(phase: 0, lengths: [width * 2, width * 3])
     }
 
-    private func drawStep(number: Int, center: CGPoint, diameter: CGFloat, color: CGColor) {
+    private func drawStep(label: String, center: CGPoint, diameter: CGFloat, color: CGColor) {
         let circle = CGRect(x: center.x - diameter / 2, y: center.y - diameter / 2, width: diameter, height: diameter)
         context.setFillColor(color)
         context.fillEllipse(in: circle)
 
-        let label = String(number)
-        let points = diameter / scale * 0.55
+        // A long label, 100 or AA, is made smaller until it fits inside the disc.
+        var points = diameter / scale * 0.55
+        let natural = TextLayout.metrics(of: label, points: points, scale: scale, bold: true).width
+        if natural > diameter * 0.78 { points *= diameter * 0.78 / natural }
         let metrics = TextLayout.metrics(of: label, points: points, scale: scale, bold: true)
         let origin = CGPoint(x: center.x - metrics.width / 2,
                              y: center.y - (metrics.ascent + metrics.descent) / 2)

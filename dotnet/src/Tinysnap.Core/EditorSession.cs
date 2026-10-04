@@ -167,6 +167,15 @@ public sealed class EditorSession
         History.Commit(Display);
     }
 
+    // Steps
+
+    /// <summary>Sets where the steps start counting, as one undoable step, held to the limits.</summary>
+    public void SetStepStart(int start)
+    {
+        Display = Display with { StepStart = start };
+        History.Commit(Display);
+    }
+
     // Magnifier
 
     /// <summary>The topmost magnifier under <paramref name="point"/> the scroll wheel may zoom: not

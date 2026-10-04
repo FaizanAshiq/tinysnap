@@ -126,6 +126,26 @@ public class StyleBarTests
         Assert.Equal(Avalonia.Media.FontWeight.Bold, box.FontWeight);
     }
 
+    [AvaloniaFact]
+    public void TheStepBarCountsInLettersAndMovesTheStart()
+    {
+        var session = new EditorSession(new Document(CanvasHost.Blank(400, 300)), Tool.Step);
+        var editor = new EditorWindow(session, DateTimeOffset.Now, TestServices.Make());
+        editor.Show();
+        var bar = editor.StyleBar;
+        Assert.Equal(2, bar.CounterChips.Count);
+        Assert.Equal("From 1", bar.StartLabel!.Text);
+        Click(bar.RaiseStart!);
+        Click(bar.RaiseStart!);
+        Assert.Equal(3, session.Display.StepStart);
+        Assert.Equal("From 3", bar.StartLabel!.Text);
+        Click(bar.CounterChips[1]);
+        Assert.True(session.StyleFor(Tool.Step).Letters);
+        editor.Canvas.Choose(Tool.Arrow);
+        Assert.Empty(bar.CounterChips);
+        Assert.Null(bar.StartLabel);
+    }
+
     /// <summary>Red text on a box types in white, the colour its letters are drawn in.</summary>
     [AvaloniaFact]
     public void TextOnABoxIsTypedInLettersThatReadOnTheBox()

@@ -8,7 +8,7 @@ namespace Tinysnap.Core;
 /// <summary>What <c>edits.json</c> holds: everything about a document except its capture
 /// pixels, which the library keeps beside it as <c>original.png</c>.</summary>
 public sealed record ArchivedEdits(DateTimeOffset Captured, double Scale, Rect? Crop, ImmutableArray<Annotation> Annotations,
-                                   Backdrop? Backdrop, double? Resize);
+                                   Backdrop? Backdrop, double? Resize, int StepStart = Document.StepStartMin);
 
 /// <summary>An <c>edits.json</c> that cannot be rebuilt exactly.</summary>
 public sealed class ArchiveException(string reason) : Exception(reason);
@@ -98,6 +98,8 @@ public static class DocumentArchive
         // Absent optionals are left out, never written as null, as the Mac's encoder does.
         if (document.Crop is { } crop) root["crop"] = Box(crop);
         if (document.Resize is { } resize) root["resize"] = resize;
+        // Written only when it is not 1, so an older Tinysnap reads the file as before.
+        if (document.StepStart != Document.StepStartMin) root["stepStart"] = document.StepStart;
         if (document.Backdrop is { } backdrop)
         {
             var stored = backdrop.ToJson();
@@ -138,7 +140,10 @@ public static class DocumentArchive
         var resize = Json.Number(root, "resize") is { } r && r >= DocumentSizing.ResizeMin && r <= DocumentSizing.ResizeMax
             ? r
             : (double?)null;
-        return new ArchivedEdits(captured, scale, crop, annotations, StoredBackdrop(root, image), resize);
+        var stepStart = Json.Integer(root, "stepStart") is { } s && s >= Document.StepStartMin && s <= Document.StepStartMax
+            ? (int)s
+            : Document.StepStartMin;
+        return new ArchivedEdits(captured, scale, crop, annotations, StoredBackdrop(root, image), resize, stepStart);
     }
 
     /// <summary>A wallpaper whose file is gone turns the fill into the gradient, rather than
