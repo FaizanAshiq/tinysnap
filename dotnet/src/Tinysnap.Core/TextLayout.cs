@@ -71,6 +71,29 @@ public static class TextLayout
         return runs;
     }
 
+    /// <summary>A line's runs in the order they are drawn left to right: each run of one face split
+    /// again wherever the reading direction changes, then put in order by <see cref="Bidi"/>. Each
+    /// keeps its letters in reading order, and the shaper lays a right to left one out from the right.</summary>
+    internal static List<(string Text, SKFont Font)> VisualRuns(string line, SKFont primary)
+    {
+        var levels = Bidi.Levels(line);
+        var pieces = new List<(string Text, SKFont Font, int Level)>();
+        var start = 0;
+        foreach (var (text, font) in Runs(line, primary))
+        {
+            var end = start + text.Length;
+            for (var at = start; at < end;)
+            {
+                var stop = at + 1;
+                while (stop < end && levels[stop] == levels[at]) stop++;
+                pieces.Add((line[at..stop], font, levels[at]));
+                at = stop;
+            }
+            start = end;
+        }
+        return [.. Bidi.Reorder(pieces, piece => piece.Level).Select(piece => (piece.Text, piece.Font))];
+    }
+
     private static bool Joins(int codepoint) =>
         codepoint is 0x200D or (>= 0xFE00 and <= 0xFE0F) or (>= 0x1F3FB and <= 0x1F3FF)
         || CharUnicodeInfo.GetUnicodeCategory(codepoint) is UnicodeCategory.NonSpacingMark or UnicodeCategory.EnclosingMark;
@@ -90,7 +113,7 @@ public static class TextLayout
     private static double Width(string line, SKFont font)
     {
         double total = 0;
-        foreach (var (text, runFont) in Runs(line, font))
+        foreach (var (text, runFont) in VisualRuns(line, font))
         {
             using var shaper = new SKShaper(runFont.Typeface);
             total += shaper.Shape(text, runFont).Width;
@@ -135,8 +158,8 @@ public static class TextLayout
         return [.. widths.Select(width => (box - width) * share)];
     }
 
-    // ponytail: runs are laid out left to right in string order; a line mixing right-to-left
-    // and left-to-right words needs ICU bidi reordering to read in the right order.
+    // ponytail: a bracket in another face than the right to left letters around it is shaped on
+    // its own, left to right, so it is not mirrored; hand the shaper each run's direction if it shows.
     /// <summary>Draws into a canvas whose space is capture pixels with y growing downward,
     /// with <paramref name="origin"/> as the top left corner of the first line.</summary>
     internal static void Draw(SKCanvas canvas, string text, Point origin, double points, double scale, SKColor color,
@@ -155,7 +178,7 @@ public static class TextLayout
         {
             var x = index < offsets.Length ? offsets[index] : 0;
             var baseline = ascent + index * height;
-            foreach (var (run, runFont) in Runs(lines[index], font))
+            foreach (var (run, runFont) in VisualRuns(lines[index], font))
             {
                 using var shaper = new SKShaper(runFont.Typeface);
                 canvas.DrawShapedText(shaper, run, (float)x, (float)baseline, SKTextAlign.Left, runFont, paint);
