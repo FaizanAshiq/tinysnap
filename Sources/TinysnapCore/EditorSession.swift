@@ -102,9 +102,19 @@ public struct EditorSession {
         if selectedAnnotation?.isLocked == true { return }
         guard let id = selection, var annotation = display.annotation(id) else {
             var style = style(for: tool)
+            let ratio = style.cropRatio
             change(&style)
             styles[tool] = style
             colorHex = style.colorHex
+            // A picked ratio trims the crop to it, or the whole capture when nothing is
+            // cropped yet, so the frame takes the ratio at once.
+            if tool == .crop, style.cropRatio != ratio, let value = style.cropRatio.value {
+                let trimmed = display.outputRect.trimmed(toRatio: value).wholePixels
+                if trimmed.width >= 1, trimmed.height >= 1, trimmed != display.outputRect {
+                    display.crop = trimmed
+                    history.commit(display)
+                }
+            }
             return
         }
         let before = annotation.style.colorHex
@@ -293,11 +303,13 @@ public struct EditorSession {
                 return
             }
             // A new crop, drawn from nothing, follows the same keys as a box. Dragging
-            // an existing crop's handle only takes Shift.
+            // an existing crop's handle only takes Shift. Either keeps a chosen ratio;
+            // Shift squares it whatever the ratio.
             let isNew = original.size == .zero
+            let ratio = constrained ? 1 : style(for: .crop).cropRatio.value
             let rect = (isNew
-                ? CGRect.dragged(from: original.origin, to: point, square: constrained, fromCentre: modifiers.contains(.option))
-                : original.resized(dragging: handle, to: point, square: constrained))
+                ? CGRect.dragged(from: original.origin, to: point, ratio: ratio, fromCentre: modifiers.contains(.option))
+                : original.resized(dragging: handle, to: point, ratio: ratio))
                 .intersection(bounds).wholePixels
             if rect.width >= 1, rect.height >= 1 { display.crop = rect }
             phase = .cropping(original: original, handle: handle, last: point)

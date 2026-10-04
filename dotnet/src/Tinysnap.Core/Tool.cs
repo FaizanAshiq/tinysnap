@@ -100,6 +100,9 @@ public static class ToolInfo
     /// <summary>The spotlight only: dim what is outside it, or blur it.</summary>
     public static bool HasOutsideBlur(this Tool tool) => tool is Tool.Spotlight;
 
+    /// <summary>The crop only: any shape, or a ratio it keeps.</summary>
+    public static bool HasRatio(this Tool tool) => tool is Tool.Crop;
+
     /// <summary>Pasted images: opacity and the difference blend, for comparing against the capture.</summary>
     public static bool HasOverlay(this Tool tool) => tool is Tool.Image;
 

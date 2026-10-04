@@ -49,12 +49,19 @@ public readonly record struct Point(double X, double Y)
 
     /// <summary>The corner that makes a square with <paramref name="anchor"/>, keeping the
     /// drag's direction.</summary>
-    public Point Squared(Point anchor)
+    public Point Squared(Point anchor) => Fitted(anchor, 1);
+
+    /// <summary>This point moved so the box from <paramref name="anchor"/> to it has
+    /// <paramref name="ratio"/>, width over height, on the drag's longer side. A drag taller than
+    /// it is wide turns the ratio upright.</summary>
+    public Point Fitted(Point anchor, double ratio)
     {
         var dx = X - anchor.X;
         var dy = Y - anchor.Y;
-        var side = Math.Max(Math.Abs(dx), Math.Abs(dy));
-        return new Point(anchor.X + (dx < 0 ? -side : side), anchor.Y + (dy < 0 ? -side : side));
+        var shape = Math.Abs(dx) >= Math.Abs(dy) ? ratio : 1 / ratio;
+        var width = Math.Max(Math.Abs(dx), Math.Abs(dy) * shape);
+        var height = width / shape;
+        return new Point(anchor.X + (dx < 0 ? -width : width), anchor.Y + (dy < 0 ? -height : height));
     }
 
     public double DistanceToSegment(Point a, Point b)
@@ -186,29 +193,66 @@ public readonly record struct Rect(double X, double Y, double Width, double Heig
     /// <summary>This rectangle with one handle dragged to <paramref name="point"/>. Always
     /// computed from the rectangle as it was when the drag began, so dragging a corner past
     /// the opposite one flips the box cleanly instead of the handle swapping meaning mid drag.</summary>
-    public Rect Resized(Handle handle, Point point, bool square) => handle switch
-    {
-        Handle.TopLeft => Corner(new Point(MaxX, MaxY), point, square),
-        Handle.TopRight => Corner(new Point(MinX, MaxY), point, square),
-        Handle.BottomRight => Corner(new Point(MinX, MinY), point, square),
-        Handle.BottomLeft => Corner(new Point(MaxX, MinY), point, square),
-        Handle.Top => FromCorners(new Point(MinX, point.Y), new Point(MaxX, MaxY)),
-        Handle.Bottom => FromCorners(new Point(MinX, MinY), new Point(MaxX, point.Y)),
-        Handle.Left => FromCorners(new Point(point.X, MinY), new Point(MaxX, MaxY)),
-        Handle.Right => FromCorners(new Point(MinX, MinY), new Point(point.X, MaxY)),
-        _ => this,
-    };
+    public Rect Resized(Handle handle, Point point, bool square) => Resized(handle, point, square ? 1 : null);
 
-    private static Rect Corner(Point anchor, Point point, bool square) =>
-        FromCorners(anchor, square ? point.Squared(anchor) : point);
+    /// <summary>With a <paramref name="ratio"/>, width over height, a corner keeps it and an edge
+    /// takes the other side along with it, about that side's middle.</summary>
+    public Rect Resized(Handle handle, Point point, double? ratio)
+    {
+        var upright = Size.Width < Size.Height;
+        switch (handle)
+        {
+            case Handle.TopLeft: return Corner(new Point(MaxX, MaxY), point, ratio);
+            case Handle.TopRight: return Corner(new Point(MinX, MaxY), point, ratio);
+            case Handle.BottomRight: return Corner(new Point(MinX, MinY), point, ratio);
+            case Handle.BottomLeft: return Corner(new Point(MaxX, MinY), point, ratio);
+            case Handle.Top or Handle.Bottom:
+            {
+                var edge = handle == Handle.Top
+                    ? FromCorners(new Point(MinX, point.Y), new Point(MaxX, MaxY))
+                    : FromCorners(new Point(MinX, MinY), new Point(MaxX, point.Y));
+                if (ratio is not { } r) return edge;
+                var width = edge.Size.Height * (upright ? 1 / r : r);
+                return new Rect(MidX - width / 2, edge.MinY, width, edge.Size.Height);
+            }
+            case Handle.Left or Handle.Right:
+            {
+                var edge = handle == Handle.Left
+                    ? FromCorners(new Point(point.X, MinY), new Point(MaxX, MaxY))
+                    : FromCorners(new Point(MinX, MinY), new Point(point.X, MaxY));
+                if (ratio is not { } r) return edge;
+                var height = edge.Size.Width / (upright ? 1 / r : r);
+                return new Rect(edge.MinX, MidY - height / 2, edge.Size.Width, height);
+            }
+            default: return this;
+        }
+    }
+
+    private static Rect Corner(Point anchor, Point point, double? ratio) =>
+        FromCorners(anchor, ratio is { } r ? point.Fitted(anchor, r) : point);
+
+    /// <summary>The largest box of <paramref name="ratio"/> inside this one, about its middle,
+    /// upright when this one is.</summary>
+    public Rect Trimmed(double ratio)
+    {
+        var shape = Size.Width >= Size.Height ? ratio : 1 / ratio;
+        var (width, height) = Size.Width / Size.Height > shape
+            ? (Size.Height * shape, Size.Height)
+            : (Size.Width, Size.Width / shape);
+        return new Rect(MidX - width / 2, MidY - height / 2, width, height);
+    }
 
     /// <summary>The box a drag from <paramref name="anchor"/> to <paramref name="point"/>
     /// draws, the way Photoshop does: from the corner, or with <paramref name="fromCentre"/>
     /// (Alt) out from the anchor as its centre, and square when <paramref name="square"/>
     /// (Shift). The editor and the capture overlay both draw with this.</summary>
-    public static Rect Dragged(Point anchor, Point point, bool square, bool fromCentre)
+    public static Rect Dragged(Point anchor, Point point, bool square, bool fromCentre) =>
+        Dragged(anchor, point, square ? 1 : null, fromCentre);
+
+    /// <summary>The same, keeping <paramref name="ratio"/>, width over height, when there is one.</summary>
+    public static Rect Dragged(Point anchor, Point point, double? ratio, bool fromCentre)
     {
-        var end = square ? point.Squared(anchor) : point;
+        var end = ratio is { } r ? point.Fitted(anchor, r) : point;
         if (!fromCentre) return FromCorners(anchor, end);
         var halfWidth = Math.Abs(end.X - anchor.X);
         var halfHeight = Math.Abs(end.Y - anchor.Y);

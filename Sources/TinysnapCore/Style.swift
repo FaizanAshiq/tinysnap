@@ -35,6 +35,21 @@ public enum TextAlign: String, Codable, Sendable, CaseIterable {
     case left, center, right
 }
 
+/// The shape the crop keeps: any, or width to height as named.
+public enum CropRatio: String, Codable, Sendable, CaseIterable {
+    case free, square = "1:1", fourThree = "4:3", sixteenNine = "16:9"
+
+    /// Width over height, landscape; nil for a crop of any shape.
+    public var value: CGFloat? {
+        switch self {
+        case .free: nil
+        case .square: 1
+        case .fourThree: 4.0 / 3
+        case .sixteenNine: 16.0 / 9
+        }
+    }
+}
+
 public struct Style: Equatable, Codable, Sendable {
     public var colorHex: String
     public var size: StyleSize
@@ -59,12 +74,15 @@ public struct Style: Equatable, Codable, Sendable {
     public var freehand: Bool
     /// The spotlight only: what is outside it blurred instead of dimmed.
     public var blurOutside: Bool
+    /// The crop tool only: the shape a crop keeps.
+    public var cropRatio: CropRatio
 
     public static let opacityRange: ClosedRange<CGFloat> = 0.1...1
 
     public init(colorHex: String, size: StyleSize = .medium, filled: Bool = false, corners: CornerSize = .medium,
                 opacity: CGFloat = 1, difference: Bool = false, align: TextAlign = .left, bold: Bool = false,
-                dashed: Bool = false, letters: Bool = false, freehand: Bool = false, blurOutside: Bool = false) {
+                dashed: Bool = false, letters: Bool = false, freehand: Bool = false, blurOutside: Bool = false,
+                cropRatio: CropRatio = .free) {
         self.colorHex = colorHex
         self.size = size
         self.filled = filled
@@ -77,10 +95,11 @@ public struct Style: Equatable, Codable, Sendable {
         self.letters = letters
         self.freehand = freehand
         self.blurOutside = blurOutside
+        self.cropRatio = cropRatio
     }
 
     private enum CodingKeys: String, CodingKey {
-        case colorHex, size, filled, corners, opacity, difference, align, bold, dashed, letters, freehand, blurOutside
+        case colorHex, size, filled, corners, opacity, difference, align, bold, dashed, letters, freehand, blurOutside, cropRatio
         /// Read only: the square corner switch this replaced.
         case sharpCorners
     }
@@ -99,6 +118,7 @@ public struct Style: Equatable, Codable, Sendable {
         try container.encode(letters, forKey: .letters)
         try container.encode(freehand, forKey: .freehand)
         try container.encode(blurOutside, forKey: .blurOutside)
+        try container.encode(cropRatio, forKey: .cropRatio)
     }
 
     /// Every key is optional and a bad value falls back on its own, so one hand edited
@@ -121,6 +141,7 @@ public struct Style: Equatable, Codable, Sendable {
         letters = (try? container.decodeIfPresent(Bool.self, forKey: .letters)) ?? false
         freehand = (try? container.decodeIfPresent(Bool.self, forKey: .freehand)) ?? false
         blurOutside = (try? container.decodeIfPresent(Bool.self, forKey: .blurOutside)) ?? false
+        cropRatio = (try? container.decodeIfPresent(CropRatio.self, forKey: .cropRatio)) ?? .free
     }
 }
 

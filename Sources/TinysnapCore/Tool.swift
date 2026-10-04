@@ -102,6 +102,9 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
     /// The spotlight only: dim what is outside it, or blur it.
     public var hasOutsideBlur: Bool { self == .spotlight }
 
+    /// The crop only: any shape, or a ratio it keeps.
+    public var hasRatio: Bool { self == .crop }
+
     /// Pasted images: opacity and the difference blend, for comparing against the capture.
     public var hasOverlay: Bool { self == .image }
 
