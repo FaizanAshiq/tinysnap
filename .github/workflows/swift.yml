@@ -15,8 +15,9 @@ permissions:
 jobs:
   mac:
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - run: swift build --product TinysnapApp
       # test.sh wires in the Swift Testing macro plugin when only Command Line Tools are there.
-      - run: ./test.sh
+      - run: ./test.sh --no-parallel
