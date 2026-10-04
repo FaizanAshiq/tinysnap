@@ -98,11 +98,18 @@ final class StyleBar: NSVisualEffectView {
         row.edgeInsets = NSEdgeInsets(top: 7, left: 12, bottom: 7, right: 12)
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
+        // The bar is sized by hand to fit the row once its chips are in, and a window lays it
+        // out before that at its first size, zero. Just below required, the far edges give way
+        // until then rather than AppKit breaking the row's own constraints and logging it.
+        let trailing = row.trailingAnchor.constraint(equalTo: trailingAnchor)
+        let bottom = row.bottomAnchor.constraint(equalTo: bottomAnchor)
+        trailing.priority = .required - 1
+        bottom.priority = .required - 1
         NSLayoutConstraint.activate([
             row.leadingAnchor.constraint(equalTo: leadingAnchor),
-            row.trailingAnchor.constraint(equalTo: trailingAnchor),
+            trailing,
             row.topAnchor.constraint(equalTo: topAnchor),
-            row.bottomAnchor.constraint(equalTo: bottomAnchor),
+            bottom,
         ])
     }
 
