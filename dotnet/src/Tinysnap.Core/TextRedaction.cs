@@ -46,18 +46,19 @@ public static partial class TextRedaction
         });
     }
 
-    /// <summary>What in <paramref name="text"/> is the target. Phone numbers take seven digits or
-    /// more, numbers four or more, so a lone 5 in "after 5 pm" stays.</summary>
+    /// <summary>What in <paramref name="text"/> is the target. Phone numbers take 7 to 15 digits, the
+    /// most a phone number has, so a 16 digit card number is not one; numbers take four or more, so a
+    /// lone 5 in "after 5 pm" stays.</summary>
     private static IEnumerable<(int Start, int End)> Matches(string text, RedactTarget target)
     {
-        var (pattern, digits) = target switch
+        var (pattern, least, most) = target switch
         {
-            RedactTarget.Emails => (Email(), 0),
-            RedactTarget.Phones => (Phone(), 7),
-            _ => (Number(), 4),
+            RedactTarget.Emails => (Email(), 0, int.MaxValue),
+            RedactTarget.Phones => (Phone(), 7, 15),
+            _ => (Number(), 4, int.MaxValue),
         };
         return pattern.Matches(text)
-            .Where(match => match.Value.Count(char.IsDigit) >= digits)
+            .Where(match => match.Value.Count(char.IsDigit) is var digits && digits >= least && digits <= most)
             .Select(match => (match.Index, match.Index + match.Length));
     }
 

@@ -48,20 +48,21 @@ public enum TextRedaction {
         }
     }
 
-    /// What in `text` is the target. Phone numbers take seven digits or more, numbers four or
-    /// more, so a lone 5 in "after 5 pm" stays.
+    /// What in `text` is the target. Phone numbers take 7 to 15 digits, the most a phone number
+    /// has, so a 16 digit card number is not one; numbers take four or more, so a lone 5 in
+    /// "after 5 pm" stays.
     static func matches(in text: String, for target: RedactTarget) -> [NSRange] {
         let pattern: String
-        let digits: Int
+        let digits: ClosedRange<Int>
         switch target {
-        case .emails: (pattern, digits) = (#"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"#, 0)
-        case .phones: (pattern, digits) = (#"[+(]?\d[\d ().-]{5,}\d"#, 7)
-        case .numbers: (pattern, digits) = (#"[+(]?\d(?:[\d ().,/-]*\d)?"#, 4)
+        case .emails: (pattern, digits) = (#"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"#, 0...Int.max)
+        case .phones: (pattern, digits) = (#"[+(]?\d[\d ().-]{5,}\d"#, 7...15)
+        case .numbers: (pattern, digits) = (#"[+(]?\d(?:[\d ().,/-]*\d)?"#, 4...Int.max)
         case .allText: return [NSRange(location: 0, length: (text as NSString).length)]
         }
         guard let expression = try? NSRegularExpression(pattern: pattern) else { return [] }
         return expression.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length))
             .map(\.range)
-            .filter { (text as NSString).substring(with: $0).filter(\.isNumber).count >= digits }
+            .filter { digits.contains((text as NSString).substring(with: $0).filter(\.isNumber).count) }
     }
 }

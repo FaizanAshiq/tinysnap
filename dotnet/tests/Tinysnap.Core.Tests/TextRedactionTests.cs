@@ -46,6 +46,17 @@ public class TextRedactionTests
         Assert.DoesNotContain(boxes, box => box.Intersects(Page[3].Words[3].Box));
     }
 
+    /// <summary>A phone number has 15 digits at most, so a 16 digit card number is not one, and Phones
+    /// said it had erased two phone numbers on a page with one. Numbers still takes the card.</summary>
+    [Fact]
+    public void ACardNumberIsNotAPhoneNumber()
+    {
+        TextLine[] card = [Line(["Card", "4242", "4242", "4242", "4242"], 130)];
+        Assert.Empty(TextRedaction.Boxes(card, RedactTarget.Phones));
+        Assert.Single(TextRedaction.Boxes(card, RedactTarget.Numbers));
+        Assert.Single(TextRedaction.Boxes([Line(["Tel", "+44", "20", "7946", "0958"], 10)], RedactTarget.Phones));
+    }
+
     [Fact]
     public void AllTextCoversEveryLine()
     {

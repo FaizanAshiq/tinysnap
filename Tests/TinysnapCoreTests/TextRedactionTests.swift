@@ -31,6 +31,15 @@ struct TextRedactionTests {
         #expect(TextRedaction.boxes(in: page, for: .phones) == [words[1].box.union(words[2].box).union(words[3].box)])
     }
 
+    /// A phone number has 15 digits at most, so a 16 digit card number is not one, and Phones
+    /// said it had erased two phone numbers on a page with one. Numbers still takes the card.
+    @Test func aCardNumberIsNotAPhoneNumber() {
+        let card = [line(["Card", "4242", "4242", "4242", "4242"], y: 130)]
+        #expect(TextRedaction.boxes(in: card, for: .phones).isEmpty)
+        #expect(TextRedaction.boxes(in: card, for: .numbers).count == 1)
+        #expect(TextRedaction.boxes(in: [line(["Tel", "+44", "20", "7946", "0958"], y: 10)], for: .phones).count == 1)
+    }
+
     @Test func numbersCoverRunsOfFourDigitsOrMore() {
         let boxes = TextRedaction.boxes(in: page, for: .numbers)
         // The phone, the order number and the total; not the lone 5.
