@@ -52,6 +52,7 @@ internal sealed class AreaOverlay
     {
         foreach (var window in Windows) window.Show();
         var underPointer = pointer is { } at ? Windows.FirstOrDefault(w => w.Screen.Bounds.Contains(at)) : null;
+        if (underPointer is not null && pointer is { } start) underPointer.PointerAt(start);
         if ((underPointer ?? Windows.FirstOrDefault()) is { } keyed) raise(keyed);
     }
 
