@@ -134,9 +134,8 @@ public struct Document: Equatable, Sendable {
         let margin = Self.growthMargin * scale
         // A hidden shape is left out of the output, so it grows nothing.
         return annotations.filter { !$0.isHidden }.reduce(capture.bounds) { extent, annotation in
-            let bounds = annotation.bounds(scale: scale)
-            guard !capture.bounds.contains(bounds) else { return extent }
-            return extent.union(bounds.insetBy(dx: -margin, dy: -margin))
+            guard !capture.bounds.contains(annotation.growthBounds(scale: scale)) else { return extent }
+            return extent.union(annotation.bounds(scale: scale).insetBy(dx: -margin, dy: -margin))
         }
         .integral
     }

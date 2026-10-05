@@ -23,6 +23,20 @@ public class DocumentTests
         Assert.True(document.Extent.MaxX == 200 && document.Extent.MinY == 0);
     }
 
+    /// <summary>A measurement read from edge to edge, as across a whole capture whose card is too
+    /// faint to stop at, ends on the edges; its end ticks overhang them, and grew the canvas.</summary>
+    [Fact]
+    public void AMeasurementToTheEdgesGrowsNothing()
+    {
+        var across = Fixture.Annotation(new AnnotationKind.Measure(new Point(0, 50), new Point(200, 50)));
+        var down = Fixture.Annotation(new AnnotationKind.Measure(new Point(120, 0), new Point(120, 100)));
+        var document = new Document(Fixture.Capture(200, 100, 2), annotations: [across, down]);
+        Assert.Equal(new Rect(0, 0, 200, 100), document.Extent);
+        // One that goes past an edge still grows it.
+        var past = Fixture.Annotation(new AnnotationKind.Measure(new Point(120, -40), new Point(120, 100)));
+        Assert.True(new Document(Fixture.Capture(200, 100, 2), annotations: [past]).Extent.MinY < 0);
+    }
+
     [Fact]
     public void ACropStillDecidesWhatIsOutputOnAGrownCanvas()
     {

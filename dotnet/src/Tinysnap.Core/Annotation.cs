@@ -92,6 +92,15 @@ public sealed record Annotation(Guid Id, AnnotationKind Kind, Style Style, doubl
     public double PixelSize(double scale) => (Tool.Points(Style.Size) ?? 0) * scale;
 
     /// <summary>The box used for the selection outline, in capture pixels.</summary>
+    /// <summary>What grows the canvas when it passes the capture's edge: everything drawn, except a
+    /// measurement's end ticks, which overhang the edges a reading ends on.</summary>
+    internal Rect GrowthBounds(double scale)
+    {
+        if (Kind is not AnnotationKind.Measure(var from, var to)) return Bounds(scale);
+        var size = PixelSize(scale);
+        return Rect.FromCorners(from, to).Union(MeasureShape.Tag(from, to, size / scale, scale, LabelAt).Rect);
+    }
+
     public Rect Bounds(double scale)
     {
         var size = PixelSize(scale);

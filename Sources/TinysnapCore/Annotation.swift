@@ -88,6 +88,15 @@ public struct Annotation: Equatable, Identifiable, Sendable {
     }
 
     /// The box used for the selection outline, in capture pixels.
+    /// What grows the canvas when it passes the capture's edge: everything drawn, except a
+    /// measurement's end ticks, which overhang the edges a reading ends on.
+    func growthBounds(scale: CGFloat) -> CGRect {
+        guard case let .measure(from, to) = kind else { return bounds(scale: scale) }
+        let size = pixelSize(scale: scale)
+        return CGRect(corner: from, corner: to)
+            .union(MeasureShape.tag(from: from, to: to, width: size / scale, scale: scale, at: labelAt).rect)
+    }
+
     public func bounds(scale: CGFloat) -> CGRect {
         let size = pixelSize(scale: scale)
         switch kind {
