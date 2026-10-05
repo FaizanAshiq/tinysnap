@@ -38,6 +38,14 @@ internal sealed class GdiScreenCapture : IScreenCapture
     /// <summary>Nothing: the window's own activation gives it the keyboard on Windows.</summary>
     public void Focus(nint window) { }
 
+    /// <summary>The desktop window manager fades a new window in; this one appears as it is.</summary>
+    public void ShowAtOnce(nint window)
+    {
+        if (window == 0) return;
+        var off = 1;
+        DwmSetWindowAttribute(window, DWMWA_TRANSITIONS_FORCEDISABLED, ref off, sizeof(int));
+    }
+
     internal static Rect ToRect(RECT rect) => new(rect.Left, rect.Top, rect.Width, rect.Height);
 
     /// <summary>Every monitor's bounds in physical pixels, and its scale from its effective DPI.</summary>

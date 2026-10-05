@@ -23,6 +23,11 @@ public sealed class FakeScreenCapture(Func<FrozenDesktop> freeze, Func<Point> po
     public List<nint> Focused { get; } = [];
 
     public void Focus(nint window) => Focused.Add(window);
+
+    /// <summary>Every window handle shown without the system's animation, for the tests.</summary>
+    public List<nint> ShownAtOnce { get; } = [];
+
+    public void ShowAtOnce(nint window) => ShownAtOnce.Add(window);
 }
 
 /// <summary>A clipboard that keeps what it was given, for the tests to read back.</summary>

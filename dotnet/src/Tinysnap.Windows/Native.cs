@@ -161,6 +161,11 @@ internal static class Native
     [DllImport("dwmapi.dll")]
     internal static extern int DwmGetWindowAttribute(nint window, int attribute, out int value, int size);
 
+    internal const int DWMWA_TRANSITIONS_FORCEDISABLED = 3;
+
+    [DllImport("dwmapi.dll")]
+    internal static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int size);
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     internal static extern nint GetModuleHandleW(string? name);
 

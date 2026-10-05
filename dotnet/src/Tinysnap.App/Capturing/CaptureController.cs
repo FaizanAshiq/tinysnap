@@ -287,6 +287,8 @@ public sealed class CaptureController
             Overlay = null;
             Finish(result, desktop, purpose);
         }, platform.Screen.PointerPosition(), systemPicker, fullScreen: !platform.Screen.PlacesWindowsAsAsked, raise: Raise);
+        // Before it shows, or the system fades the frozen screen in after the hotkey.
+        foreach (var window in Overlay.Windows) platform.Screen.ShowAtOnce(window.TryGetPlatformHandle()?.Handle ?? 0);
         Overlay.Show();
         if (windowMode) Overlay.ToggleWindowMode();
     }
