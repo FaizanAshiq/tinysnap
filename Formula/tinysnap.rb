@@ -1,8 +1,8 @@
 class Tinysnap < Formula
   desc "Menu bar screenshot app: capture, mark up, redact, frame and pin"
   homepage "https://github.com/FaizanAshiq/tinysnap"
-  url "https://github.com/FaizanAshiq/tinysnap/archive/refs/tags/v1.4.3.tar.gz"
-  sha256 "85b56682992a5d62092e6bd0931c9a6674cef72d293634c97c477e5692a9666a"
+  url "https://github.com/FaizanAshiq/tinysnap/archive/refs/tags/v1.4.4.tar.gz"
+  sha256 "c1130840b59015a883bd46dfd52340f41035c96e98bed0285e5283998d2019b5"
   license "MIT"
   depends_on macos: :sonoma
 
