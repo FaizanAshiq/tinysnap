@@ -20,6 +20,18 @@ struct DocumentTests {
         #expect(document.extent.maxX == 200 && document.extent.minY == 0)
     }
 
+    /// A measurement read from edge to edge, as across a whole capture whose card is too faint
+    /// to stop at, ends on the edges; its end ticks overhang them, and grew the canvas.
+    @Test func aMeasurementToTheEdgesGrowsNothing() {
+        let across = Fixture.annotation(.measure(from: CGPoint(x: 0, y: 50), to: CGPoint(x: 200, y: 50)))
+        let down = Fixture.annotation(.measure(from: CGPoint(x: 120, y: 0), to: CGPoint(x: 120, y: 100)))
+        let document = Document(capture: Fixture.capture(width: 200, height: 100, scale: 2), annotations: [across, down])
+        #expect(document.extent == CGRect(x: 0, y: 0, width: 200, height: 100))
+        // One that goes past an edge still grows it.
+        let past = Fixture.annotation(.measure(from: CGPoint(x: 120, y: -40), to: CGPoint(x: 120, y: 100)))
+        #expect(Document(capture: Fixture.capture(width: 200, height: 100, scale: 2), annotations: [past]).extent.minY < 0)
+    }
+
     @Test func aCropStillDecidesWhatIsOutputOnAGrownCanvas() {
         let box = Fixture.annotation(.rectangle(CGRect(x: 150, y: 10, width: 100, height: 20)))
         var document = Document(capture: Fixture.capture(width: 200, height: 100), annotations: [box])

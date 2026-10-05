@@ -160,8 +160,9 @@ public sealed record Document
             // A hidden shape is left out of the output, so it grows nothing.
             return Annotations.Where(a => !a.IsHidden).Aggregate(bounds, (extent, annotation) =>
             {
-                var box = annotation.Bounds(Scale);
-                return bounds.Contains(box) ? extent : extent.Union(box.Inset(-margin, -margin));
+                return bounds.Contains(annotation.GrowthBounds(Scale))
+                    ? extent
+                    : extent.Union(annotation.Bounds(Scale).Inset(-margin, -margin));
             }).Integral;
         }
     }
