@@ -133,12 +133,12 @@ public struct EditorSession {
             }
             return
         }
-        let before = annotation.style.colorHex
+        let before = annotation.style
         change(&annotation.style)
         styles[annotation.tool] = annotation.style
         // Only a colour that was picked becomes the shared one. Stepping an old red
         // annotation's size leaves a blue shared colour alone.
-        if annotation.style.colorHex != before { colorHex = annotation.style.colorHex }
+        if annotation.style.colorHex != before.colorHex { colorHex = annotation.style.colorHex }
         display.replace(annotation)
         // Every spotlight lights one shared area, so all of them dim or all of them blur.
         if case .spotlight = annotation.kind {
@@ -147,6 +147,11 @@ public struct EditorSession {
                 display.annotations[index].style.blurOutside = annotation.style.blurOutside
             }
         }
+        // Straight or Freehand only sets how the next stroke is drawn, as a stroke already drawn
+        // keeps its shape, so a change to nothing else takes no undo step.
+        var drawn = annotation.style
+        drawn.freehand = before.freehand
+        guard drawn != before else { return }
         // A text still being typed is committed when typing ends, as one step.
         if typingID == nil { history.commit(display, mergeKey: merging ? "style \(id)" : nil) }
     }

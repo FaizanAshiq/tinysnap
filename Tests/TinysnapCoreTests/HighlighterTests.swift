@@ -87,4 +87,20 @@ struct FreehandHighlighterTests {
         #expect(try JSONDecoder().decode(Style.self, from: old).freehand == false)
         #expect(Tool.highlighter.hasFreehand && !Tool.line.hasFreehand)
     }
+
+    /// Straight or Freehand sets how the next stroke is drawn; a stroke already drawn keeps its
+    /// shape. Picked with one selected, it took an undo step that changed nothing.
+    @Test func pickingFreehandWithAStrokeSelectedTakesNoUndoStep() {
+        let stroke = Fixture.annotation(.highlighter(from: CGPoint(x: 10, y: 10), to: CGPoint(x: 90, y: 10)))
+        var session = EditorSession(document: Document(capture: Fixture.capture(width: 100, height: 50), annotations: [stroke]),
+                                    tool: .highlighter)
+        session.select(stroke.id)
+        session.restyle { $0.freehand = true }
+        #expect(!session.history.canUndo)
+        #expect(session.style(for: .highlighter).freehand)
+        #expect(session.selectedAnnotation?.style.freehand == true)
+        // A change that shows, such as the colour, still takes its step.
+        session.restyle { $0.colorHex = "#007AFF" }
+        #expect(session.history.canUndo)
+    }
 }

@@ -100,4 +100,21 @@ public class FreehandHighlighterTests
         Assert.True(Tool.Highlighter.HasFreehand());
         Assert.False(Tool.Line.HasFreehand());
     }
+
+    /// <summary>Straight or Freehand sets how the next stroke is drawn; a stroke already drawn keeps
+    /// its shape. Picked with one selected, it took an undo step that changed nothing.</summary>
+    [Fact]
+    public void PickingFreehandWithAStrokeSelectedTakesNoUndoStep()
+    {
+        var stroke = Fixture.Annotation(new AnnotationKind.Highlighter(new Point(10, 10), new Point(90, 10)));
+        var session = new EditorSession(new Document(Fixture.Capture(100, 50), annotations: [stroke]), Tool.Highlighter);
+        session.Select(stroke.Id);
+        session.Restyle(s => s with { Freehand = true });
+        Assert.False(session.History.CanUndo);
+        Assert.True(session.StyleFor(Tool.Highlighter).Freehand);
+        Assert.True(session.SelectedAnnotation?.Style.Freehand);
+        // A change that shows, such as the colour, still takes its step.
+        session.Restyle(s => s with { ColorHex = "#007AFF" });
+        Assert.True(session.History.CanUndo);
+    }
 }

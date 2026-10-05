@@ -143,12 +143,12 @@ public sealed class EditorSession
             }
             return;
         }
-        var before = annotation.Style.ColorHex;
+        var before = annotation.Style;
         annotation = annotation with { Style = change(annotation.Style) };
         styles[annotation.Tool] = annotation.Style;
         // Only a colour that was picked becomes the shared one. Stepping an old red
         // annotation's size leaves a blue shared colour alone.
-        if (annotation.Style.ColorHex != before) ColorHex = annotation.Style.ColorHex;
+        if (annotation.Style.ColorHex != before.ColorHex) ColorHex = annotation.Style.ColorHex;
         Display = Display.Replacing(annotation);
         // Every spotlight lights one shared area, so all of them dim or all of them blur.
         if (annotation.Kind is AnnotationKind.Spotlight)
@@ -161,6 +161,9 @@ public sealed class EditorSession
                     : a)],
             };
         }
+        // Straight or Freehand only sets how the next stroke is drawn, as a stroke already drawn
+        // keeps its shape, so a change to nothing else takes no undo step.
+        if (annotation.Style with { Freehand = before.Freehand } == before) return;
         // A text still being typed is committed when typing ends, as one step.
         if (TypingId is null) History.Commit(Display, merging ? $"style {id}" : null);
     }
