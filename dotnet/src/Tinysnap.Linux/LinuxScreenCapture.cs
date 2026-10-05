@@ -66,9 +66,9 @@ internal sealed class LinuxScreenCapture(Func<X11Screen?> screen, Func<DBusConne
         if (window != 0) screen()?.Activate((nuint)window);
     }
 
-    // ponytail: GNOME animates a normal window as it maps, and an app can only opt out by giving
-    // it another window type, which may cost it the keyboard or full screen; untried until a GNOME
-    // session can check the overlay still takes Esc.
+    /// <summary>Nothing an app can do: GNOME Shell zooms in every normal window as it maps, and Mutter
+    /// lets only a normal window go full screen, which the overlay needs to cover the top bar. The
+    /// person can turn it off in Settings, Accessibility, Reduce Animation.</summary>
     public void ShowAtOnce(nint window) { }
 
     /// <summary>The window GNOME's tool picked, at the scale of the last freeze.</summary>
