@@ -33,6 +33,9 @@ final class AreaOverlayController {
             window.hasShadow = false
             window.level = .screenSaver
             window.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+            // The frozen screen is there the moment the hotkey lands, and gone the moment the box
+            // is done: AppKit would fade it in and out.
+            window.animationBehavior = .none
 
             // The frozen image sits in a layer, so moving the pointer only redraws the
             // thin selection view above it, never the full resolution image.

@@ -85,6 +85,19 @@ public class CaptureFlowTests
         Assert.Null(controller.Overlay);
     }
 
+    /// <summary>The frozen screen is there the moment the hotkey lands: every overlay window, one a
+    /// monitor, has the system's open animation turned off before it shows.</summary>
+    [AvaloniaFact]
+    public void TheOverlayShowsWithoutTheSystemAnimation()
+    {
+        var plain = Screens.Frozen(new CoreRect(0, 0, 1920, 1080), 1, SKColors.Red);
+        var scaled = Screens.Frozen(new CoreRect(1920, 0, 2880, 1620), 1.5, SKColors.Blue);
+        var screen = new FakeScreenCapture(() => Screens.Desktop(plain, scaled), () => new CorePoint(100, 100));
+        var controller = new CaptureController(new FakePlatform(screen), TestServices.Store(), new LibraryStore(TestServices.TemporaryFolder()));
+        controller.CaptureArea();
+        Assert.Equal(controller.Overlay!.Windows.Count, screen.ShownAtOnce.Count);
+    }
+
     [AvaloniaFact]
     public void ABoxOnAOneAndAHalfMonitorBesideAPlainOneCutsItsOwnPixels()
     {

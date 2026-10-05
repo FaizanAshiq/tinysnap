@@ -42,6 +42,10 @@ public interface IScreenCapture
     /// app may be turned down: GNOME refuses an app that a hotkey reached without any input of its
     /// own. Windows needs nothing past the window's own activation.</summary>
     void Focus(nint window);
+
+    /// <summary>Turns off the system's animation for a window about to be shown, by its native
+    /// handle, so a frozen screen is there the moment the hotkey lands instead of fading in.</summary>
+    void ShowAtOnce(nint window);
 }
 
 public interface IHotkeys : IDisposable
