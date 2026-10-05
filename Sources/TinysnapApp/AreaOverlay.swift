@@ -63,6 +63,7 @@ final class AreaOverlayController {
         let key = windows.first { $0.frame.contains(mouse) } ?? windows.first
         key?.makeKeyAndOrderFront(nil)
         if let key, let selection = key.contentView?.subviews.first { key.makeFirstResponder(selection) }
+        selectionViews.forEach { $0.followPointer() }
         watchForLostFocus()
     }
 
@@ -178,6 +179,15 @@ final class AreaSelectionView: NSView {
     private func location(_ event: NSEvent) -> CGPoint {
         let point = convert(event.locationInWindow, from: nil)
         return CGPoint(x: min(max(point.x, 0), bounds.width), y: min(max(point.y, 0), bounds.height))
+    }
+
+    /// The pointer where it is as the overlay opens, so the guide lines are there before it moves.
+    /// Left out on the displays it is not over.
+    func followPointer() {
+        guard let window else { return }
+        let point = convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+        pointer = bounds.contains(point) ? point : nil
+        needsDisplay = true
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -305,8 +315,10 @@ final class AreaSelectionView: NSView {
             drawReadout("\(Int((rect.width * display.scale).rounded())) × \(Int((rect.height * display.scale).rounded()))",
                         near: CGPoint(x: rect.maxX, y: rect.maxY))
         } else if !windowMode, let pointer {
-            NSColor.white.withAlphaComponent(0.6).setStroke()
+            // Faint and dotted, to line a box up by without standing out from the screen under it.
+            NSColor.white.withAlphaComponent(0.35).setStroke()
             let cross = NSBezierPath()
+            cross.setLineDash([1, 3], count: 2, phase: 0)
             cross.move(to: CGPoint(x: pointer.x, y: 0))
             cross.line(to: CGPoint(x: pointer.x, y: bounds.height))
             cross.move(to: CGPoint(x: 0, y: pointer.y))

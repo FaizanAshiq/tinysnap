@@ -85,6 +85,19 @@ public class CaptureFlowTests
         Assert.Null(controller.Overlay);
     }
 
+    /// <summary>The guide lines cross at the pointer the moment the screen freezes, on the monitor
+    /// it is over, rather than after it first moves.</summary>
+    [AvaloniaFact]
+    public void TheGuideLinesAreAtThePointerBeforeItMoves()
+    {
+        var plain = Screens.Frozen(new CoreRect(0, 0, 1920, 1080), 1, SKColors.Red);
+        var scaled = Screens.Frozen(new CoreRect(1920, 0, 2880, 1620), 1.5, SKColors.Blue);
+        var controller = Controller(Screens.Desktop(plain, scaled), new CorePoint(2220, 450));
+        controller.CaptureArea();
+        Assert.Null(controller.Overlay!.Windows[0].Crosshair);
+        Assert.Equal(new Point(200, 300), controller.Overlay.Windows[1].Crosshair);
+    }
+
     /// <summary>The frozen screen is there the moment the hotkey lands: every overlay window, one a
     /// monitor, has the system's open animation turned off before it shows.</summary>
     [AvaloniaFact]

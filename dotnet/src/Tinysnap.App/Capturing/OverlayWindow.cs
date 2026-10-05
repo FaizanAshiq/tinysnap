@@ -45,6 +45,18 @@ internal sealed class OverlayWindow : Window
         Content = new Surface(this);
     }
 
+    /// <summary>Where the guide lines cross: at the pointer, while no box is drawn and no window is
+    /// being picked. Null when the pointer is on another monitor.</summary>
+    internal Point? Crosshair => owner.WindowMode || selection.Selection is not null ? null : pointer;
+
+    /// <summary>The pointer where it is as the overlay opens, in the desktop's pixels, so the guide
+    /// lines are there before it moves.</summary>
+    internal void PointerAt(CorePoint pixel)
+    {
+        pointer = new Point((pixel.X - Screen.Bounds.X) / Screen.Scale, (pixel.Y - Screen.Bounds.Y) / Screen.Scale);
+        Redraw();
+    }
+
     internal void WindowModeChanged()
     {
         hovered = owner.WindowMode && pointer is { } at ? owner.WindowAt(ToPixel(at)) : null;
@@ -157,7 +169,8 @@ internal sealed class OverlayWindow : Window
         private static readonly IBrush Dim = new SolidColorBrush(Color.FromArgb(89, 0, 0, 0));
         private static readonly IBrush Lit = new SolidColorBrush(Color.FromArgb(64, 10, 132, 255));
         private static readonly IPen Edge = new Pen(Brushes.White, 1);
-        private static readonly IPen Cross = new Pen(new SolidColorBrush(Color.FromArgb(153, 255, 255, 255)), 1);
+        // Faint and dotted, to line a box up by without standing out from the screen under it.
+        private static readonly IPen Cross = new Pen(new SolidColorBrush(Color.FromArgb(89, 255, 255, 255)), 1, new DashStyle([1, 3], 0));
         private static readonly IBrush ReadoutGround = new SolidColorBrush(Color.FromArgb(191, 0, 0, 0));
         private static readonly SKSamplingOptions Sampling = new(SKFilterMode.Linear, SKMipmapMode.Linear);
 
@@ -184,7 +197,7 @@ internal sealed class OverlayWindow : Window
 
             if (box is { } selected)
                 DrawReadout(context, window.selection.Readout(window.Screen.Scale), new CorePoint(selected.MaxX, selected.MaxY));
-            else if (!window.owner.WindowMode && window.pointer is { } at)
+            else if (window.Crosshair is { } at)
             {
                 context.DrawLine(Cross, new Point(at.X, 0), new Point(at.X, bounds.Height));
                 context.DrawLine(Cross, new Point(0, at.Y), new Point(bounds.Width, at.Y));
