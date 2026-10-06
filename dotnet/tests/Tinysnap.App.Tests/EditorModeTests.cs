@@ -30,17 +30,17 @@ public class EditorModeTests
     private static List<string?> Names(IEnumerable<Control> controls) => [.. controls.Select(AutomationProperties.GetName)];
 
     [AvaloniaFact]
-    public void EssentialShowsTheEverydayToolsThenUndoSaveAndCopy()
+    public void EssentialShowsCopyAndSaveThenTheEverydayToolsAndUndo()
     {
         var editor = Open(EditorMode.Essential);
         Assert.Equal(ToolInfo.Essential, editor.ShownTools);
-        Assert.Equal(["Undo", "Save", "Copy"], Names(editor.ShownOutputs));
+        Assert.Equal(["Copy", "Save", "Undo"], Names(editor.ShownOutputs));
         Assert.False(editor.LayersButton.IsVisible);
         Assert.Equal(EditorMode.Essential, editor.ModeSwitch.Mode);
     }
 
     [AvaloniaFact]
-    public void ProShowsEveryToolGroupedByKindThenWhatTheCaptureBecomes()
+    public void ProShowsSharingThenEveryToolGroupedByKindThenReadingAndFraming()
     {
         var editor = Open(EditorMode.Pro);
         Assert.Equal(
@@ -52,7 +52,7 @@ public class EditorModeTests
             Tool.Blur, Tool.Pixelate, Tool.Erase,
         ], editor.ShownTools);
         Assert.Equal(5, editor.ToolGroups);
-        Assert.Equal(["Copy Text", "Scan QR Code", "Backdrop", "Export size", "Pin and close", "Drag out", "Save", "Copy"],
+        Assert.Equal(["Copy", "Save", "Drag out", "Pin and close", "Copy Text", "Scan QR Code", "Backdrop", "Export size"],
                      Names(editor.ShownOutputs));
         Assert.True(editor.LayersButton.IsVisible);
         Assert.Equal(EditorMode.Pro, editor.ModeSwitch.Mode);

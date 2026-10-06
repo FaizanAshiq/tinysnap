@@ -426,8 +426,8 @@ internal sealed class EditorWindow : Window
         Arrange(mode);
     }
 
-    /// <summary>Essential: the everyday tools, Undo, then Save and Copy. Pro: every tool in groups
-    /// by kind, then reading, finishing and sharing. The same buttons either way, laid out again.</summary>
+    /// <summary>Essential: Copy and Save, the everyday tools, then Undo. Pro: sharing, every tool in
+    /// groups by kind, then reading and framing. The same buttons either way, laid out again.</summary>
     private void Arrange(EditorMode mode)
     {
         shownMode = mode;
@@ -438,11 +438,9 @@ internal sealed class EditorWindow : Window
         Control Button(Tool tool) => ToolButtons.First(b => b.Tool == tool).Button;
         var essential = mode == EditorMode.Essential;
         Control[][] left = essential
-            ? [[.. ToolInfo.Essential.Select(Button)], [UndoButton]]
-            : [.. Groups.Select(group => group.Select(Button).ToArray())];
-        Control[][] right = essential
-            ? [[saveButton, copyButton]]
-            : [[CopyTextButton, scanButton], [BackdropButton, sizeButton], [pinButton, dragOut, saveButton, copyButton]];
+            ? [[copyButton, saveButton], [.. ToolInfo.Essential.Select(Button)], [UndoButton]]
+            : [[copyButton, saveButton, dragOut, pinButton], .. Groups.Select(group => group.Select(Button).ToArray())];
+        Control[][] right = essential ? [] : [[CopyTextButton, scanButton], [BackdropButton, sizeButton]];
         foreach (var group in left) toolsPart.Children.Add(Capsule(group));
         // The colour under the pointer follows the Pro tools, Measure's above all.
         if (!essential) toolsPart.Children.Add(readout);
