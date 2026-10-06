@@ -2,8 +2,8 @@ using Microsoft.Win32;
 
 namespace Tinysnap.Windows.Tests;
 
-/// <summary>Windows 11 hands Print Screen to the Snipping Tool while its setting is on, or was
-/// never set. Tinysnap turns it off while it holds the key and puts it back exactly as it was.</summary>
+/// <summary>Up to 1.4.4 Tinysnap turned the Snipping Tool's Print Screen setting off while it held the
+/// key, keeping what it held in its own key. A copy killed first left it off; this puts it back.</summary>
 public class PrintScreenKeyTests : IDisposable
 {
     private const string Setting = "PrintScreenKeyForSnippingEnabled";
@@ -24,48 +24,38 @@ public class PrintScreenKeyTests : IDisposable
         key.SetValue(Setting, value, RegistryValueKind.DWord);
     }
 
-    [Fact]
-    public void ASettingThatWasOnIsTurnedOffThenBackOn()
+    /// <summary>As an earlier copy left it: the setting off, and what it held kept in Tinysnap's key.</summary>
+    private void LeftOffByAnEarlierCopy(object before)
     {
-        Set(1);
-        var printScreen = new PrintScreenKey(keyboard, Own);
-        printScreen.Take();
-        Assert.Equal(0, Value());
-        printScreen.GiveBack();
+        Set(0);
+        using var own = Registry.CurrentUser.CreateSubKey(Own);
+        own.SetValue("PrintScreenKeyBefore", before);
+    }
+
+    [Fact]
+    public void ASettingThatWasOnIsPutBackOn()
+    {
+        LeftOffByAnEarlierCopy(1);
+        new PrintScreenKey(keyboard, Own).GiveBack();
         Assert.Equal(1, Value());
     }
 
     [Fact]
-    public void ASettingNeverSetIsTurnedOffThenLeftUnsetAgain()
+    public void ASettingThatWasNeverSetIsLeftUnsetAgain()
     {
-        Registry.CurrentUser.CreateSubKey(keyboard).Dispose();
-        var printScreen = new PrintScreenKey(keyboard, Own);
-        printScreen.Take();
-        Assert.Equal(0, Value());
-        printScreen.GiveBack();
+        LeftOffByAnEarlierCopy("unset");
+        new PrintScreenKey(keyboard, Own).GiveBack();
         Assert.Null(Value());
     }
 
+    /// <summary>Once put back, it is the person's: a later start leaves it as they set it.</summary>
     [Fact]
-    public void ASettingLeftOffByACopyThatWasKilledIsStillPutBack()
+    public void ASettingIsPutBackOnceThenLeftAlone()
     {
-        Set(1);
-        new PrintScreenKey(keyboard, Own).Take();
-        // Killed: never gave it back. The next copy finds it off, and knows it was on.
-        var next = new PrintScreenKey(keyboard, Own);
-        next.Take();
-        Assert.Equal(0, Value());
-        next.GiveBack();
-        Assert.Equal(1, Value());
-    }
-
-    [Fact]
-    public void ASettingAlreadyOffIsLeftAlone()
-    {
+        LeftOffByAnEarlierCopy(1);
+        new PrintScreenKey(keyboard, Own).GiveBack();
         Set(0);
-        var printScreen = new PrintScreenKey(keyboard, Own);
-        printScreen.Take();
-        printScreen.GiveBack();
+        new PrintScreenKey(keyboard, Own).GiveBack();
         Assert.Equal(0, Value());
     }
 }
