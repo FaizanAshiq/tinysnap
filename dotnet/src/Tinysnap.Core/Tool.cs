@@ -103,6 +103,9 @@ public static class ToolInfo
     /// <summary>The crop only: any shape, or a ratio it keeps.</summary>
     public static bool HasRatio(this Tool tool) => tool is Tool.Crop;
 
+    /// <summary>Blur, pixelate and erase: they hide what is under them rather than add anything.</summary>
+    public static bool HidesCapture(this Tool tool) => tool is Tool.Blur or Tool.Pixelate or Tool.Erase;
+
     /// <summary>Erase only: cover every email, phone number, number or line of text the reader finds.</summary>
     public static bool HasRedact(this Tool tool) => tool is Tool.Erase;
 
