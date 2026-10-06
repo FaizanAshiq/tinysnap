@@ -444,8 +444,8 @@ internal sealed class EditorWindow : Window
             ? [[saveButton, copyButton]]
             : [[CopyTextButton, scanButton], [BackdropButton, sizeButton], [pinButton, dragOut, saveButton, copyButton]];
         foreach (var group in left) toolsPart.Children.Add(Capsule(group));
-        // The colour under the pointer goes with the Pro tools that need it, Measure's above all.
-        if (!essential) outputsPart.Children.Add(readout);
+        // The colour under the pointer follows the Pro tools, Measure's above all.
+        if (!essential) toolsPart.Children.Add(readout);
         foreach (var group in right) outputsPart.Children.Add(Capsule(group));
         ShownTools = essential ? ToolInfo.Essential : [.. Groups.SelectMany(group => group)];
         ToolGroups = essential ? 1 : Groups.Length;
