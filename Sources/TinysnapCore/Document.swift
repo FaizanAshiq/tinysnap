@@ -140,6 +140,32 @@ public struct Document: Equatable, Sendable {
         .integral
     }
 
+    /// The crop, taking in every shape that changed since `before` and now reaches past it, with
+    /// the margin the canvas gives a shape drawn past the capture's edge, and keeping `ratio` when
+    /// there is one. Measured from `before`'s crop, so a shape dragged out and back leaves it as it
+    /// was. A shape wholly outside is somewhere the crop leaves out, as one cropped away is, and
+    /// blur, pixelate and erase hide what is under them rather than add anything: neither moves it.
+    public mutating func cropFollowShapes(since before: Document, ratio: CGFloat?) {
+        guard let base = before.crop else { return }
+        let earlier = Dictionary(before.annotations.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let changed = annotations.filter { earlier[$0.id] != $0 }
+        guard !changed.isEmpty else { return }
+        let margin = Self.growthMargin * scale
+        var grown = base
+        for annotation in changed where !annotation.isHidden && !annotation.tool.hidesCapture {
+            let reach = annotation.growthBounds(scale: scale)
+            guard reach.intersects(base), !base.contains(reach) else { continue }
+            grown = grown.union(annotation.bounds(scale: scale).insetBy(dx: -margin, dy: -margin))
+        }
+        guard grown != base else {
+            crop = base
+            return
+        }
+        // Grown to the ratio past the canvas's edge, it moves back in rather than lose the ratio.
+        if let ratio { grown = grown.expanded(toRatio: ratio).shifted(into: extent) }
+        crop = grown.intersection(extent).wholePixels
+    }
+
     public func annotation(_ id: Annotation.ID) -> Annotation? {
         annotations.first { $0.id == id }
     }

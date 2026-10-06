@@ -129,6 +129,22 @@ extension CGRect {
         return CGRect(x: midX - size.width / 2, y: midY - size.height / 2, width: size.width, height: size.height)
     }
 
+    /// The smallest box of `ratio` holding this one, about its middle, upright when this one is.
+    public func expanded(toRatio ratio: CGFloat) -> CGRect {
+        let shape = width >= height ? ratio : 1 / ratio
+        let size = width / height > shape ? CGSize(width: width, height: width / shape)
+                                          : CGSize(width: height * shape, height: height)
+        return CGRect(x: midX - size.width / 2, y: midY - size.height / 2, width: size.width, height: size.height)
+    }
+
+    /// Moved the least that puts it inside `bounds`, as far as it fits there.
+    public func shifted(into bounds: CGRect) -> CGRect {
+        var rect = self
+        rect.origin.x = max(bounds.minX, min(rect.minX, bounds.maxX - rect.width))
+        rect.origin.y = max(bounds.minY, min(rect.minY, bounds.maxY - rect.height))
+        return rect
+    }
+
     /// The box a drag from `anchor` to `point` draws, the way Photoshop does: from the
     /// corner, or with `fromCentre` (Option) out from `anchor` as its centre, and square
     /// when `square` (Shift). The editor and the capture overlay both draw with this.

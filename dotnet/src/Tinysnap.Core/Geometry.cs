@@ -242,6 +242,22 @@ public readonly record struct Rect(double X, double Y, double Width, double Heig
         return new Rect(MidX - width / 2, MidY - height / 2, width, height);
     }
 
+    /// <summary>The smallest box of <paramref name="ratio"/> holding this one, about its middle,
+    /// upright when this one is.</summary>
+    public Rect Expanded(double ratio)
+    {
+        var shape = Size.Width >= Size.Height ? ratio : 1 / ratio;
+        var (width, height) = Size.Width / Size.Height > shape
+            ? (Size.Width, Size.Width / shape)
+            : (Size.Height * shape, Size.Height);
+        return new Rect(MidX - width / 2, MidY - height / 2, width, height);
+    }
+
+    /// <summary>Moved the least that puts it inside <paramref name="bounds"/>, as far as it fits there.</summary>
+    public Rect ShiftedInto(Rect bounds) =>
+        new(Math.Max(bounds.MinX, Math.Min(MinX, bounds.MaxX - Size.Width)),
+            Math.Max(bounds.MinY, Math.Min(MinY, bounds.MaxY - Size.Height)), Size.Width, Size.Height);
+
     /// <summary>The box a drag from <paramref name="anchor"/> to <paramref name="point"/>
     /// draws, the way Photoshop does: from the corner, or with <paramref name="fromCentre"/>
     /// (Alt) out from the anchor as its centre, and square when <paramref name="square"/>
