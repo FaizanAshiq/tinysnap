@@ -49,6 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let center = HotKeyCenter { [weak self] action in self?.perform(action) }
         takenHotKeys = center.register(preferences.hotkeys)
         hotKeys = center
+        // Said once, at launch: Settings marks a taken shortcut while it is being changed.
+        if let notice = preferences.hotkeys.takenNotice(takenHotKeys) {
+            DispatchQueue.main.async { [weak self] in self?.showTakenHotKeys(notice) }
+        }
 
         Task { await ScreenReader.warmUp() }
         // Off the main thread and at low priority: the first read can take many seconds.
@@ -197,6 +201,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.addButton(withTitle: "Later").keyEquivalent = "\u{1b}"
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn { restart() }
+    }
+
+    private func showTakenHotKeys(_ notice: (message: String, detail: String)) {
+        let alert = NSAlert()
+        alert.messageText = notice.message
+        alert.informativeText = notice.detail
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     private func showCaptureFailed() {

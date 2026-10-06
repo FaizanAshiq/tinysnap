@@ -138,6 +138,33 @@ public sealed record HotKeys(HotKeyBinding? Area, HotKeyBinding? Window, HotKeyB
     public HotKeyAction? ActionUsing(HotKeyBinding binding) =>
         Enum.GetValues<HotKeyAction>().Cast<HotKeyAction?>().FirstOrDefault(action => this[action!.Value] == binding);
 
+    /// <summary>What to tell the person when another app or the system holds some of these shortcuts,
+    /// so they do nothing, and how to get them back; null when none is taken. On Windows, Print Screen
+    /// is the screen snip's, which only Windows Settings and a restart let go of.</summary>
+    public (string Message, string Detail)? TakenNotice(IReadOnlySet<HotKeyAction> taken, bool windows)
+    {
+        var keys = Enum.GetValues<HotKeyAction>().Where(taken.Contains).Select(action => this[action]).OfType<HotKeyBinding>().ToList();
+        if (keys.Count == 0) return null;
+        var snip = windows && keys.Any(IsPrintScreen);
+        var others = keys.Where(key => !snip || !IsPrintScreen(key)).ToList();
+        var settings = keys.Count == 1 ? "pick another shortcut in Tinysnap Settings" : "pick other shortcuts in Tinysnap Settings";
+        var message = $"{List(keys)} {(keys.Count == 1 ? "is" : "are")} already in use";
+        if (!snip) return (message, $"Another app or the system holds {Them(others)}. Free {Them(others)} there, or {settings}.");
+        var detail = $"Windows keeps {(others.Count == 0 ? "it" : "Print Screen")} for its own screen snip. To free it, search Windows " +
+                     "Settings for Print screen, turn off \"Use the Print screen key to open screen capture\" and restart the computer.";
+        if (others.Count > 0) detail += $" Another app or the system holds {List(others)}: free {Them(others)} there.";
+        return (message, $"{detail} Or {settings}.");
+    }
+
+    private static bool IsPrintScreen(HotKeyBinding key) => key.KeyCode == 0x2C && key.Modifiers.IsEmpty;
+
+    private static string Them(List<HotKeyBinding> keys) => keys.Count == 1 ? "it" : "them";
+
+    /// <summary>A, B and C.</summary>
+    private static string List(List<HotKeyBinding> keys) =>
+        keys.Count == 1 ? keys[0].DisplayString
+            : $"{string.Join(", ", keys.SkipLast(1).Select(key => key.DisplayString))} and {keys[^1].DisplayString}";
+
     /// <summary>Null is written as null, not left out. Left out, a hotkey the user cleared
     /// would read back as the default on the next launch.</summary>
     public JsonObject ToJson()

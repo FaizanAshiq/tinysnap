@@ -50,8 +50,13 @@ small stand-in for the screenshot portal, which GNOME's own cannot run there: th
 the session, nothing showing at start, the overlay full screen over the top bar with the frozen
 screen in it, an editor for a fullscreen capture, and Capture Window through GNOME's picker.
 
+Print Screen on Windows is caught by a keyboard hook before Windows' own screen snip sees it, so
+it opens Tinysnap whatever Windows Settings says, and it goes back to the snip when Tinysnap
+quits. A shortcut that is taken all the same, by another app or the system, is told once at
+launch with how to free it, on every platform.
+
 What only a person on a Windows machine can check: capture on real monitors at mixed scales,
-pasting into other apps, dragging out, how a pin resizes on a real wheel and touchpad, the
+Print Screen with the screen snip turned on, pasting into other apps, dragging out, how a pin resizes on a real wheel and touchpad, the
 thumbnail's slide and swipe, the tray menu, start at login, the Recycle Bin, a second launch
 with no file bringing the first forward, text in the person's own languages, the desktop
 picture as a backdrop, the ARM64 build, and how it all feels.

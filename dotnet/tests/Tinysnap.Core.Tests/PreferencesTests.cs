@@ -113,6 +113,38 @@ public class PreferencesTests
         Assert.Null(HotKeys.Defaults.ActionUsing(new HotKeyBinding(0x31, [ModifierKey.Control])));
     }
 
+    /// <summary>A shortcut another app holds does nothing, so the person is told which, and how to
+    /// get it back. Print Screen on Windows is the screen snip, freed in Windows Settings.</summary>
+    [Fact]
+    public void ATakenShortcutSaysWhoHoldsItAndHowToFreeIt()
+    {
+        Assert.Null(HotKeys.Defaults.TakenNotice(new HashSet<HotKeyAction>(), windows: true));
+        Assert.Equal(("Ctrl+Shift+1 is already in use",
+                      "Another app or the system holds it. Free it there, or pick another shortcut in Tinysnap Settings."),
+                     HotKeys.Defaults.TakenNotice(new HashSet<HotKeyAction> { HotKeyAction.Fullscreen }, windows: true));
+        Assert.Equal(("Ctrl+Shift+1 and Ctrl+Shift+O are already in use",
+                      "Another app or the system holds them. Free them there, or pick other shortcuts in Tinysnap Settings."),
+                     HotKeys.Defaults.TakenNotice(new HashSet<HotKeyAction> { HotKeyAction.Text, HotKeyAction.Fullscreen }, windows: false));
+    }
+
+    [Fact]
+    public void PrintScreenTakenOnWindowsSaysHowToTurnOffTheScreenSnip()
+    {
+        const string snip = "Windows keeps {0} for its own screen snip. To free it, search Windows Settings for Print screen, " +
+                            "turn off \"Use the Print screen key to open screen capture\" and restart the computer.";
+        Assert.Equal(("Print Screen is already in use", string.Format(snip, "it") + " Or pick another shortcut in Tinysnap Settings."),
+                     HotKeys.Defaults.TakenNotice(new HashSet<HotKeyAction> { HotKeyAction.Area }, windows: true));
+        Assert.Equal(("Print Screen, Ctrl+Shift+1 and Ctrl+Shift+O are already in use",
+                      string.Format(snip, "Print Screen") +
+                      " Another app or the system holds Ctrl+Shift+1 and Ctrl+Shift+O: free them there. Or pick other shortcuts in Tinysnap Settings."),
+                     HotKeys.Defaults.TakenNotice(new HashSet<HotKeyAction> { HotKeyAction.Text, HotKeyAction.Area, HotKeyAction.Fullscreen },
+                                                  windows: true));
+        // Off Windows, Print Screen is any other key.
+        Assert.Equal(("Print Screen is already in use",
+                      "Another app or the system holds it. Free it there, or pick another shortcut in Tinysnap Settings."),
+                     HotKeys.Defaults.TakenNotice(new HashSet<HotKeyAction> { HotKeyAction.Area }, windows: false));
+    }
+
     [Fact]
     public void OneRememberedColourStartsRedAndABadOneFallsBack()
     {

@@ -62,6 +62,8 @@ internal static class Program
             instance.AskFirstToReopen(args);
             return;
         }
+        // An earlier copy, killed while it held Print Screen, may have left the Snipping Tool setting off.
+        new PrintScreenKey().GiveBack();
         // Made here, on the thread that becomes the UI thread, whose message loop delivers the hotkeys.
         using var hotkeys = new Win32Hotkeys();
         using var clipboard = new Win32Clipboard();
@@ -77,8 +79,7 @@ internal static class Program
     internal static void Installed(Win32FileTypes types) => types.Register(Environment.ProcessPath!);
 
     /// <summary>Uninstalling leaves no start-at-login entry, and no "Open with" entry, pointing at a
-    /// removed exe, and gives Print Screen back to the Snipping Tool if a copy killed while holding
-    /// it never did.</summary>
+    /// removed exe, and puts back the Snipping Tool setting if an earlier copy left it off.</summary>
     internal static void Uninstalling(IStartup startup, Win32FileTypes types, PrintScreenKey? printScreen = null)
     {
         startup.SetEnabled(false);

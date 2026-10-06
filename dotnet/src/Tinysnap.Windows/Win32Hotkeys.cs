@@ -19,7 +19,8 @@ internal sealed class Win32Hotkeys : IHotkeys
     private readonly nint window;
     private readonly Dictionary<int, HotKeyAction> actions = [];
     private bool isDisposed;
-    private readonly PrintScreenKey snippingTool = new();
+    private PrintScreenHook? printScreen;
+    private int printScreenId;
 
     public event Action<HotKeyAction>? Pressed;
 
@@ -67,6 +68,8 @@ internal sealed class Win32Hotkeys : IHotkeys
         var id = (int)action + 1;
         UnregisterHotKey(window, id);
         actions.Remove(id);
+        // Print Screen moved to another key goes back to the system.
+        if (id == printScreenId) LetGoOfPrintScreen();
         var modifiers = MOD_NOREPEAT;
         foreach (var key in binding.Modifiers)
         {
@@ -78,23 +81,46 @@ internal sealed class Win32Hotkeys : IHotkeys
                 _ => MOD_WIN,
             };
         }
-        var printScreen = binding.KeyCode == 0x2C && binding.Modifiers.IsEmpty;
-        if (printScreen) snippingTool.Take();
-        if (!RegisterHotKey(window, id, modifiers, binding.KeyCode))
+        // Print Screen alone is taken by a keyboard hook and comes back as the relay key, which is
+        // what is registered: Windows 11 holds Print Screen itself until Explorer restarts.
+        if (binding.KeyCode == 0x2C && binding.Modifiers.IsEmpty && TakePrintScreen(id))
         {
-            // Still held elsewhere: the Snipping Tool keeps the key rather than nobody having it.
-            if (printScreen) snippingTool.GiveBack();
-            return false;
+            actions[id] = action;
+            return true;
         }
+        if (!RegisterHotKey(window, id, modifiers, binding.KeyCode)) return false;
         actions[id] = action;
         return true;
+    }
+
+    /// <summary>False when the hook or the relay key is refused, and Print Screen is registered as any
+    /// other key instead, which works wherever nothing else holds it.</summary>
+    private bool TakePrintScreen(int id)
+    {
+        if (!RegisterHotKey(window, id, MOD_NOREPEAT, PrintScreenHook.Relay)) return false;
+        printScreen ??= new PrintScreenHook();
+        if (printScreen.IsActive)
+        {
+            printScreenId = id;
+            return true;
+        }
+        UnregisterHotKey(window, id);
+        LetGoOfPrintScreen();
+        return false;
+    }
+
+    private void LetGoOfPrintScreen()
+    {
+        printScreen?.Dispose();
+        printScreen = null;
+        printScreenId = 0;
     }
 
     public void UnregisterAll()
     {
         foreach (var id in actions.Keys) UnregisterHotKey(window, id);
         actions.Clear();
-        snippingTool.GiveBack();
+        LetGoOfPrintScreen();
     }
 
     public void Dispose()

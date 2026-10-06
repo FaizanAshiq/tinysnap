@@ -65,6 +65,29 @@ public class TrayTests
         Assert.Equal("Capture Fullscreen (taken)", Item(Tray.Menu(setup.Controller, () => { }), 2).Header);
     }
 
+    /// <summary>A shortcut that does nothing from the start is said once, at launch; Settings marks
+    /// one taken while it is being changed.</summary>
+    [AvaloniaFact]
+    public void AShortcutTakenAtLaunchIsToldOnce()
+    {
+        var setup = Launch(held: [HotKeys.Defaults.Fullscreen!]);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(["Ctrl+Shift+1 is already in use\n" +
+                      "Another app or the system holds it. Free it there, or pick another shortcut in Tinysnap Settings."],
+                     setup.Dialogs.Told);
+        setup.Controller.Preferences.Update(p => p with { HotKeys = p.HotKeys with { Library = HotKeys.Defaults.Fullscreen } });
+        Dispatcher.UIThread.RunJobs();
+        Assert.Single(setup.Dialogs.Told);
+    }
+
+    [AvaloniaFact]
+    public void NothingIsToldWhenEveryShortcutIsFree()
+    {
+        var setup = Launch();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(setup.Dialogs.Told);
+    }
+
     [AvaloniaFact]
     public void RepeatLastAreaTakesTheSameBoxAgain()
     {

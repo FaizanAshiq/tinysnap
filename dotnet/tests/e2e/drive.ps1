@@ -125,6 +125,12 @@ public static class Desk
         return false;
     }
 
+    /// <summary>Holds a combination for this script, as the screen snip in Explorer holds Print
+    /// Screen on a Windows 11 desktop, until let go.</summary>
+    public static bool Hold(uint modifiers, uint key) { return RegisterHotKey(IntPtr.Zero, 0xB0B0, modifiers, key); }
+
+    public static void LetGo() { UnregisterHotKey(IntPtr.Zero, 0xB0B0); }
+
     /// <summary>Brings a window forward even when this process is not in front: a tapped Alt
     /// counts as input, which lets the next call take the foreground.</summary>
     public static bool Focus(IntPtr window)
@@ -347,12 +353,15 @@ $page = Start-Process powershell -PassThru -ArgumentList '-NoProfile', '-Encoded
 $preferences = Join-Path $env:APPDATA 'Tinysnap\preferences.json'
 New-Item -ItemType Directory -Force (Split-Path $preferences) | Out-Null
 '{"hotkeys": {"window": {"keyCode": 87, "modifiers": ["control", "shift"]}}}' | Set-Content $preferences -Encoding ASCII
+# Windows 11 holds Print Screen for its screen snip, and lets go only when Explorer restarts. The
+# runner has no screen snip, so this script holds the key in its place, and Tinysnap must take it anyway.
+$printScreenSetting = (Get-ItemProperty 'HKCU:\Control Panel\Keyboard' -ErrorAction SilentlyContinue).PrintScreenKeyForSnippingEnabled
+Check 'Print Screen is held elsewhere before Tinysnap starts' { if (-not [Desk]::Hold(0, 0x2C)) { 'something else already holds it' } }
 $since = [System.Diagnostics.Stopwatch]::StartNew()
 $script:app = Start-Process $exe -PassThru
 [void](Timed 'starting to holding its hotkeys' { [Desk]::HotkeyTaken($ModControl + $ModShift, 0x31) } 30 $since)
 Check 'Tinysnap starts and holds its hotkeys' {
     if (-not (Until { [Desk]::HotkeyTaken($ModControl + $ModShift, 0x31) } 30)) { return 'Ctrl+Shift+1 is free' }
-    if (-not [Desk]::HotkeyTaken(0, 0x2C)) { return 'Print Screen is free' }
     if (-not [Desk]::HotkeyTaken($ModControl + $ModShift, 0x57)) { return 'Ctrl+Shift+W is free' }
     if (-not [Desk]::HotkeyTaken($ModControl + $ModShift, 0x4F)) { return 'Ctrl+Shift+O is free' }
 }
@@ -505,9 +514,9 @@ if ($editor)
 
 # 5. An area: the overlay, a drag, the editor, the saved size
 
-Check 'the Snipping Tool lets go of Print Screen while Tinysnap runs' {
+Check 'Tinysnap leaves the Print Screen setting as it was' {
     $value = (Get-ItemProperty 'HKCU:\Control Panel\Keyboard' -ErrorAction SilentlyContinue).PrintScreenKeyForSnippingEnabled
-    if ($value -ne 0) { "the setting holds '$value'" }
+    if ($value -ne $printScreenSetting) { "the setting holds '$value', not '$printScreenSetting'" }
 }
 $since = [System.Diagnostics.Stopwatch]::StartNew()
 Press 0x2C
@@ -540,6 +549,15 @@ if ($overlay)
         [void](Until { (Editors).Count -eq 0 } 5)
     }
 }
+# The press arrives as a real hotkey, so the overlay has the keyboard: Esc closes it.
+Press 0x2C
+$again = Until { Overlay } 10
+if ($again) { Start-Sleep -Milliseconds 300; Press 0x1B }
+Check 'Esc closes the overlay Print Screen opened, so it has the keyboard' {
+    if (-not $again) { return 'no overlay' }
+    if (-not (Until { -not (Overlay) } 5)) { 'still open' }
+}
+[Desk]::LetGo()
 
 # 5b. A window: Capture Window, a click on the window, just that window saved
 

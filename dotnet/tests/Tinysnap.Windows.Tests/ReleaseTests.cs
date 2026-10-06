@@ -36,11 +36,11 @@ public class ReleaseTests
         var root = $@"Software\TinysnapTest{Guid.NewGuid():N}";
         try
         {
+            // As an earlier copy, killed while holding the key, left it: off, with what it held kept.
             using (var keyboard = Microsoft.Win32.Registry.CurrentUser.CreateSubKey($@"{root}\Keyboard"))
-                keyboard.SetValue("PrintScreenKeyForSnippingEnabled", 1, Microsoft.Win32.RegistryValueKind.DWord);
-            var printScreen = new PrintScreenKey($@"{root}\Keyboard", $@"{root}\Tinysnap");
-            printScreen.Take();
-            // Killed while holding the key, then uninstalled.
+                keyboard.SetValue("PrintScreenKeyForSnippingEnabled", 0, Microsoft.Win32.RegistryValueKind.DWord);
+            using (var own = Microsoft.Win32.Registry.CurrentUser.CreateSubKey($@"{root}\Tinysnap"))
+                own.SetValue("PrintScreenKeyBefore", 1);
             Program.Uninstalling(new Win32Startup($"TinysnapTest{Guid.NewGuid():N}"),
                                  new Win32FileTypes($"TinysnapTest{Guid.NewGuid():N}", ".tinysnaptest"),
                                  new PrintScreenKey($@"{root}\Keyboard", $@"{root}\Tinysnap"));
