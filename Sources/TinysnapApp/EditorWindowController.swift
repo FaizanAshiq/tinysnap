@@ -69,7 +69,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     /// selection it was opened over: picking another tool, or selecting something, puts
     /// the panel back.
     private var panel: (kind: Panel, tool: Tool, selection: Annotation.ID?)?
-    private weak var backdropItem: NSToolbarItem?
+    /// The toolbar's groups as built for the current mode, to mark the chosen tool in.
+    private var groups: [ToolbarGroup] = []
     /// The library entry this editor keeps up to date. Nil for a file opened from disk,
     /// a damaged entry opened flat, or any capture while the library is off.
     let entry: LibraryEntry?
@@ -88,24 +89,19 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private var magnifyObserver: NSObjectProtocol?
     private var isClosingForGood = false
 
-    private static let copyItem = NSToolbarItem.Identifier("copy")
-    private static let saveItem = NSToolbarItem.Identifier("save")
-    private static let dragItem = NSToolbarItem.Identifier("drag")
-    private static let pinItem = NSToolbarItem.Identifier("pin")
-    private static let textItem = NSToolbarItem.Identifier("text")
-    private static let qrItem = NSToolbarItem.Identifier("qr")
-    private static let backdropItemIdentifier = NSToolbarItem.Identifier("backdrop")
-    private static let sizeItem = NSToolbarItem.Identifier("size")
-    private static let undoItem = NSToolbarItem.Identifier("undo")
+    private static let shareGroup = NSToolbarItem.Identifier("group.share")
+    private static let readGroup = NSToolbarItem.Identifier("group.read")
+    private static let finishGroup = NSToolbarItem.Identifier("group.finish")
+    private static let undoGroup = NSToolbarItem.Identifier("group.undo")
     private static let modeItem = NSToolbarItem.Identifier("mode")
-    /// One toolbar item per tool, not one group of them: the toolbar draws hover and
-    /// selection per item, so a group lit up as one block under the pointer.
-    nonisolated private static func toolItem(_ tool: Tool) -> NSToolbarItem.Identifier {
-        NSToolbarItem.Identifier("tool.\(tool.rawValue)")
-    }
-
-    private static let toolItems = Tool.allCases.map(toolItem)
     private static let colorItem = NSToolbarItem.Identifier("colour")
+    /// The tools of one kind, by its place in `Tool.toolbarGroups`, or Essential's for nil.
+    nonisolated private static func toolsGroup(_ index: Int?) -> NSToolbarItem.Identifier {
+        NSToolbarItem.Identifier("group.tools.\(index.map(String.init) ?? "essential")")
+    }
+    /// A tool's button inside its group. Copy Text's is apart: a tool's raw value can be "text".
+    private static func id(_ tool: Tool) -> String { "tool.\(tool.rawValue)" }
+    private static let copyTextID = "copy text"
 
     init(document: Document, entry: LibraryEntry?, library: LibraryStore, screen: NSScreen?, title: String,
          preferences: @escaping () -> Preferences, onStylesChange: @escaping ([Tool: Style], String) -> Void,
@@ -136,9 +132,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         window.title = title
         window.titleVisibility = .hidden
         window.toolbarStyle = .unifiedCompact
-        // Wide enough for every toolbar button: narrower, and the last ones go into an
-        // overflow menu, the library button first.
-        window.minSize = NSSize(width: 1180, height: 280)
+        window.minSize = NSSize(width: Self.minWidth(mode), height: 280)
         // Captures and the library share one window as tabs, whatever the system's own
         // preference for tabs says.
         window.tabbingMode = .preferred
@@ -302,88 +296,103 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     // MARK: Toolbar
 
+    /// Wide enough for every group of the mode: narrower, and the last ones go into the overflow
+    /// menu, as Backdrop and Size did at 1180 points.
+    private static func minWidth(_ mode: EditorMode) -> CGFloat {
+        mode == .pro ? 1300 : 900
+    }
+
+    /// Switched to Pro in a window too narrow for it, the window widens, as far as its screen allows.
+    private func fitToToolbar() {
+        guard let window else { return }
+        let width = min(Self.minWidth(mode), window.screen?.visibleFrame.width ?? .greatestFiniteMagnitude)
+        window.minSize.width = width
+        guard window.frame.width < width else { return }
+        var frame = window.frame
+        frame.size.width = width
+        window.setFrame(frame, display: true, animate: false)
+    }
+
     /// One per mode: windows whose toolbars share an identifier share their items.
     private func buildToolbar() {
         let toolbar = NSToolbar(identifier: "TinysnapEditor.\(mode.rawValue)")
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
+        groups = []
         window?.toolbar = toolbar
     }
 
-    /// Essential: the everyday tools and Undo, then Save and Copy. Pro: every tool in groups by
-    /// kind, then reading, finishing and sharing. A space between groups, which macOS 26 draws as
-    /// a capsule of their own each, and the Essential and Pro switch last of all.
+    /// Essential: Copy and Save, the everyday tools, then Undo. Pro: sharing, every tool in groups
+    /// by kind and the colour under the pointer, then reading and framing. Each group is one item,
+    /// which macOS 26 draws as a capsule of its own, a space between, and the switch last of all.
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        let left: [[NSToolbarItem.Identifier]]
-        let right: [[NSToolbarItem.Identifier]]
+        let left: [NSToolbarItem.Identifier]
+        let right: [NSToolbarItem.Identifier]
         switch mode {
         case .essential:
-            left = [Tool.essential.map(Self.toolItem), [Self.undoItem]]
-            right = [[Self.saveItem, Self.copyItem]]
+            left = [Self.shareGroup, Self.toolsGroup(nil), Self.undoGroup]
+            right = [Self.modeItem]
         case .pro:
             // The colour under the pointer follows the tools, Measure's above all.
-            left = Tool.toolbarGroups.map { $0.map(Self.toolItem) } + [[Self.colorItem]]
-            right = [[Self.textItem, Self.qrItem], [Self.backdropItemIdentifier, Self.sizeItem],
-                     [Self.pinItem, Self.dragItem, Self.saveItem, Self.copyItem]]
+            left = [Self.shareGroup] + Tool.toolbarGroups.indices.map { Self.toolsGroup($0) } + [Self.colorItem]
+            right = [Self.readGroup, Self.finishGroup, Self.modeItem]
         }
-        func spaced(_ groups: [[NSToolbarItem.Identifier]]) -> [NSToolbarItem.Identifier] {
-            Array(groups.flatMap { [NSToolbarItem.Identifier.space] + $0 }.dropFirst())
+        func spaced(_ items: [NSToolbarItem.Identifier]) -> [NSToolbarItem.Identifier] {
+            Array(items.flatMap { [NSToolbarItem.Identifier.space, $0] }.dropFirst())
         }
-        return spaced(left) + [.flexibleSpace] + spaced(right) + [.space, Self.modeItem]
+        return spaced(left) + [.flexibleSpace] + spaced(right)
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         toolbarDefaultItemIdentifiers(toolbar)
     }
 
-    /// The toolbar itself marks the current tool, the way it marks a settings tab.
-    /// Copy Text shows as selected while it waits, as a tool does.
-    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        Self.toolItems + [Self.textItem]
-    }
-
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier,
                  willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
-        if let tool = Tool.allCases.first(where: { Self.toolItem($0) == identifier }) {
-            let item = NSToolbarItem(itemIdentifier: identifier)
-            item.image = tool.symbol
-            item.label = tool.title
-            item.toolTip = tool.tooltip
-            item.target = self
-            item.action = #selector(toolPicked(_:))
-            item.isBordered = true
-            return item
+        let kinds: [Int?] = Tool.toolbarGroups.indices.map { $0 } + [nil]
+        if let kind = kinds.first(where: { Self.toolsGroup($0) == identifier }) {
+            let tools = kind.map { Tool.toolbarGroups[$0] } ?? Tool.essential
+            return groupItem(identifier, label: "Tools", tools.map { tool in
+                .button(id: Self.id(tool), symbol: tool.symbolName, tip: tool.tooltip) { [weak self] in self?.pick(tool) }
+            })
         }
         switch identifier {
-        case Self.copyItem:
-            return button(identifier, symbol: "doc.on.doc", tooltip: "Copy (⌘C)", action: #selector(copy(_:)))
-        case Self.saveItem:
-            return button(identifier, symbol: "square.and.arrow.down", tooltip: "Save to the save folder (⌘S)", action: #selector(saveImage(_:)))
-        case Self.dragItem:
-            let item = NSToolbarItem(itemIdentifier: identifier)
-            let handle = DragOutView()
-            handle.toolTip = "Drag the capture into another app"
-            handle.makeFile = { [weak self] in self?.writeTemporaryFile() }
-            handle.onDropped = { [weak self] in self?.canvas.session.markSaved() }
-            item.view = handle
-            // The toolbar reads this label to accessibility, not the view's own.
-            item.label = "Drag out the capture"
-            return item
-        case Self.textItem:
-            return button(identifier, symbol: "text.viewfinder", tooltip: "Copy the text in an area (⌘⇧C)", action: #selector(copyText(_:)))
-        case Self.qrItem:
-            return button(identifier, symbol: "qrcode.viewfinder", tooltip: "Scan a QR code (⌘⇧R)", action: #selector(scanQRCode(_:)))
-        case Self.backdropItemIdentifier:
-            let item = button(identifier, symbol: "rectangle.dashed", tooltip: "Backdrop", action: #selector(showBackdropPanel(_:)))
-            backdropItem = item
-            return item
-        case Self.sizeItem:
-            return button(identifier, symbol: "square.resize", tooltip: "Export size", action: #selector(showSizePanel(_:)))
-        case Self.pinItem:
-            return button(identifier, symbol: "pin", tooltip: "Pin on top of every app and close (⌘P)", action: #selector(pinImage(_:)))
-        case Self.undoItem:
-            return button(identifier, symbol: "arrow.uturn.backward", tooltip: "Undo (⌘Z)", action: #selector(undoPicked(_:)))
+        case Self.shareGroup:
+            var entries: [ToolbarGroup.Entry] = [
+                .button(id: "copy", symbol: "doc.on.doc", tip: "Copy (⌘C)") { [weak self] in self?.copy(nil) },
+                .button(id: "save", symbol: "square.and.arrow.down", tip: "Save to the save folder (⌘S)") { [weak self] in
+                    self?.saveImage(nil)
+                },
+            ]
+            if mode == .pro {
+                let handle = DragOutView()
+                handle.toolTip = "Drag the capture into another app"
+                handle.setAccessibilityLabel("Drag out the capture")
+                handle.makeFile = { [weak self] in self?.writeTemporaryFile() }
+                handle.onDropped = { [weak self] in self?.canvas.session.markSaved() }
+                entries += [
+                    .view(handle),
+                    .button(id: "pin", symbol: "pin", tip: "Pin on top of every app and close (⌘P)") { [weak self] in self?.pinImage(nil) },
+                ]
+            }
+            return groupItem(identifier, label: "Share", entries)
+        case Self.readGroup:
+            return groupItem(identifier, label: "Read", [
+                .button(id: Self.copyTextID, symbol: "text.viewfinder", tip: "Copy the text in an area (⌘⇧C)") { [weak self] in
+                    self?.copyText(nil)
+                },
+                .button(id: "qr", symbol: "qrcode.viewfinder", tip: "Scan a QR code (⌘⇧R)") { [weak self] in self?.scanQRCode(nil) },
+            ])
+        case Self.finishGroup:
+            return groupItem(identifier, label: "Finish", [
+                .button(id: "backdrop", symbol: "rectangle.dashed", tip: "Backdrop") { [weak self] in self?.showBackdropPanel(nil) },
+                .button(id: "size", symbol: "square.resize", tip: "Export size") { [weak self] in self?.showSizePanel(nil) },
+            ])
+        case Self.undoGroup:
+            return groupItem(identifier, label: "Undo", [
+                .button(id: "undo", symbol: "arrow.uturn.backward", tip: "Undo (⌘Z)") { [weak self] in self?.undoPicked(nil) },
+            ])
         case Self.modeItem:
             let control = ModeSwitch(mode: mode)
             control.onPick = { [weak self] picked in self?.onModeChange(picked) }
@@ -428,15 +437,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         return item
     }
 
-    private func button(_ identifier: NSToolbarItem.Identifier, symbol: String, tooltip: String, action: Selector) -> NSToolbarItem {
-        let item = NSToolbarItem(itemIdentifier: identifier)
-        item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tooltip)
-        item.toolTip = tooltip
-        item.label = tooltip
-        item.target = self
-        item.action = action
-        item.isBordered = true
-        return item
+    private func groupItem(_ identifier: NSToolbarItem.Identifier, label: String, _ entries: [ToolbarGroup.Entry]) -> NSToolbarItem {
+        let group = ToolbarGroup(entries)
+        groups.append(group)
+        return infoItem(identifier, view: group, label: label)
     }
 
     @objc private func undoPicked(_ sender: Any?) {
@@ -444,8 +448,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         handKeysToCanvas()
     }
 
-    @objc private func toolPicked(_ sender: NSToolbarItem) {
-        guard let tool = Tool.allCases.first(where: { Self.toolItem($0) == sender.itemIdentifier }) else { return }
+    private func pick(_ tool: Tool) {
         canvas.choose(tool)
         window?.makeFirstResponder(canvas)
     }
@@ -462,10 +465,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         // Last, once the style bar is placed, since the panel sits under it.
         defer { refreshLayers() }
         let session = canvas.session
-        window?.toolbar?.selectedItemIdentifier = canvas.isPickingText ? Self.textItem : Self.toolItem(session.tool)
-        // Filled while a backdrop is on, dashed while there is none.
-        backdropItem?.image = NSImage(systemSymbolName: session.display.backdrop == nil ? "rectangle.dashed" : "rectangle.inset.filled",
-                                      accessibilityDescription: "Backdrop")
+        // Copy Text shows as chosen while it waits, as a tool does.
+        let chosen = canvas.isPickingText ? Self.copyTextID : Self.id(session.tool)
+        for group in groups {
+            group.chosen = chosen
+            // Filled while a backdrop is on, dashed while there is none.
+            group.setSymbol(session.display.backdrop == nil ? "rectangle.dashed" : "rectangle.inset.filled", for: "backdrop")
+        }
         if let panel, panel.tool != session.tool || panel.selection != session.selection { self.panel = nil }
         if let panel {
             styleBar.isHidden = false
@@ -503,6 +509,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             // After the click that may have asked for it, which came from the toolbar going.
             DispatchQueue.main.async { [weak self] in
                 self?.buildToolbar()
+                self?.fitToToolbar()
                 self?.refreshToolbar()
             }
         }
@@ -516,8 +523,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     /// From the Measure button, where the eye already is.
     private func showMeasureGuide() {
-        guard measureGuide == nil,
-              let item = window?.toolbar?.items.first(where: { $0.itemIdentifier == Self.toolItem(.measure) }) else { return }
+        guard measureGuide == nil, let button = groups.lazy.compactMap({ $0.button(Self.id(.measure)) }).first else { return }
         let popover = NSPopover()
         popover.behavior = .transient
         popover.contentViewController = MeasureGuideController { [weak popover] in popover?.close() }
@@ -525,7 +531,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             MainActor.assumeIsolated { self?.measureGuideClosed() }
         }
         measureGuide = popover
-        popover.show(relativeTo: item)
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: button.isFlipped ? .maxY : .minY)
     }
 
     /// Closed any way at all, it is not shown on its own again; the ? still opens it.
