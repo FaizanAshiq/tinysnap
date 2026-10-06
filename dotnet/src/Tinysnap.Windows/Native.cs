@@ -191,6 +191,55 @@ internal static class Native
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool UnregisterHotKey(nint window, int id);
 
+    // The keyboard hook that takes Print Screen, on a thread of its own.
+
+    internal delegate nint HookProc(int code, nint wParam, nint lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MSG
+    {
+        public nint hwnd;
+        public uint message;
+        public nint wParam;
+        public nint lParam;
+        public uint time;
+        public POINT pt;
+        public uint lPrivate;
+    }
+
+    internal const int WH_KEYBOARD_LL = 13;
+    internal const uint WM_QUIT = 0x0012, WM_TIMER = 0x0113, WM_KEYDOWN = 0x0100, WM_SYSKEYDOWN = 0x0104;
+    internal const uint KEYEVENTF_KEYUP = 0x0002;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern nint SetWindowsHookExW(int hook, HookProc procedure, nint module, uint thread);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool UnhookWindowsHookEx(nint hook);
+
+    [DllImport("user32.dll")]
+    internal static extern nint CallNextHookEx(nint hook, int code, nint wParam, nint lParam);
+
+    [DllImport("user32.dll")]
+    internal static extern int GetMessageW(out MSG message, nint window, uint first, uint last);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool PostThreadMessageW(uint thread, uint message, nint wParam, nint lParam);
+
+    [DllImport("kernel32.dll")]
+    internal static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    internal static extern nuint SetTimer(nint window, nuint id, uint milliseconds, nint callback);
+
+    [DllImport("user32.dll")]
+    internal static extern short GetAsyncKeyState(int key);
+
+    [DllImport("user32.dll")]
+    internal static extern void keybd_event(byte key, byte scan, uint flags, nuint extra);
+
     internal const uint CF_UNICODETEXT = 13;
     internal const uint CF_DIBV5 = 17;
     internal const uint GMEM_MOVEABLE = 0x0002;
