@@ -409,6 +409,9 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             colorWell.heightAnchor.constraint(equalToConstant: 20).isActive = true
             let stack = NSStackView(views: [colorWell, readout(colorLabel, caption: "Tab to copy")])
             stack.spacing = 8
+            // Room inside the capsule macOS draws round it, which otherwise touched the swatch and
+            // cut off the caption.
+            stack.edgeInsets = NSEdgeInsets(top: 2, left: 8, bottom: 2, right: 12)
             return infoItem(identifier, view: stack, label: "Colour under the pointer")
         default:
             return nil
