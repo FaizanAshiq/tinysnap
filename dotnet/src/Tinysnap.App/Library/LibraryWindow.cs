@@ -33,6 +33,7 @@ internal sealed class LibraryWindow : Window
         TextWrapping = TextWrapping.Wrap,
         TextAlignment = TextAlignment.Center,
         MaxWidth = 360,
+        FontSize = 15,
         HorizontalAlignment = HorizontalAlignment.Center,
         VerticalAlignment = VerticalAlignment.Center,
         [!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SystemControlForegroundBaseMediumBrush"),
@@ -81,10 +82,10 @@ internal sealed class LibraryWindow : Window
     {
         this.captures = captures;
         Title = "Library";
-        Width = 1000;
-        Height = 700;
-        MinWidth = 520;
-        MinHeight = 360;
+        Width = 860;
+        Height = 600;
+        MinWidth = 480;
+        MinHeight = 320;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Styles.AddRange(TileActionStyles());
 
@@ -102,7 +103,14 @@ internal sealed class LibraryWindow : Window
         {
             Height = 40,
             Padding = new Thickness(8, 0),
-            Child = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center },
+            // At the right end, as the Mac's toolbar puts them.
+            Child = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 2,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
             [!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"),
         };
         foreach (var button in ToolbarButtons) ((StackPanel)toolbar.Child).Children.Add(button);
@@ -199,9 +207,10 @@ internal sealed class LibraryWindow : Window
                 Text = title,
                 FontSize = 15,
                 FontWeight = FontWeight.SemiBold,
-                Margin = new Thickness(LibraryLayout.Edge, 20, LibraryLayout.Edge, 10),
+                // The Mac's day headings: 38 under the day before, 12 over their tiles.
+                Margin = new Thickness(LibraryLayout.Edge, 22, LibraryLayout.Edge, 12),
             });
-            var grid = new TileGrid();
+            var grid = new TileGrid { Margin = new Thickness(0, 0, 0, 16) };
             foreach (var entry in dayEntries) grid.Children.Add(Tile(entry, pending));
             grids.Add(grid);
             daysPanel.Children.Add(grid);
@@ -587,9 +596,14 @@ internal sealed class LibraryWindow : Window
         {
             Setters =
             {
-                new Setter(Avalonia.Controls.Primitives.TemplatedControl.PaddingProperty, new Thickness(9, 3)),
+                new Setter(Avalonia.Controls.Primitives.TemplatedControl.PaddingProperty, new Thickness(6, 0)),
+                new Setter(HeightProperty, 28.0),
+                new Setter(HorizontalAlignmentProperty, HorizontalAlignment.Stretch),
+                new Setter(ContentControl.HorizontalContentAlignmentProperty, HorizontalAlignment.Center),
+                new Setter(ContentControl.VerticalContentAlignmentProperty, VerticalAlignment.Center),
                 new Setter(Avalonia.Controls.Primitives.TemplatedControl.FontSizeProperty, 12.0),
-                new Setter(Avalonia.Controls.Primitives.TemplatedControl.CornerRadiusProperty, new CornerRadius(6)),
+                new Setter(Avalonia.Controls.Primitives.TemplatedControl.FontWeightProperty, FontWeight.SemiBold),
+                new Setter(Avalonia.Controls.Primitives.TemplatedControl.CornerRadiusProperty, new CornerRadius(7)),
             },
         };
         yield return new Style(x => Presenter(x.OfType<Button>().Class("tile-action")))
@@ -610,6 +624,17 @@ internal sealed class LibraryWindow : Window
             {
                 new Setter(ContentPresenter.BackgroundProperty, Brushes.White),
                 new Setter(ContentPresenter.ForegroundProperty, new SolidColorBrush(Color.FromRgb(28, 28, 30))),
+            },
+        };
+        // Copy stays on the accent under the pointer, a shade lighter, as on the Mac.
+        var accent = Accent.Color;
+        static byte Lighter(byte channel) => (byte)Math.Round(channel + (255 - channel) * 0.18);
+        yield return new Style(x => Presenter(x.OfType<Button>().Class("tile-action").Class("primary").Class(":pointerover")))
+        {
+            Setters =
+            {
+                new Setter(ContentPresenter.BackgroundProperty, new SolidColorBrush(Color.FromRgb(Lighter(accent.R), Lighter(accent.G), Lighter(accent.B)))),
+                new Setter(ContentPresenter.ForegroundProperty, Brushes.White),
             },
         };
     }
