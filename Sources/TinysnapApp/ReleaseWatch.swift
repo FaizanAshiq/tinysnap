@@ -18,7 +18,7 @@ final class ReleaseWatch {
     func start() {
         Task { await check() }
         timer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { Task { await self?.check() } }
+            Task { @MainActor in await self?.check() }
         }
     }
 
