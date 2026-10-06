@@ -32,6 +32,7 @@ internal sealed class SettingsWindow : Window
     internal TextBlock SaveFolder { get; } = new() { TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
     internal ComboBox Export { get; } = Choice("Full resolution", "1x, one pixel per point");
     internal ComboBox AfterCapture { get; } = Choice("Open the editor", "Show a thumbnail");
+    internal ComboBox EditorToolbar { get; } = Choice("Essential: the everyday tools", "Pro: every tool");
     internal CheckBox KeepLibrary { get; } = new() { Content = "Keep captures in the library for 30 days" };
     internal NumericUpDown Delay { get; } = new() { Minimum = Preferences.DelayMin, Maximum = 10, Increment = 1, FormatString = "0", Width = 120 };
     internal CheckBox OpenAtLogin { get; } = new() { Content = "Open Tinysnap when you log in" };
@@ -71,6 +72,9 @@ internal sealed class SettingsWindow : Window
         rows.Add(("Export", Export));
         AfterCapture.Width = ControlWidth;
         rows.Add(("After a capture", AfterCapture));
+        EditorToolbar.Width = ControlWidth;
+        ToolTip.SetTip(EditorToolbar, "Also switched in any editor, at the right end of its toolbar");
+        rows.Add(("Editor toolbar", EditorToolbar));
 
         var open = new Button { Content = "Open Library" };
         open.Click += (_, _) => captures.ShowLibrary();
@@ -132,6 +136,8 @@ internal sealed class SettingsWindow : Window
         Export.SelectionChanged += (_, _) => Change(p => p with { ExportScale = Export.SelectedIndex == 1 ? ExportScale.OneX : ExportScale.Native });
         AfterCapture.SelectionChanged += (_, _) =>
             Change(p => p with { AfterCapture = AfterCapture.SelectedIndex == 1 ? Core.AfterCapture.Thumbnail : Core.AfterCapture.Editor });
+        EditorToolbar.SelectionChanged += (_, _) =>
+            Change(p => p with { EditorMode = EditorToolbar.SelectedIndex == 1 ? EditorMode.Pro : EditorMode.Essential });
         KeepLibrary.IsCheckedChanged += (_, _) => Change(p => p with { KeepLibrary = KeepLibrary.IsChecked == true });
         Delay.ValueChanged += (_, _) => Change(p => p with { DelaySeconds = (int)(Delay.Value ?? Preferences.DelayMin) });
         ShowTrayIcon.IsCheckedChanged += (_, _) => Change(p => p with { ShowTrayIcon = ShowTrayIcon.IsChecked == true });
@@ -176,6 +182,7 @@ internal sealed class SettingsWindow : Window
         ToolTip.SetTip(SaveFolder, preferences.SaveFolderPath);
         Export.SelectedIndex = preferences.ExportScale == ExportScale.OneX ? 1 : 0;
         AfterCapture.SelectedIndex = preferences.AfterCapture == Core.AfterCapture.Thumbnail ? 1 : 0;
+        EditorToolbar.SelectedIndex = preferences.EditorMode == EditorMode.Pro ? 1 : 0;
         KeepLibrary.IsChecked = preferences.KeepLibrary;
         Delay.Value = Math.Clamp(preferences.DelaySeconds, Preferences.DelayMin, 10);
         OpenAtLogin.IsChecked = captures.Startup.IsEnabled;

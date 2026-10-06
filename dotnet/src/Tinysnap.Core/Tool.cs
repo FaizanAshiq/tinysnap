@@ -103,6 +103,10 @@ public static class ToolInfo
     /// <summary>The crop only: any shape, or a ratio it keeps.</summary>
     public static bool HasRatio(this Tool tool) => tool is Tool.Crop;
 
+    /// <summary>The Essential toolbar's tools, the ones most screenshots need, in its order. Every
+    /// other tool is still on its key there.</summary>
+    public static readonly Tool[] Essential = [Tool.Arrow, Tool.Rectangle, Tool.Text, Tool.Freehand, Tool.Highlighter, Tool.Blur, Tool.Crop];
+
     /// <summary>Blur, pixelate and erase: they hide what is under them rather than add anything.</summary>
     public static bool HidesCapture(this Tool tool) => tool is Tool.Blur or Tool.Pixelate or Tool.Erase;
 

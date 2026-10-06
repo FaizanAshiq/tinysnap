@@ -30,6 +30,22 @@ public class PreferencesTests
         return Preferences.Load(path);
     }
 
+    /// <summary>Two editor toolbars. Someone opening Tinysnap for the first time gets Essential; a
+    /// file written before the modes existed belongs to someone used to every tool, so it reads as Pro.</summary>
+    [Fact]
+    public void NewCopiesStartInEssentialAndEarlierOnesInPro()
+    {
+        Assert.Equal(EditorMode.Essential, Preferences.Defaults.EditorMode);
+        Assert.Equal(EditorMode.Essential, Preferences.Load(TemporaryFile()).EditorMode);
+        Assert.Equal(EditorMode.Pro, Preferences.Load(TemporaryFile("""{"delaySeconds": 5}""")).EditorMode);
+        Assert.Equal(EditorMode.Essential, Preferences.Load(TemporaryFile("""{"editorMode": "essential"}""")).EditorMode);
+        Assert.Equal(EditorMode.Pro, Reloaded(Preferences.Defaults with { EditorMode = EditorMode.Pro }).EditorMode);
+    }
+
+    [Fact]
+    public void EssentialHasTheSevenEverydayTools() =>
+        Assert.Equal([Tool.Arrow, Tool.Rectangle, Tool.Text, Tool.Freehand, Tool.Highlighter, Tool.Blur, Tool.Crop], ToolInfo.Essential);
+
     [Fact]
     public void AMissingFileGivesDefaults()
     {

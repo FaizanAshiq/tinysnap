@@ -194,6 +194,9 @@ public sealed record HotKeys(HotKeyBinding? Area, HotKeyBinding? Window, HotKeyB
 /// <summary>What a capture turns into once it is taken.</summary>
 public enum AfterCapture { Editor, Thumbnail }
 
+/// <summary>The editor's toolbar: the everyday tools, or every tool.</summary>
+public enum EditorMode { Essential, Pro }
+
 public sealed record Preferences
 {
     public const int DelayMin = 1;
@@ -244,6 +247,9 @@ public sealed record Preferences
     /// <summary>Custom colours picked lately, newest first, shown beside the fixed swatches.</summary>
     public ImmutableArray<string> RecentColors { get; init; } = [];
 
+    /// <summary>Essential for someone new to Tinysnap; switched in any editor's toolbar or in Settings.</summary>
+    public EditorMode EditorMode { get; init; } = EditorMode.Essential;
+
     /// <summary>Tool styles compared by content, as the Mac's dictionary is.</summary>
     public bool Equals(Preferences? other) =>
         other is not null && HotKeys == other.HotKeys && SaveFolder == other.SaveFolder && ExportScale == other.ExportScale
@@ -251,7 +257,8 @@ public sealed record Preferences
         && ToolStyles.Count == other.ToolStyles.Count
         && ToolStyles.All(pair => other.ToolStyles.TryGetValue(pair.Key, out var style) && style == pair.Value)
         && AfterCapture == other.AfterCapture && KeepLibrary == other.KeepLibrary && Backdrop == other.Backdrop
-        && Measure == other.Measure && ShowsLayers == other.ShowsLayers && RecentColors.SequenceEqual(other.RecentColors);
+        && Measure == other.Measure && ShowsLayers == other.ShowsLayers && RecentColors.SequenceEqual(other.RecentColors)
+        && EditorMode == other.EditorMode;
 
     public override int GetHashCode() =>
         HashCode.Combine(HotKeys, SaveFolder, ExportScale, DelaySeconds, ColorHex, ToolStyles.Count, Backdrop, Measure);
@@ -319,6 +326,7 @@ public sealed record Preferences
         ["measure"] = Measure.ToJson(),
         ["showsLayers"] = ShowsLayers,
         ["recentColors"] = new JsonArray([.. RecentColors.Select(hex => (JsonNode)hex)]),
+        ["editorMode"] = Json.Wire(EditorMode),
     };
 
     /// <summary>Every key is optional and a bad value falls back on its own, so a file written
@@ -353,6 +361,8 @@ public sealed record Preferences
             RecentColors = [.. (Json.Array(o, "recentColors") ?? [])
                 .Select(node => node is JsonValue value && value.TryGetValue<string>(out var hex) ? hex : null)
                 .OfType<string>().Where(hex => Palette.Components(hex) is not null)],
+            // A file from before the modes is someone already used to every tool.
+            EditorMode = Json.Enum<EditorMode>(o, "editorMode") ?? EditorMode.Pro,
         };
     }
 }

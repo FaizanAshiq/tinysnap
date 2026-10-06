@@ -14,6 +14,24 @@ struct PreferencesTests {
         #expect(try Preferences.load(from: temporaryFile()) == .defaults)
     }
 
+    /// Two editor toolbars. Someone opening Tinysnap for the first time gets Essential; a file
+    /// written before the modes existed belongs to someone used to every tool, so it reads as Pro.
+    @Test func newCopiesStartInEssentialAndEarlierOnesInPro() throws {
+        #expect(Preferences.defaults.editorMode == .essential)
+        #expect(try Preferences.load(from: temporaryFile()).editorMode == .essential)
+        #expect(try Preferences.load(from: temporaryFile(containing: #"{"delaySeconds": 5}"#)).editorMode == .pro)
+        #expect(try Preferences.load(from: temporaryFile(containing: #"{"editorMode": "essential"}"#)).editorMode == .essential)
+        var saved = Preferences.defaults
+        saved.editorMode = .pro
+        let url = try temporaryFile()
+        try saved.save(to: url)
+        #expect(try Preferences.load(from: url).editorMode == .pro)
+    }
+
+    @Test func essentialHasTheSevenEverydayTools() {
+        #expect(Tool.essential == [.arrow, .rectangle, .text, .freehand, .highlighter, .blur, .crop])
+    }
+
     @Test func aPartialFileKeepsTheRestAtDefaults() throws {
         let preferences = try Preferences.load(from: temporaryFile(containing: #"{"delaySeconds": 5}"#))
         #expect(preferences.delaySeconds == 5)

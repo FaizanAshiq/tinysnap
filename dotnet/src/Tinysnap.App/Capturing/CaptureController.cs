@@ -49,11 +49,16 @@ public sealed class CaptureController
                                       measure => preferences.Update(p => p with { Measure = measure }),
                                       backdrop => preferences.Update(p => p with { Backdrop = backdrop }), ReadWallpaper,
                                       shows => preferences.Update(p => p with { ShowsLayers = shows }), Tabs,
-                                      platform.ReduceMotion, RedactText);
-        // A Measure setting changed in one editor reaches every other.
+                                      platform.ReduceMotion, RedactText,
+                                      mode => preferences.Update(p => p with { EditorMode = mode }));
+        // A Measure setting, or Essential and Pro, changed in one editor or Settings reaches every editor.
         preferences.Changed += changed =>
         {
-            foreach (var editor in editors) editor.Canvas.MeasureSettings = changed.Measure;
+            foreach (var editor in editors)
+            {
+                editor.Canvas.MeasureSettings = changed.Measure;
+                editor.ShowMode(changed.EditorMode);
+            }
         };
         Hotkeys = new HotkeyRegistrar(platform.Hotkeys);
         var applied = preferences.Current.HotKeys;

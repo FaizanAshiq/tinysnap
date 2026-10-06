@@ -77,10 +77,39 @@ internal sealed class EditorWindow : Window
     public StyleBar StyleBar { get; }
     public Control Toolbar { get; }
     internal IReadOnlyList<(Tool Tool, ToggleButton Button)> ToolButtons { get; }
-    internal int GroupDividers { get; }
 
-    /// <summary>Copy, Save, the drag-out handle and Pin, at the start of the toolbar.</summary>
+    /// <summary>How many groups the tools shown are in.</summary>
+    internal int ToolGroups { get; private set; }
+
+    /// <summary>The tools the toolbar shows, left to right.</summary>
+    internal IReadOnlyList<Tool> ShownTools { get; private set; } = [];
+
+    /// <summary>The other buttons it shows, left to right.</summary>
+    internal IReadOnlyList<Control> ShownOutputs { get; private set; } = [];
+
+    /// <summary>Every button that is not a tool, whichever mode shows it.</summary>
     internal IReadOnlyList<Control> OutputButtons { get; }
+
+    /// <summary>Essential or Pro, outside the part of the toolbar that scrolls, so always in view.</summary>
+    internal ModeSwitch ModeSwitch { get; }
+
+    internal Button UndoButton { get; }
+
+    private readonly StackPanel toolsPart = new() { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+    private readonly StackPanel outputsPart = new()
+    {
+        Orientation = Orientation.Horizontal,
+        Spacing = 8,
+        Margin = new Thickness(16, 0, 0, 0),
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+    private readonly List<Panel> capsules = [];
+    private readonly Control readout;
+    private readonly Control dragOut;
+    private readonly Button scanButton;
+    private readonly Button pinButton;
+    private readonly Button sizeButton;
+    private EditorMode shownMode;
 
     private readonly Button copyButton;
     private readonly Button saveButton;
@@ -187,7 +216,6 @@ internal sealed class EditorWindow : Window
         StyleBar.Redact = target => redacting = Redact(target);
 
         var buttons = new List<(Tool, ToggleButton)>();
-        var bar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
         copyButton = OutputButton(ToolIcons.Copy, "Copy", "Copy (Ctrl+C)", CopyImage);
         saveButton = OutputButton(ToolIcons.Save, "Save", "Save to the save folder (Ctrl+S); Ctrl+Shift+S asks where", SaveImage);
         var dragHandle = DragHandle();
@@ -207,13 +235,16 @@ internal sealed class EditorWindow : Window
         var scan = OutputButton(ToolIcons.ScanCode, "Scan QR Code", "Scan a QR code (Ctrl+Shift+R)", ScanCodes);
         BackdropButton = OutputButton(ToolIcons.BackdropOff, "Backdrop", "Backdrop", () => TogglePanel(StyleBarMode.Backdrop));
         var size = OutputButton(ToolIcons.ExportSize, "Export size", "Export size", () => TogglePanel(StyleBarMode.Size));
-        OutputButtons = [copyButton, saveButton, dragHandle, CopyTextButton, scan, pin, BackdropButton, size];
-        foreach (var control in OutputButtons) bar.Children.Add(control);
-        bar.Children.Add(Divider());
-        for (var group = 0; group < Groups.Length; group++)
+        UndoButton = OutputButton(ToolIcons.Undo, "Undo", "Undo (Ctrl+Z)", () =>
         {
-            if (group > 0) bar.Children.Add(Divider());
-            foreach (var tool in Groups[group])
+            Canvas.Apply(s => s.Undo());
+            Canvas.Focus();
+        });
+        (dragOut, scanButton, pinButton, sizeButton) = (dragHandle, scan, pin, size);
+        OutputButtons = [copyButton, saveButton, dragHandle, CopyTextButton, scan, pin, BackdropButton, size, UndoButton];
+        foreach (var group in Groups)
+        {
+            foreach (var tool in group)
             {
                 var button = new ToggleButton
                 {
@@ -233,12 +264,10 @@ internal sealed class EditorWindow : Window
                     Canvas.Focus();
                 };
                 buttons.Add((tool, button));
-                bar.Children.Add(button);
             }
         }
-        GroupDividers = Groups.Length - 1;
         ToolButtons = buttons;
-        var readout = new StackPanel
+        readout = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 6,
@@ -247,7 +276,6 @@ internal sealed class EditorWindow : Window
             Children = { colorWell, colorLabel },
         };
         ToolTip.SetTip(readout, "Colour under the pointer; Tab copies it");
-        bar.Children.Add(readout);
         LibraryButton = OutputButton(ToolIcons.Library, "Library", "Library: every capture of the last 30 days",
                                      () => services.OpenLibrary?.Invoke());
         LibraryButton.Width = LibraryButton.Height = 32;
@@ -279,9 +307,12 @@ internal sealed class EditorWindow : Window
         DockPanel.SetDock(Rail, Dock.Right);
         // On a screen narrower than the tools, as a small laptop at 125% is, they scroll sideways,
         // and a mouse wheel turns sideways here, having nothing else to scroll.
+        // The tools from the left, what becomes of the capture at the right end, past any room between.
+        DockPanel.SetDock(outputsPart, Dock.Right);
+        toolsPart.HorizontalAlignment = HorizontalAlignment.Left;
         var tools = new ScrollViewer
         {
-            Content = bar,
+            Content = new DockPanel { Children = { outputsPart, toolsPart } },
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
         };
@@ -291,15 +322,24 @@ internal sealed class EditorWindow : Window
             tools.Offset = tools.Offset.WithX(tools.Offset.X - e.Delta.Y * 48);
             e.Handled = true;
         }, RoutingStrategies.Tunnel);
+        ModeSwitch = new ModeSwitch(services.Preferences().EditorMode) { Margin = new Thickness(10, 0, 0, 0) };
+        ModeSwitch.Chosen += mode =>
+        {
+            ShowMode(mode);
+            services.RememberMode?.Invoke(mode);
+            Canvas.Focus();
+        };
+        DockPanel.SetDock(ModeSwitch, Dock.Right);
         Toolbar = new Border
         {
             // Tools only: the library moved to the rail, as on the Mac.
-            Child = tools,
+            Child = new DockPanel { Children = { ModeSwitch, tools } },
             Height = ToolbarHeight,
             Padding = new Thickness(8, 0),
             [!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"),
         };
         DockPanel.SetDock(Toolbar, Dock.Top);
+        Arrange(ModeSwitch.Mode);
 
         var page = new Grid { Children = { scroll, StyleBar, Layers, TextHint } };
         // Tall lists scroll inside the panel rather than run off the window.
@@ -378,13 +418,56 @@ internal sealed class EditorWindow : Window
         return tool == Tool.Select ? shortcut + ", or hold Ctrl with any tool" : shortcut;
     }
 
-    private static Control Divider() => new Border
+    /// <summary>The toolbar for <paramref name="mode"/>, for a choice made in this editor or another.</summary>
+    internal void ShowMode(EditorMode mode)
     {
-        Width = 1,
-        Height = 20,
-        Margin = new Thickness(6, 0),
-        [!BackgroundProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
-    };
+        if (mode == shownMode) return;
+        ModeSwitch.Show(mode);
+        Arrange(mode);
+    }
+
+    /// <summary>Essential: the everyday tools, Undo, then Save and Copy. Pro: every tool in groups
+    /// by kind, then reading, finishing and sharing. The same buttons either way, laid out again.</summary>
+    private void Arrange(EditorMode mode)
+    {
+        shownMode = mode;
+        foreach (var capsule in capsules) capsule.Children.Clear();
+        capsules.Clear();
+        toolsPart.Children.Clear();
+        outputsPart.Children.Clear();
+        Control Button(Tool tool) => ToolButtons.First(b => b.Tool == tool).Button;
+        var essential = mode == EditorMode.Essential;
+        Control[][] left = essential
+            ? [[.. ToolInfo.Essential.Select(Button)], [UndoButton]]
+            : [.. Groups.Select(group => group.Select(Button).ToArray())];
+        Control[][] right = essential
+            ? [[saveButton, copyButton]]
+            : [[CopyTextButton, scanButton], [BackdropButton, sizeButton], [pinButton, dragOut, saveButton, copyButton]];
+        foreach (var group in left) toolsPart.Children.Add(Capsule(group));
+        // The colour under the pointer goes with the Pro tools that need it, Measure's above all.
+        if (!essential) outputsPart.Children.Add(readout);
+        foreach (var group in right) outputsPart.Children.Add(Capsule(group));
+        ShownTools = essential ? ToolInfo.Essential : [.. Groups.SelectMany(group => group)];
+        ToolGroups = essential ? 1 : Groups.Length;
+        ShownOutputs = [.. left.Concat(right).SelectMany(group => group).Where(control => ToolButtons.All(b => b.Button != control))];
+        LayersButton.IsVisible = !essential;
+        RefreshLayers();
+    }
+
+    /// <summary>One kind of button on a rounded ground of its own, as the Mac's toolbar groups them.</summary>
+    private Border Capsule(Control[] items)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+        foreach (var item in items) row.Children.Add(item);
+        capsules.Add(row);
+        return new Border
+        {
+            CornerRadius = new CornerRadius(16),
+            Padding = new Thickness(2),
+            Child = row,
+            [!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundBaseLowBrush"),
+        };
+    }
 
     private void RememberStyles() => services.RememberStyles?.Invoke(Canvas.Session.Styles, Canvas.Session.ColorHex);
 
@@ -431,9 +514,11 @@ internal sealed class EditorWindow : Window
 
     private void RefreshLayers()
     {
+        // Essential has no layers button, so no panel to be left open without one.
+        var shown = showsLayers && shownMode == EditorMode.Pro;
         LayersButton.IsChecked = showsLayers;
-        Layers.IsVisible = showsLayers;
-        if (showsLayers) Layers.Show(Canvas.Session.Display, Canvas.Session.Selection);
+        Layers.IsVisible = shown;
+        if (shown) Layers.Show(Canvas.Session.Display, Canvas.Session.Selection);
     }
 
     private void Refresh()
