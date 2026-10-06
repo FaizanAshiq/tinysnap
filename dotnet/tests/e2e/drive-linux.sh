@@ -87,15 +87,18 @@ start=$(date +%s%N)
 fonts=$(fc-list | wc -l)
 echo "     fontconfig listed $fonts fonts in $((($(date +%s%N) - start) / 1000000)) ms" >> "$results"
 
-# The desktop: a known colour, a line of text and a QR code to capture.
+# The desktop: a known colour, a line of text and a QR code to capture. The colour is set once
+# openbox has taken the screen: set during its start, on a slow runner, it was lost to black.
 openbox &
-sleep 1
+within 15 eval 'xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q "window id"'
 xsetroot -solid '#3366cc'
 convert -size 900x200 xc:white -font DejaVu-Sans -pointsize 48 -fill black -annotate +40+120 'Tinysnap reads this line' "$shots/line.png"
 qrencode -s 6 -o "$shots/code.png" 'https://example.com/tinysnap'
 display -geometry +60+60 -title line "$shots/line.png" &
 display -geometry +940+440 -title code "$shots/code.png" &
 sleep 2
+import -window root "$shots/desktop.png" 2>/dev/null
+check "the desktop shows the known colour" pixel_is "$shots/desktop.png" 5 795 3366CC
 
 "$appimage" > "$shots/app.log" 2>&1 &
 check "owns its D-Bus name" within 45 running
