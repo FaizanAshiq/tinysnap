@@ -24,7 +24,15 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
     private let emptyNote = NSTextField(wrappingLabelWithString: "")
     private var days: [(title: String, entries: [LibraryEntry])] = []
     private var thumbnails: [URL: (modified: Date, image: NSImage, pixels: CGSize)] = [:]
+    /// Pictures being made in the background, so an item shown twice asks once.
+    private var loading: Set<URL> = []
     private var observer: NSObjectProtocol?
+    private var pageNumber = 0
+    /// Previous, the page and Next, under the grid while there is more than one page.
+    private let pager = NSStackView()
+    private let previousPage = NSButton(title: "Previous", target: nil, action: nil)
+    private let nextPage = NSButton(title: "Next", target: nil, action: nil)
+    private let pageTitle = NSTextField(labelWithString: "")
 
     init(library: LibraryStore, preferences: @escaping () -> Preferences, keeping: @escaping () -> Set<String>,
          onOpen: @escaping (LibraryEntry) -> Void, onPin: @escaping (LibraryEntry) -> Void,
@@ -91,16 +99,36 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
         emptyNote.textColor = .secondaryLabelColor
         emptyNote.font = .systemFont(ofSize: 15)
 
+        previousPage.target = self
+        previousPage.action = #selector(showPreviousPage(_:))
+        nextPage.target = self
+        nextPage.action = #selector(showNextPage(_:))
+        pageTitle.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        pageTitle.textColor = .secondaryLabelColor
+        for button in [previousPage, nextPage] {
+            button.widthAnchor.constraint(greaterThanOrEqualToConstant: 88).isActive = true
+        }
+        pager.setViews([previousPage, pageTitle, nextPage], in: .center)
+        pager.spacing = 12
+        pager.edgeInsets = NSEdgeInsets(top: 10, left: 0, bottom: 10, right: 0)
+        pager.setContentHuggingPriority(.required, for: .vertical)
+
+        // The pager detaches when hidden, so one page gives the grid the whole height.
+        let column = NSStackView(views: [scroll, pager])
+        column.orientation = .vertical
+        column.spacing = 0
         let container = NSView()
-        for view in [scroll, emptyNote] as [NSView] {
+        for view in [column, emptyNote] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(view)
         }
         NSLayoutConstraint.activate([
-            scroll.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: container.topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            column.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            column.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            column.topAnchor.constraint(equalTo: container.topAnchor),
+            column.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            scroll.widthAnchor.constraint(equalTo: column.widthAnchor),
+            pager.widthAnchor.constraint(equalTo: column.widthAnchor),
             emptyNote.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             emptyNote.centerYAnchor.constraint(equalTo: container.centerYAnchor),
             emptyNote.widthAnchor.constraint(lessThanOrEqualToConstant: 360),
@@ -108,7 +136,9 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
         window.contentView = container
     }
 
+    /// On the newest page when it was not open.
     func show() {
+        if window?.isVisible != true { pageNumber = 0 }
         reload()
         // Centred only on its own: as a tab it keeps the shared window where it is.
         if window?.isVisible != true, (window?.tabbedWindows?.count ?? 0) <= 1 { window?.center() }
@@ -128,9 +158,15 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
         for entry in entries where !open.contains(entry.name) && library.imageIsStale(entry) {
             renderStale(entry)
         }
+        let page = LibraryPage(entries, number: pageNumber)
+        pageNumber = page.number
+        pager.isHidden = page.count == 1
+        pageTitle.stringValue = page.title
+        previousPage.isEnabled = page.hasPrevious
+        nextPage.isEnabled = page.hasNext
         let calendar = Calendar.current
         var grouped: [(day: Date, entries: [LibraryEntry])] = []
-        for entry in entries {
+        for entry in page.entries {
             let day = calendar.startOfDay(for: entry.captured)
             if grouped.last?.day == day {
                 grouped[grouped.count - 1].entries.append(entry)
@@ -173,22 +209,57 @@ final class LibraryWindowController: NSWindowController, NSWindowDelegate, NSCol
         grid.selectionIndexPaths.first.map(entry(at:))
     }
 
-    /// A small copy of the rendered image, kept until the image changes.
-    // ponytail: made on the main thread as items appear; move to a background queue if a big library scrolls slowly.
+    /// Another page, from its top, with nothing selected: the toolbar acts on the selection,
+    /// which is never out of sight.
+    @objc private func showPreviousPage(_ sender: Any?) { turn(by: -1) }
+    @objc private func showNextPage(_ sender: Any?) { turn(by: 1) }
+
+    private func turn(by pages: Int) {
+        pageNumber += pages
+        grid.selectionIndexPaths = []
+        reload()
+        grid.scrollToVisible(NSRect(x: 0, y: 0, width: 1, height: 1))
+    }
+
+    /// A small copy of the rendered image if one is kept, and the image's size in pixels.
+    /// Without one it is made in the background and handed to the item showing the
+    /// capture by then, so a page of big captures opens at once.
     private func thumbnail(for entry: LibraryEntry) -> (image: NSImage?, pixels: CGSize) {
         let url = FileManager.default.fileExists(atPath: entry.imageURL.path) ? entry.imageURL : entry.originalURL
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
         if let cached = thumbnails[url], cached.modified == modified { return (cached.image, cached.pixels) }
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return (nil, .zero) }
+        // The header alone, which is quick enough to read as the item appears.
         let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
         let pixels = CGSize(width: (properties?[kCGImagePropertyPixelWidth] as? Int) ?? 0,
                             height: (properties?[kCGImagePropertyPixelHeight] as? Int) ?? 0)
+        guard loading.insert(url).inserted else { return (nil, pixels) }
+        Task { @MainActor [weak self] in
+            let small = await Task.detached(priority: .userInitiated) { Self.smallCopy(of: url) }.value
+            self?.arrived(small, for: entry, from: url, modified: modified, pixels: pixels)
+        }
+        return (nil, pixels)
+    }
+
+    /// No more than 640 pixels across.
+    private nonisolated static func smallCopy(of url: URL) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let options = [kCGImageSourceCreateThumbnailFromImageAlways: true,
                        kCGImageSourceThumbnailMaxPixelSize: 640] as CFDictionary
-        guard let small = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else { return (nil, pixels) }
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options)
+    }
+
+    /// Kept for the next time, and on the item showing the capture now, if one does: items
+    /// are reused as the grid scrolls and pages turn.
+    private func arrived(_ small: CGImage?, for entry: LibraryEntry, from url: URL, modified: Date, pixels: CGSize) {
+        loading.remove(url)
+        guard let small else { return }
         let image = NSImage(cgImage: small, size: .zero)
         thumbnails[url] = (modified, image, pixels)
-        return (image, pixels)
+        guard let section = days.firstIndex(where: { $0.entries.contains(entry) }),
+              let index = days[section].entries.firstIndex(of: entry),
+              let item = grid.item(at: IndexPath(item: index, section: section)) as? LibraryItem else { return }
+        item.showPicture(image)
     }
 
     // MARK: Grid
@@ -565,6 +636,10 @@ final class LibraryItem: NSCollectionViewItem {
 
     override var isSelected: Bool {
         didSet { tile.isSelected = isSelected }
+    }
+
+    func showPicture(_ image: NSImage) {
+        picture.image = image
     }
 
     func show(image: NSImage?, time: String, width: Int, height: Int) {

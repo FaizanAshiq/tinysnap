@@ -42,6 +42,10 @@ internal sealed class LibraryWindow : Window
     private readonly Dictionary<string, (DateTime Modified, Bitmap? Picture, PixelSize Pixels)> thumbnails = [];
     private readonly List<LibraryTile> tiles = [];
     private readonly List<TileGrid> grids = [];
+    private readonly ScrollViewer scroll;
+    private int pageNumber;
+    private CancellationTokenSource loading = new();
+    private bool closed;
     private LibraryEntry? selected;
     private PointerPressedEventArgs? pressed;
     private Point pressedAt;
@@ -52,6 +56,26 @@ internal sealed class LibraryWindow : Window
     internal IReadOnlyList<Button> ToolbarButtons { get; }
 
     internal PreviewWindow? Preview { get; private set; }
+
+    internal IReadOnlyList<LibraryTile> Tiles => tiles;
+
+    /// <summary>The page's pictures being decoded; done once each is posted to its tile.</summary>
+    internal Task PicturesLoading { get; private set; } = Task.CompletedTask;
+
+    /// <summary>Previous, the page and Next, under the grid while there is more than one page.</summary>
+    internal Control Pager { get; }
+
+    internal Button PreviousPage { get; }
+
+    internal Button NextPage { get; }
+
+    internal TextBlock PageTitle { get; } = new()
+    {
+        FontSize = 13,
+        FontFeatures = FontFeatureCollection.Parse("tnum"),
+        VerticalAlignment = VerticalAlignment.Center,
+        [!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SystemControlForegroundBaseMediumBrush"),
+    };
 
     public LibraryWindow(CaptureController captures)
     {
@@ -84,7 +108,19 @@ internal sealed class LibraryWindow : Window
         foreach (var button in ToolbarButtons) ((StackPanel)toolbar.Child).Children.Add(button);
         DockPanel.SetDock(toolbar, Dock.Top);
 
-        var scroll = new ScrollViewer
+        PreviousPage = PageButton("Previous", () => Turn(-1));
+        NextPage = PageButton("Next", () => Turn(1));
+        Pager = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 10),
+            Children = { PreviousPage, PageTitle, NextPage },
+        };
+        DockPanel.SetDock(Pager, Dock.Bottom);
+
+        scroll = new ScrollViewer
         {
             Content = daysPanel,
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
@@ -92,21 +128,24 @@ internal sealed class LibraryWindow : Window
         };
         var strip = new WindowTabStrip(captures.Tabs, this);
         DockPanel.SetDock(strip, Dock.Top);
-        Content = new DockPanel { Children = { strip, toolbar, new Panel { Children = { scroll, emptyNote } } } };
+        Content = new DockPanel { Children = { strip, toolbar, Pager, new Panel { Children = { scroll, emptyNote } } } };
 
         captures.LibraryChanged += Reload;
         Closed += (_, _) =>
         {
             captures.LibraryChanged -= Reload;
+            closed = true;
+            loading.Cancel();
             Preview?.Close();
             foreach (var (_, picture, _) in thumbnails.Values) picture?.Dispose();
         };
         Refresh();
     }
 
-    /// <summary>Reloaded, shown, and brought in front.</summary>
+    /// <summary>Reloaded, shown, and brought in front, on the newest page when it was not open.</summary>
     public void ShowInFront()
     {
+        if (!IsVisible) pageNumber = 0;
         Reload();
         if (!IsVisible) Show();
         Activate();
@@ -138,13 +177,18 @@ internal sealed class LibraryWindow : Window
         foreach (var entry in entries.Where(e => !open.Contains(e.Name) && captures.Library.ImageIsStale(e)))
             if (captures.Library.Open(entry) is { IsEditable: true } opened) captures.Render(entry, opened.Document);
 
+        var page = new LibraryPage(entries, pageNumber);
+        pageNumber = page.Number;
         var today = DateTime.Today;
-        Days = entries
+        Days = page.Entries
             .GroupBy(entry => entry.Captured.ToLocalTime().Date)
             .Select(day => (DayTitle(day.Key, today), (IReadOnlyList<LibraryEntry>)day.ToList()))
             .ToList();
-        if (selected is not null && !entries.Contains(selected)) selected = null;
+        if (selected is not null && !page.Entries.Contains(selected)) selected = null;
 
+        loading.Cancel();
+        loading = new CancellationTokenSource();
+        var pending = new List<PictureJob>();
         daysPanel.Children.Clear();
         tiles.Clear();
         grids.Clear();
@@ -158,10 +202,15 @@ internal sealed class LibraryWindow : Window
                 Margin = new Thickness(LibraryLayout.Edge, 20, LibraryLayout.Edge, 10),
             });
             var grid = new TileGrid();
-            foreach (var entry in dayEntries) grid.Children.Add(Tile(entry));
+            foreach (var entry in dayEntries) grid.Children.Add(Tile(entry, pending));
             grids.Add(grid);
             daysPanel.Children.Add(grid);
         }
+        PicturesLoading = LoadPictures(pending, loading.Token);
+        Pager.IsVisible = page.Count > 1;
+        PageTitle.Text = page.Title;
+        PreviousPage.IsEnabled = page.HasPrevious;
+        NextPage.IsEnabled = page.HasNext;
         emptyNote.IsVisible = entries.Count == 0;
         emptyNote.Text = captures.Services.Preferences().KeepLibrary
             ? "Captures appear here and stay for 30 days."
@@ -174,10 +223,32 @@ internal sealed class LibraryWindow : Window
         : day == today.AddDays(-1) ? "Yesterday"
         : day.ToString("D", CultureInfo.CurrentCulture);
 
-    private LibraryTile Tile(LibraryEntry entry)
+    /// <summary>Another page, from its top, with nothing selected: the toolbar acts on the selection,
+    /// which is never out of sight.</summary>
+    private void Turn(int by)
     {
-        var (picture, pixels) = Thumbnail(entry);
-        var tile = new LibraryTile(entry, picture, pixels) { ContextMenu = Menu(entry) };
+        pageNumber += by;
+        selected = null;
+        Reload();
+        scroll.Offset = default;
+    }
+
+    /// <summary>A tile showing its kept picture, or none yet: that one is added to
+    /// <paramref name="pending"/> and arrives from the background.</summary>
+    private LibraryTile Tile(LibraryEntry entry, List<PictureJob> pending)
+    {
+        var path = File.Exists(entry.ImagePath) ? entry.ImagePath : entry.OriginalPath;
+        var modified = File.GetLastWriteTimeUtc(path);
+        LibraryTile tile;
+        if (thumbnails.TryGetValue(path, out var cached) && cached.Modified == modified)
+            tile = new LibraryTile(entry, cached.Pixels) { Picture = cached.Picture };
+        else
+        {
+            var pixels = Pixels(path);
+            tile = new LibraryTile(entry, pixels);
+            pending.Add(new PictureJob(tile, path, modified, pixels));
+        }
+        tile.ContextMenu = Menu(entry);
         tile.CopyRequested += button => Copy(entry, button);
         tile.SaveRequested += button => Save(entry, button);
         tile.EditRequested += () => captures.Open(entry);
@@ -188,27 +259,70 @@ internal sealed class LibraryWindow : Window
         return tile;
     }
 
-    /// <summary>The rendered image at no more than 640 pixels across, and its full size.</summary>
-    private (Bitmap? Picture, PixelSize Pixels) Thumbnail(LibraryEntry entry)
+    /// <summary>A tile waiting for its picture, and the file it comes from.</summary>
+    private readonly record struct PictureJob(LibraryTile Tile, string Path, DateTime Modified, PixelSize Pixels);
+
+    /// <summary>The image's size, from its header alone, which is quick enough to read as the tile is made.</summary>
+    private static PixelSize Pixels(string path)
     {
-        var path = File.Exists(entry.ImagePath) ? entry.ImagePath : entry.OriginalPath;
-        var modified = File.GetLastWriteTimeUtc(path);
-        if (thumbnails.TryGetValue(path, out var cached) && cached.Modified == modified) return (cached.Picture, cached.Pixels);
         try
         {
             using var codec = SKCodec.Create(path);
-            var pixels = codec is null ? default : new PixelSize(codec.Info.Width, codec.Info.Height);
+            return codec is null ? default : new PixelSize(codec.Info.Width, codec.Info.Height);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return default;
+        }
+    }
+
+    /// <summary>Four pictures decoded at a time, off the UI thread, each posted to its tile as it is
+    /// done. A newer page cancels what is left of the last.</summary>
+    private Task LoadPictures(List<PictureJob> pending, CancellationToken cancel) =>
+        pending.Count == 0
+            ? Task.CompletedTask
+            : Task.Run(() => Parallel.ForEach(pending, new ParallelOptions { MaxDegreeOfParallelism = 4 }, job =>
+            {
+                if (cancel.IsCancellationRequested) return;
+                var picture = Decode(job.Path, job.Pixels.Width);
+                if (picture is not null) Dispatcher.UIThread.Post(() => Arrived(job, picture));
+            }));
+
+    /// <summary>The image at no more than 640 pixels across.</summary>
+    private static Bitmap? Decode(string path, int width)
+    {
+        try
+        {
             using var stream = File.OpenRead(path);
-            var picture = Bitmap.DecodeToWidth(stream, Math.Min(640, Math.Max(1, pixels.Width)));
-            // ponytail: an image replaced while its old thumbnail still shows is left to the
-            // collector rather than disposed under a tile that may be drawing it.
-            thumbnails[path] = (modified, picture, pixels);
-            return (picture, pixels);
+            return Bitmap.DecodeToWidth(stream, Math.Min(640, Math.Max(1, width)));
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
-            return (null, default);
+            return null;
         }
+    }
+
+    /// <summary>Kept for the next time the page shows, and on the tile if it still shows: a reload
+    /// since makes new tiles, which ask again and find it kept.</summary>
+    private void Arrived(PictureJob job, Bitmap picture)
+    {
+        if (closed)
+        {
+            picture.Dispose();
+            return;
+        }
+        if (thumbnails.TryGetValue(job.Path, out var cached) && cached.Modified == job.Modified && cached.Picture is { } kept)
+        {
+            picture.Dispose();
+            picture = kept;
+        }
+        else
+        {
+            // ponytail: an image replaced while its old thumbnail still shows is left to the
+            // collector rather than disposed under a tile that may be drawing it.
+            thumbnails[job.Path] = (job.Modified, picture, job.Pixels);
+        }
+        if (tiles.Contains(job.Tile)) job.Tile.Picture = picture;
     }
 
     private ContextMenu Menu(LibraryEntry entry)
@@ -439,6 +553,13 @@ internal sealed class LibraryWindow : Window
     }
 
     // Look
+
+    private static Button PageButton(string title, Action action)
+    {
+        var button = new Button { Content = title, MinWidth = 88, HorizontalContentAlignment = HorizontalAlignment.Center };
+        button.Click += (_, _) => action();
+        return button;
+    }
 
     private static Button ToolbarButton(string icon, string name, string tip, Action action)
     {
