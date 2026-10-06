@@ -659,6 +659,8 @@ if ($Next)
 {
     $nextVersion = (Get-Content (Join-Path $Next 'releases.win-x64.json') -Raw | ConvertFrom-Json).Assets[0].Version
     $env:TINYSNAP_UPDATE_FEED = (Resolve-Path $Next).Path
+    # The first start looked already, which would put the next look a week away.
+    Remove-Item (Join-Path $env:APPDATA 'Tinysnap\last-update-check') -ErrorAction SilentlyContinue
     $old = Start-Process $exe -PassThru
     $null = $old.Handle
     $updated = Timed "starting to updated to $nextVersion" {

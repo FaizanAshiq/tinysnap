@@ -4,10 +4,10 @@ name: swift
 # Swift side was never built or tested before it merged.
 on:
   pull_request:
-    paths: ['Sources/**', 'Tests/**', 'Resources/**', 'Package.swift', 'build.sh', 'test.sh', '.github/workflows/swift.yml']
+    paths: ['Sources/**', 'Tests/**', 'Resources/**', 'Package.swift', 'build.sh', 'test.sh', 'scripts/**', '.github/workflows/swift.yml']
   push:
     branches: [main]
-    paths: ['Sources/**', 'Tests/**', 'Resources/**', 'Package.swift', 'build.sh', 'test.sh', '.github/workflows/swift.yml']
+    paths: ['Sources/**', 'Tests/**', 'Resources/**', 'Package.swift', 'build.sh', 'test.sh', 'scripts/**', '.github/workflows/swift.yml']
 
 permissions:
   contents: read
@@ -21,3 +21,75 @@ jobs:
       - run: swift build --product TinysnapApp
       # test.sh wires in the Swift Testing macro plugin when only Command Line Tools are there.
       - run: ./test.sh --no-parallel
+
+  # The Mac app for download, for Apple silicon and Intel, signed with the one release certificate:
+  # macOS keeps Screen Recording for an app by its signature, and a copy installs only an update
+  # signed exactly as itself. A disk image to download and a zip for updates, kept two weeks.
+  # Nothing is released from here: publishing is a separate, deliberate step.
+  package:
+    needs: mac
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Release signing identity
+        env:
+          IDENTITY: ${{ secrets.MAC_SIGNING_P12 }}
+          PASSWORD: ${{ secrets.MAC_SIGNING_PASSWORD }}
+        run: |
+          [ -n "$IDENTITY" ] || { echo "No MAC_SIGNING_P12 secret: run scripts/release-identity.sh once." >&2; exit 1; }
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p ci "$keychain"
+          security set-keychain-settings "$keychain"
+          security unlock-keychain -p ci "$keychain"
+          echo "$IDENTITY" | base64 --decode > "$RUNNER_TEMP/identity.p12"
+          security import "$RUNNER_TEMP/identity.p12" -k "$keychain" -P "$PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/identity.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+      - name: Build
+        run: TINYSNAP_UNIVERSAL=1 TINYSNAP_SIGN_IDENTITY="Tinysnap Release" TINYSNAP_REQUIRE_IDENTITY=1 ./build.sh release
+      - run: ./scripts/package-mac.sh
+      # The same app one version on, signed the same way, for the e2e run to update to.
+      - name: Next version
+        run: |
+          version=$(plutil -extract CFBundleShortVersionString raw dist/Tinysnap.app/Contents/Info.plist)
+          mkdir next
+          ditto dist/Tinysnap.app next/Tinysnap.app
+          echo "$version" | awk -F. '{print $1"."$2"."$3+1}' > next/version
+          plutil -replace CFBundleShortVersionString -string "$(cat next/version)" next/Tinysnap.app/Contents/Info.plist
+          codesign --force --sign "Tinysnap Release" next/Tinysnap.app
+          ditto -c -k --keepParent next/Tinysnap.app next/Tinysnap-mac.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Tinysnap-mac
+          path: |
+            dist/Tinysnap-mac.dmg
+            dist/Tinysnap-mac.zip
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Tinysnap-mac-next
+          path: |
+            next/Tinysnap-mac.zip
+            next/version
+          retention-days: 14
+
+  # The downloaded app updating itself to the next version, as a person's would.
+  e2e:
+    needs: package
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: Tinysnap-mac
+          path: release
+      - uses: actions/download-artifact@v8
+        with:
+          name: Tinysnap-mac-next
+          path: next
+      - run: bash scripts/e2e-mac-update.sh release/Tinysnap-mac.zip next
+      - if: always()
+        run: cat app.log 2>/dev/null || true

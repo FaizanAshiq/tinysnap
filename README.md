@@ -8,6 +8,14 @@ account, a server or a subscription.
 
 ## Install
 
+Download [`Tinysnap-mac.dmg`](https://github.com/FaizanAshiq/tinysnap/releases/latest/download/Tinysnap-mac.dmg),
+open it and drag Tinysnap into Applications. The first time you open it, macOS says it cannot
+check it for malware, as it does for any app not signed with a paid Apple developer account: open
+System Settings, Privacy & Security, and click Open Anyway, once. From then on it keeps itself up
+to date. It runs on Apple silicon and Intel Macs with macOS 14 Sonoma or later.
+
+Or with Homebrew, which builds it on your Mac, so it opens with no prompt at all:
+
 ```bash
 brew install faizanashiq/tap/tinysnap
 ```
@@ -20,8 +28,8 @@ cd tinysnap
 ./build.sh release --install
 ```
 
-Both compile on your machine, which is what keeps first launch clean. See below for
-why that matters. Tinysnap needs macOS 14 Sonoma or later.
+Those two compile on your machine, which is what keeps first launch clean. See below for why
+that matters.
 
 On Windows 10 or 11, run `Tinysnap-win-x64-Setup.exe` (or `-arm64`) from the
 [latest release](https://github.com/FaizanAshiq/tinysnap/releases/latest); it installs for you
@@ -29,9 +37,11 @@ alone, with no admin prompt. On Linux with GNOME, download `Tinysnap-linux-x64.A
 `-arm64`) from the same release, make it executable and run it. More in
 [dotnet/README.md](dotnet/README.md).
 
-Windows and Linux copies then keep themselves up to date, installing a new version while
-nothing of Tinysnap's is open. On the Mac, Homebrew does the updating: Tinysnap says when a new
-version is out and gives you the `brew upgrade` command.
+Every copy then keeps itself up to date. Once a week Tinysnap asks GitHub whether a newer
+version is out. The Mac download, Windows and Linux install it themselves the first moment
+nothing of Tinysnap's is open, and say so when they start again. A copy Homebrew installed tells
+you instead and gives you the `brew upgrade` command, since Homebrew keeps track of what it
+installed. A copy you built yourself tells you where to download the new one.
 
 ## Capturing
 
@@ -172,7 +182,9 @@ editable later. Turn it off in Settings, or clear it from there, if that matters
 ## Permissions
 
 Screen Recording is the only permission Tinysnap asks for, the first time you capture.
-It never asks for Accessibility, makes no network calls and has no accounts.
+It never asks for Accessibility and has no accounts. The only thing it sends anywhere is a
+question to GitHub once a week, whether a newer version is out; nothing about you or your
+captures goes with it.
 
 ## Settings
 
@@ -220,6 +232,11 @@ over again. Run this once and that stops happening:
 It makes a self signed certificate in your login keychain and `build.sh` signs with it
 from then on, which keeps the identity fixed across builds. It is not a Developer ID and
 changes nothing for anyone else.
+
+The download is built by CI and signed the same way with one release certificate
+(`scripts/release-identity.sh`), so Screen Recording carries over from version to version, and
+a copy installs an update only when it is signed exactly as the copy itself is. Without a
+Developer ID, that first open still needs Open Anyway.
 
 ## License
 
