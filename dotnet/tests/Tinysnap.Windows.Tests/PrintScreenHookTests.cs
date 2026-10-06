@@ -20,14 +20,17 @@ public class PrintScreenHookTests
         Assert.True(RegisterHotKey(0, Holder, 0, PrintScreen));
         try
         {
+            using var rest = new Observer();
             using var hotkeys = new Win32Hotkeys();
             HotKeyAction? pressed = null;
             hotkeys.Pressed += action => pressed = action;
             Assert.True(hotkeys.Register(HotKeyAction.Area, new HotKeyBinding(PrintScreen, [])));
             Tap((byte)PrintScreen);
-            var holderHeard = Pump(() => pressed is not null);
+            Pump(() => pressed is not null);
             Assert.Equal(HotKeyAction.Area, pressed);
-            Assert.False(holderHeard);
+            // The release too, which comes after the press is heard.
+            Pump(() => false, TimeSpan.FromMilliseconds(300));
+            Assert.Empty(rest.Saw(PrintScreen));
         }
         finally { UnregisterHotKey(0, Holder); }
     }
@@ -36,32 +39,31 @@ public class PrintScreenHookTests
     [Fact]
     public void PrintScreenWithAModifierIsLeftToWindows()
     {
+        using var rest = new Observer();
         using var hotkeys = new Win32Hotkeys();
         HotKeyAction? pressed = null;
         hotkeys.Pressed += action => pressed = action;
         Assert.True(hotkeys.Register(HotKeyAction.Area, new HotKeyBinding(PrintScreen, [])));
         Tap(Shift, (byte)PrintScreen);
-        Pump(() => false, TimeSpan.FromMilliseconds(600));
+        Pump(() => rest.Saw(PrintScreen).Count == 2);
         Assert.Null(pressed);
+        Assert.Equal(2, rest.Saw(PrintScreen).Count);
     }
 
-    /// <summary>Let go, the key is the system's again at once.</summary>
+    /// <summary>Let go, the key reaches the rest of the system again at once.</summary>
     [Fact]
     public void PrintScreenIsLetGoWithTheHotkeys()
     {
+        using var rest = new Observer();
         var hotkeys = new Win32Hotkeys();
         HotKeyAction? pressed = null;
         hotkeys.Pressed += action => pressed = action;
         Assert.True(hotkeys.Register(HotKeyAction.Area, new HotKeyBinding(PrintScreen, [])));
         hotkeys.Dispose();
-        Assert.True(RegisterHotKey(0, Holder, 0, PrintScreen));
-        try
-        {
-            Tap((byte)PrintScreen);
-            Assert.True(Pump(() => false, TimeSpan.FromSeconds(1)));
-            Assert.Null(pressed);
-        }
-        finally { UnregisterHotKey(0, Holder); }
+        Tap((byte)PrintScreen);
+        Pump(() => rest.Saw(PrintScreen).Count == 2);
+        Assert.Equal(2, rest.Saw(PrintScreen).Count);
+        Assert.Null(pressed);
     }
 
     /// <summary>Presses the keys in order and lets them go in reverse, as a hand would.</summary>
@@ -71,26 +73,54 @@ public class PrintScreenHookTests
         for (var i = keys.Length - 1; i >= 0; i--) keybd_event(keys[i], 0, KeyUp, 0);
     }
 
-    /// <summary>Delivers this thread's messages, which is how the hook is called, until
-    /// <paramref name="done"/> or the time is up. True when the held hotkey was heard.</summary>
-    private static bool Pump(Func<bool> done, TimeSpan? limit = null)
+    /// <summary>Delivers this thread's messages, which is how the hooks are called, until
+    /// <paramref name="done"/> or the time is up.</summary>
+    private static void Pump(Func<bool> done, TimeSpan? limit = null)
     {
-        var heard = false;
         var clock = Stopwatch.StartNew();
         while (!done() && clock.Elapsed < (limit ?? TimeSpan.FromSeconds(2)))
         {
             while (PeekMessageW(out var message, 0, 0, 0, Remove))
             {
-                if (message.Message == HotkeyMessage && message.Window == 0 && message.WParam == Holder) heard = true;
                 TranslateMessage(ref message);
                 DispatchMessageW(ref message);
             }
             Thread.Sleep(10);
         }
-        return heard;
     }
 
-    private const uint KeyUp = 0x0002, Remove = 0x0001, HotkeyMessage = 0x0312;
+    /// <summary>Stands in for everything after Tinysnap: a keyboard hook laid before Tinysnap's, so
+    /// it hears a key only when Tinysnap passes it on. A hotkey another app holds would do, but a
+    /// CI desktop never delivers one for Print Screen, whatever holds it.</summary>
+    private sealed class Observer : IDisposable
+    {
+        private readonly HookProc procedure;
+        private readonly nint hook;
+        private readonly List<(uint Key, nint Message)> heard = [];
+
+        public Observer()
+        {
+            procedure = Hear;
+            hook = SetWindowsHookExW(KeyboardLowLevel, procedure, GetModuleHandleW(null), 0);
+            Assert.NotEqual(0, hook);
+        }
+
+        /// <summary>The downs and ups of <paramref name="key"/> heard so far.</summary>
+        public List<nint> Saw(uint key) => heard.Where(entry => entry.Key == key).Select(entry => entry.Message).ToList();
+
+        private nint Hear(int code, nint wParam, nint lParam)
+        {
+            if (code >= 0) heard.Add(((uint)Marshal.ReadInt32(lParam), wParam));
+            return CallNextHookEx(hook, code, wParam, lParam);
+        }
+
+        public void Dispose() => UnhookWindowsHookEx(hook);
+    }
+
+    private const int KeyboardLowLevel = 13;
+    private const uint KeyUp = 0x0002, Remove = 0x0001;
+
+    private delegate nint HookProc(int code, nint wParam, nint lParam);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct QueuedMessage
@@ -104,6 +134,19 @@ public class PrintScreenHookTests
         public int Y;
         public uint Private;
     }
+
+    [DllImport("user32.dll")]
+    private static extern nint SetWindowsHookExW(int kind, HookProc procedure, nint module, uint thread);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnhookWindowsHookEx(nint hook);
+
+    [DllImport("user32.dll")]
+    private static extern nint CallNextHookEx(nint hook, int code, nint wParam, nint lParam);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint GetModuleHandleW(string? name);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
