@@ -666,6 +666,8 @@ if ($Next)
             ForEach-Object { [Desk]::Windows($_.Id) } | Where-Object Title -eq "Updated to Tinysnap $nextVersion" | Select-Object -First 1
     } 120
     Remove-Item Env:TINYSNAP_UPDATE_FEED
+    # Found the moment it exists, before its first frame is drawn.
+    Start-Sleep -Milliseconds 700
     Shot 'updated'
     Check 'with nothing open, Tinysnap updates itself, starts again and says so' {
         if (-not $updated) { "no 'Updated to Tinysnap $nextVersion' from a new copy within 2 minutes" }
