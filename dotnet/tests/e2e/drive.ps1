@@ -492,9 +492,12 @@ if ($editor)
     Press $Ctrl $Shift 0x4C
     [System.Windows.Forms.Clipboard]::Clear()
     Press $Ctrl 0x43
+    # Once, in run 37192797212, no PNG arrived although the editor closed, which it does only
+    # after the copy: so a miss says what the clipboard held instead, for next time.
     Check 'Ctrl+C copies it as a PNG and as a bitmap' {
-        $formats = Until { $data = [System.Windows.Forms.Clipboard]::GetDataObject(); if ($data.GetFormats() -contains 'PNG') { $data.GetFormats() } } 5
-        if (-not $formats) { return 'no PNG on the clipboard' }
+        $script:held = @()
+        $formats = Until { $script:held = @([System.Windows.Forms.Clipboard]::GetDataObject().GetFormats()); if ($script:held -contains 'PNG') { $script:held } } 10
+        if (-not $formats) { return "no PNG on the clipboard after 10 s; it held: $(if ($script:held) { $script:held -join ', ' } else { 'nothing' })" }
         if (-not [System.Windows.Forms.Clipboard]::ContainsImage()) { "no bitmap among $($formats -join ', ')" }
     }
     Check 'Ctrl+C closes the editor without asking' { if (-not (Until { (Editors).Count -eq 0 } 5)) { 'still open' } }
