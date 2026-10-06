@@ -45,8 +45,9 @@ internal static class TestServices
     /// <param name="picker">The system's window picker, for a platform that cannot list windows.</param>
     /// <param name="placesWindowsAsAsked">False for a desktop that keeps windows on screen and below its panel, as GNOME does.</param>
     /// <param name="held">Shortcuts another app holds before Tinysnap starts.</param>
+    /// <param name="mode">Pro unless a test is about Essential: most tests reach for every tool.</param>
     public static AppSetup Launch(Preferences? preferences = null, Func<Task<Capture?>>? picker = null, bool placesWindowsAsAsked = true,
-                                  HotKeyBinding[]? held = null)
+                                  HotKeyBinding[]? held = null, EditorMode mode = EditorMode.Pro)
     {
         var retina = Screens.Frozen(new Tinysnap.Core.Rect(0, 0, 400, 300), 2, SkiaSharp.SKColors.Blue);
         var platform = new FakePlatform(new FakeScreenCapture(() => Screens.Desktop(retina), () => new Tinysnap.Core.Point(100, 100),
@@ -55,7 +56,8 @@ internal static class TestServices
         var library = new LibraryStore(TemporaryFolder());
         var dialogs = new FakeDialogs();
         var time = new FakeTime();
-        var controller = new CaptureController(platform, Store(preferences), library, dialogs, time);
+        var controller = new CaptureController(platform, Store((preferences ?? Preferences.Defaults) with { EditorMode = mode }), library,
+                                               dialogs, time);
         return new AppSetup(controller, library, (FakeClipboard)platform.Clipboard, dialogs, time, (FakeFiles)platform.Files, platform);
     }
 
@@ -73,7 +75,7 @@ internal static class TestServices
                                       Action<ExportedImage, bool>? pin = null)
     {
         var folder = saveFolder ?? TemporaryFolder();
-        return new EditorServices(clipboard ?? new FakeClipboard(), () => Preferences.Defaults with { SaveFolder = folder },
+        return new EditorServices(clipboard ?? new FakeClipboard(), () => Preferences.Defaults with { SaveFolder = folder, EditorMode = EditorMode.Pro },
                                   dialogs ?? new FakeDialogs(), pin is null ? null : (exported, keepsSize, _) => pin(exported, keepsSize));
     }
 

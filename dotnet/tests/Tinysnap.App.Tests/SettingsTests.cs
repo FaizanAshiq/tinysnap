@@ -127,6 +127,18 @@ public class SettingsTests
         Assert.False(written.ShowTrayIcon);
     }
 
+    /// <summary>Essential or Pro is chosen here as well as in any editor, and an open editor follows.</summary>
+    [AvaloniaFact]
+    public void TheEditorToolbarCanBeChosenHereAndOpenEditorsFollow()
+    {
+        var (setup, window) = Open();
+        Assert.Equal(1, window.EditorToolbar.SelectedIndex);
+        setup.Controller.CaptureFullscreen();
+        window.EditorToolbar.SelectedIndex = 0;
+        Assert.Equal(EditorMode.Essential, Preferences.Load(setup.Controller.Preferences.Path).EditorMode);
+        Assert.Equal(ToolInfo.Essential, setup.Controller.Editors[0].ShownTools);
+    }
+
     [AvaloniaFact]
     public void OpenAtLoginFollowsTheSystem()
     {

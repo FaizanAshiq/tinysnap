@@ -18,16 +18,6 @@ final class CenteringClipView: NSClipView {
     }
 }
 
-/// An upright rule between toolbar groups, fainter than the buttons either side.
-final class ToolbarDivider: NSView {
-    override var intrinsicContentSize: NSSize { NSSize(width: 13, height: 18) }
-
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.separatorColor.setFill()
-        NSRect(x: (bounds.width - 1) / 2, y: (bounds.height - 18) / 2, width: 1, height: 18).fill()
-    }
-}
-
 /// One window per capture: the canvas, one toolbar row in the title bar, and the
 /// copy, save and drag out actions.
 @MainActor
@@ -45,6 +35,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private let onMeasureChange: (MeasureSettings) -> Void
     /// The layers panel was opened or closed, so the next editor opens the same way.
     private let onShowsLayersChange: (Bool) -> Void
+    /// Essential or Pro was picked in this editor, for every editor to follow.
+    private let onModeChange: (EditorMode) -> Void
+    /// The toolbar this editor shows, as the preferences last had it.
+    private var mode: EditorMode
     /// The strip down the right edge: the library, and the layers panel's switch.
     private let rail = NSView()
     private lazy var libraryButton = RailButton(symbol: "photo.stack", label: "Library, every capture from the last 30 days",
@@ -102,6 +96,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private static let qrItem = NSToolbarItem.Identifier("qr")
     private static let backdropItemIdentifier = NSToolbarItem.Identifier("backdrop")
     private static let sizeItem = NSToolbarItem.Identifier("size")
+    private static let undoItem = NSToolbarItem.Identifier("undo")
+    private static let modeItem = NSToolbarItem.Identifier("mode")
     /// One toolbar item per tool, not one group of them: the toolbar draws hover and
     /// selection per item, so a group lit up as one block under the pointer.
     nonisolated private static func toolItem(_ tool: Tool) -> NSToolbarItem.Identifier {
@@ -115,15 +111,17 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
          preferences: @escaping () -> Preferences, onStylesChange: @escaping ([Tool: Style], String) -> Void,
          onPin: @escaping (CGImage, CGFloat, LibraryEntry?, Bool) -> Void, onBackdropChange: @escaping (Backdrop) -> Void,
          onMeasureChange: @escaping (MeasureSettings) -> Void, onShowsLayersChange: @escaping (Bool) -> Void,
-         onClose: @escaping (EditorWindowController) -> Void) {
+         onModeChange: @escaping (EditorMode) -> Void, onClose: @escaping (EditorWindowController) -> Void) {
         self.preferences = preferences
         self.onStylesChange = onStylesChange
         self.onPin = onPin
         self.onBackdropChange = onBackdropChange
         self.onMeasureChange = onMeasureChange
         self.onShowsLayersChange = onShowsLayersChange
+        self.onModeChange = onModeChange
         self.onClose = onClose
         showsLayers = preferences().showsLayers
+        mode = preferences().editorMode
         self.entry = entry
         self.library = library
         keptDocument = document
@@ -304,26 +302,36 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     // MARK: Toolbar
 
+    /// One per mode: windows whose toolbars share an identifier share their items.
     private func buildToolbar() {
-        let toolbar = NSToolbar(identifier: "TinysnapEditor")
+        let toolbar = NSToolbar(identifier: "TinysnapEditor.\(mode.rawValue)")
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
         window?.toolbar = toolbar
     }
 
-    /// The output buttons, then each group of tools, a divider before every group after
-    /// the first.
+    /// Essential: the everyday tools and Undo, then Save and Copy. Pro: every tool in groups by
+    /// kind, then reading, finishing and sharing. A space between groups, which macOS 26 draws as
+    /// a capsule of their own each, and the Essential and Pro switch last of all.
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        let groups = [[Self.copyItem, Self.saveItem, Self.dragItem, Self.textItem, Self.qrItem, Self.pinItem, Self.backdropItemIdentifier,
-                       Self.sizeItem]]
-            + Tool.toolbarGroups.map { $0.map(Self.toolItem) }
-        let divided = groups.enumerated().flatMap { index, group in index == 0 ? group : [Self.divider(index)] + group }
-        return divided + [.flexibleSpace, Self.colorItem]
+        let left: [[NSToolbarItem.Identifier]]
+        let right: [[NSToolbarItem.Identifier]]
+        switch mode {
+        case .essential:
+            left = [Tool.essential.map(Self.toolItem), [Self.undoItem]]
+            right = [[Self.saveItem, Self.copyItem]]
+        case .pro:
+            // The colour under the pointer follows the tools, Measure's above all.
+            left = Tool.toolbarGroups.map { $0.map(Self.toolItem) } + [[Self.colorItem]]
+            right = [[Self.textItem, Self.qrItem], [Self.backdropItemIdentifier, Self.sizeItem],
+                     [Self.pinItem, Self.dragItem, Self.saveItem, Self.copyItem]]
+        }
+        func spaced(_ groups: [[NSToolbarItem.Identifier]]) -> [NSToolbarItem.Identifier] {
+            Array(groups.flatMap { [NSToolbarItem.Identifier.space] + $0 }.dropFirst())
+        }
+        return spaced(left) + [.flexibleSpace] + spaced(right) + [.space, Self.modeItem]
     }
-
-    /// One identifier each, so no two items in the toolbar share one.
-    private static func divider(_ index: Int) -> NSToolbarItem.Identifier { NSToolbarItem.Identifier("divider \(index)") }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         toolbarDefaultItemIdentifiers(toolbar)
@@ -337,11 +345,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier,
                  willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
-        if identifier.rawValue.hasPrefix("divider ") {
-            let item = NSToolbarItem(itemIdentifier: identifier)
-            item.view = ToolbarDivider()
-            return item
-        }
         if let tool = Tool.allCases.first(where: { Self.toolItem($0) == identifier }) {
             let item = NSToolbarItem(itemIdentifier: identifier)
             item.image = tool.symbol
@@ -379,6 +382,15 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             return button(identifier, symbol: "square.resize", tooltip: "Export size", action: #selector(showSizePanel(_:)))
         case Self.pinItem:
             return button(identifier, symbol: "pin", tooltip: "Pin on top of every app and close (⌘P)", action: #selector(pinImage(_:)))
+        case Self.undoItem:
+            return button(identifier, symbol: "arrow.uturn.backward", tooltip: "Undo (⌘Z)", action: #selector(undoPicked(_:)))
+        case Self.modeItem:
+            let control = ModeSwitch(mode: mode)
+            control.onPick = { [weak self] picked in self?.onModeChange(picked) }
+            let item = infoItem(identifier, view: control, label: "Toolbar")
+            // Asked for: always there to switch with, so the last item a narrow window gives up.
+            item.visibilityPriority = .high
+            return item
         case Self.colorItem:
             colorWell.wantsLayer = true
             colorWell.layer?.cornerRadius = 6
@@ -425,6 +437,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         item.action = action
         item.isBordered = true
         return item
+    }
+
+    @objc private func undoPicked(_ sender: Any?) {
+        canvas.undo(sender)
+        handKeysToCanvas()
     }
 
     @objc private func toolPicked(_ sender: NSToolbarItem) {
@@ -481,6 +498,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     /// size, and the Measure tool's lines, edge contrast and whether its guide was seen.
     func preferencesChanged() {
         canvas.measure = preferences().measure
+        if preferences().editorMode != mode {
+            mode = preferences().editorMode
+            // After the click that may have asked for it, which came from the toolbar going.
+            DispatchQueue.main.async { [weak self] in
+                self?.buildToolbar()
+                self?.refreshToolbar()
+            }
+        }
         refreshToolbar()
     }
 
@@ -572,9 +597,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     private func refreshLayers() {
+        // Essential has no layers button, so no panel to be left open without one.
+        let shown = showsLayers && mode == .pro
+        layersButton.isHidden = mode == .essential
         layersButton.isOn = showsLayers
-        layers.isHidden = !showsLayers
-        guard showsLayers, let bounds = window?.contentView?.bounds else { return }
+        layers.isHidden = !shown
+        guard shown, let bounds = window?.contentView?.bounds else { return }
         layers.show(canvas.session.display, selection: canvas.session.selection)
         // Always under the style bar's place, shown or not: following it made the panel jump
         // down under the pointer whenever a click on a row brought the style bar up.

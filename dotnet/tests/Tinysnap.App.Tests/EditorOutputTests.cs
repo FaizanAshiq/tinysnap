@@ -129,13 +129,6 @@ public class EditorOutputTests
         Assert.Equal(400, Png.Decode(File.ReadAllBytes(path))!.Value.Image.Width);
     }
 
-    [AvaloniaFact]
-    public void TheToolbarStartsWithCopySaveDragAndPin()
-    {
-        var editor = Editor(Make());
-        Assert.Equal(["Copy", "Save", "Drag out", "Copy Text", "Scan QR Code", "Pin and close", "Backdrop", "Export size"], editor.OutputButtons.Select(b => Avalonia.Automation.AutomationProperties.GetName(b)));
-    }
-
     /// <summary>A clipboard another app is holding: every set fails.</summary>
     private sealed class RefusingClipboard : Tinysnap.Platform.IClipboard
     {

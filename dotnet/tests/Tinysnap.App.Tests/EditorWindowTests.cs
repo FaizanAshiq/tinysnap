@@ -50,7 +50,7 @@ public class EditorWindowTests
             Tool.Spotlight, Tool.Magnifier, Tool.Measure,
             Tool.Blur, Tool.Pixelate, Tool.Erase,
         ], editor.ToolButtons.Select(b => b.Tool));
-        Assert.Equal(4, editor.GroupDividers);
+        Assert.Equal(5, editor.ToolGroups);
         Assert.Equal("Arrow (A)", ToolTip.GetTip(editor.ToolButtons[2].Button));
         Assert.Equal("Select (V), or hold Ctrl with any tool", ToolTip.GetTip(editor.ToolButtons[0].Button));
     }
@@ -105,8 +105,9 @@ public class EditorWindowTests
         editor.UpdateLayout();
         double Left(Control control) => control.TranslatePoint(default, editor)!.Value.X;
         double Right(Control control) => Left(control) + control.Bounds.Width;
-        // The toolbar runs the window's width; its last tool starts past the window's edge.
-        var last = editor.Toolbar.GetVisualDescendants().OfType<Button>().MaxBy(Left)!;
+        // The toolbar runs the window's width; its last button starts past the window's edge. The
+        // Essential and Pro switch stays put, outside what scrolls.
+        var last = editor.ShownOutputs.OfType<Button>().MaxBy(Left)!;
         var edge = Right(editor.Toolbar);
         Assert.True(edge <= 600, $"toolbar ends at {edge}, window {editor.ClientSize.Width}");
         Assert.True(Right(last) > edge);

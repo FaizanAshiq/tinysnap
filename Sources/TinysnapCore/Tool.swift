@@ -105,6 +105,10 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
     /// The crop only: any shape, or a ratio it keeps.
     public var hasRatio: Bool { self == .crop }
 
+    /// The Essential toolbar's tools, the ones most screenshots need, in its order. Every other
+    /// tool is still on its key there.
+    public static let essential: [Tool] = [.arrow, .rectangle, .text, .freehand, .highlighter, .blur, .crop]
+
     /// Blur, pixelate and erase: they hide what is under them rather than add anything.
     public var hidesCapture: Bool { self == .blur || self == .pixelate || self == .erase }
 

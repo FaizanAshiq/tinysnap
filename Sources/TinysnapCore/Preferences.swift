@@ -186,6 +186,11 @@ public enum AfterCapture: String, Codable, Sendable, CaseIterable {
     case editor, thumbnail
 }
 
+/// The editor's toolbar: the everyday tools, or every tool.
+public enum EditorMode: String, Codable, Sendable, CaseIterable {
+    case essential, pro
+}
+
 public struct Preferences: Equatable, Sendable, Codable {
     public var hotkeys: HotKeys
     public var saveFolder: String
@@ -216,6 +221,8 @@ public struct Preferences: Equatable, Sendable, Codable {
     public var showsLayers: Bool
     /// Custom colours picked lately, newest first, shown beside the fixed swatches.
     public var recentColors: [String]
+    /// Essential for someone new to Tinysnap; switched in any editor's toolbar or in Settings.
+    public var editorMode: EditorMode
 
     public static let defaults = Preferences(
         hotkeys: .defaults,
@@ -238,7 +245,7 @@ public struct Preferences: Equatable, Sendable, Codable {
     public init(hotkeys: HotKeys, saveFolder: String, exportScale: ExportScale, delaySeconds: Int,
                 showMenuBarIcon: Bool, showDockIconWhileCapturing: Bool, colorHex: String, toolStyles: [String: Style],
                 afterCapture: AfterCapture, keepLibrary: Bool, backdrop: Backdrop, measure: MeasureSettings = .defaults,
-                showsLayers: Bool = false, recentColors: [String] = []) {
+                showsLayers: Bool = false, recentColors: [String] = [], editorMode: EditorMode = .essential) {
         self.hotkeys = hotkeys
         self.saveFolder = saveFolder
         self.exportScale = exportScale
@@ -255,6 +262,7 @@ public struct Preferences: Equatable, Sendable, Codable {
         self.measure = measure
         self.showsLayers = showsLayers
         self.recentColors = recentColors
+        self.editorMode = editorMode
     }
 
     /// Every key is optional and a bad value falls back on its own, so a file written
@@ -280,6 +288,8 @@ public struct Preferences: Equatable, Sendable, Codable {
         showsLayers = (try? container.decodeIfPresent(Bool.self, forKey: .showsLayers)) ?? fallback.showsLayers
         let recent = (try? container.decodeIfPresent([String].self, forKey: .recentColors)) ?? nil
         recentColors = (recent ?? []).filter { Palette.components(of: $0) != nil }
+        // A file from before the modes is someone already used to every tool.
+        editorMode = (try? container.decodeIfPresent(EditorMode.self, forKey: .editorMode)) ?? .pro
     }
 
     public var saveFolderURL: URL {
