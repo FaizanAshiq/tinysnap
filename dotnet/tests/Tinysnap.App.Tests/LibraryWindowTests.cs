@@ -25,6 +25,63 @@ public class LibraryWindowTests
         return (setup, window, newer, older);
     }
 
+    /// <summary>Reported: with many captures the library stuck, every picture decoded on the UI thread
+    /// before the window could draw. Pictures now load in the background, so it opens at once.</summary>
+    [AvaloniaFact]
+    public void APageOpensBeforeItsPicturesAreDecodedAndThenFillsIn()
+    {
+        var setup = Launch();
+        for (var i = 0; i < 12; i++) setup.Library.Add(CanvasHost.Blank(400, 300), DateTimeOffset.Now.AddMinutes(-i));
+        var window = setup.Controller.ShowLibrary();
+        Assert.Equal(12, window.Tiles.Count);
+        Assert.All(window.Tiles, tile => Assert.Null(tile.Picture));
+        Settle(window);
+        Assert.All(window.Tiles, tile => Assert.NotNull(tile.Picture));
+    }
+
+    /// <summary>Fifty a page, newest first, with Previous and Next under the grid. A selection stays
+    /// on its page, so the toolbar never acts on a capture out of sight.</summary>
+    [AvaloniaFact]
+    public void FiftyCapturesAPageWithPreviousAndNext()
+    {
+        var setup = Launch();
+        var now = DateTimeOffset.Now;
+        var all = Enumerable.Range(0, 120).Select(i => setup.Library.Add(CanvasHost.Blank(40, 30), now.AddMinutes(-i))).ToList();
+        var window = setup.Controller.ShowLibrary();
+        Assert.True(window.Pager.IsVisible);
+        Assert.Equal(all[..50], window.Tiles.Select(tile => tile.Entry));
+        Assert.Equal("Page 1 of 3", window.PageTitle.Text);
+        Assert.False(window.PreviousPage.IsEnabled);
+        window.Selected = all[0];
+
+        Click(window.NextPage);
+        Assert.Equal(all[50..100], window.Tiles.Select(tile => tile.Entry));
+        Assert.Null(window.Selected);
+        Click(window.NextPage);
+        Assert.Equal(all[100..], window.Tiles.Select(tile => tile.Entry));
+        Assert.Equal("Page 3 of 3", window.PageTitle.Text);
+        Assert.False(window.NextPage.IsEnabled);
+        Click(window.PreviousPage);
+        Assert.Equal("Page 2 of 3", window.PageTitle.Text);
+    }
+
+    [AvaloniaFact]
+    public void OnePageHasNoPageButtons()
+    {
+        var (_, window, _, _) = Open();
+        Assert.False(window.Pager.IsVisible);
+    }
+
+    /// <summary>Lets every picture the page asked for arrive.</summary>
+    private static void Settle(LibraryWindow window)
+    {
+        Assert.True(window.PicturesLoading.Wait(TimeSpan.FromSeconds(10)));
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    private static void Click(Avalonia.Controls.Button button) =>
+        button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+
     [AvaloniaFact]
     public void CapturesAreGroupedByDayNewestFirst()
     {

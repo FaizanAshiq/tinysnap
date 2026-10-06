@@ -27,6 +27,7 @@ internal sealed class LibraryTile : Border
 
     private readonly Border fade;
     private readonly StackPanel actions;
+    private readonly Image image = new() { Stretch = Stretch.Uniform };
     private bool isSelected;
 
     public LibraryEntry Entry { get; }
@@ -40,7 +41,14 @@ internal sealed class LibraryTile : Border
     public event Action<Button>? SaveRequested;
     public event Action? EditRequested;
 
-    public LibraryTile(LibraryEntry entry, Bitmap? picture, PixelSize pixels)
+    /// <summary>The picture, which arrives after the tile: the library decodes it in the background.</summary>
+    internal Bitmap? Picture
+    {
+        get => image.Source as Bitmap;
+        set => image.Source = value;
+    }
+
+    public LibraryTile(LibraryEntry entry, PixelSize pixels)
     {
         Entry = entry;
         CornerRadius = new CornerRadius(10);
@@ -98,7 +106,7 @@ internal sealed class LibraryTile : Border
             {
                 Children =
                 {
-                    new Image { Source = picture, Stretch = Stretch.Uniform },
+                    image,
                     fade,
                     actions,
                 },
