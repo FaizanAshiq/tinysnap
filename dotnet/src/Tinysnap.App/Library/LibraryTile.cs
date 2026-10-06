@@ -26,7 +26,7 @@ internal sealed class LibraryTile : Border
     private static readonly ITransform Raised = TransformOperations.Parse("translateY(0px)");
 
     private readonly Border fade;
-    private readonly StackPanel actions;
+    private readonly Grid actions;
     private readonly Image image = new() { Stretch = Stretch.Uniform };
     private bool isSelected;
 
@@ -36,6 +36,9 @@ internal sealed class LibraryTile : Border
 
     /// <summary>Copy, Save and Edit, in that order.</summary>
     internal IReadOnlyList<Button> HoverButtons { get; }
+
+    /// <summary>The hour and minute it was taken, under the picture.</summary>
+    internal TextBlock TimeLabel { get; }
 
     public event Action<Button>? CopyRequested;
     public event Action<Button>? SaveRequested;
@@ -52,10 +55,11 @@ internal sealed class LibraryTile : Border
     {
         Entry = entry;
         CornerRadius = new CornerRadius(10);
-        BorderThickness = new Thickness(2);
+        BorderThickness = new Thickness(3);
         BorderBrush = Brushes.Transparent;
         this[!BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundListLowBrush");
-        AutomationProperties.SetName(this, $"Capture at {entry.Captured.ToLocalTime():T}");
+        var taken = entry.Captured.ToLocalTime().ToString("t");
+        AutomationProperties.SetName(this, $"Capture at {taken}, {pixels.Width} by {pixels.Height} pixels");
         // Focus moves with the selection, so a screen reader reads each capture out as the arrows reach
         // it. The selection border already shows where it is.
         Focusable = true;
@@ -66,12 +70,17 @@ internal sealed class LibraryTile : Border
             IsHitTestVisible = false,
             Opacity = 0,
             // Strongest under the buttons, gone by two thirds of the way up, so white labels read
-            // over a white capture as well as a dark one.
+            // over a white capture as well as a dark one. The Mac's stops.
             Background = new LinearGradientBrush
             {
                 StartPoint = new RelativePoint(0.5, 1, RelativeUnit.Relative),
-                EndPoint = new RelativePoint(0.5, 1.0 / 3, RelativeUnit.Relative),
-                GradientStops = { new GradientStop(Color.FromArgb(166, 0, 0, 0), 0), new GradientStop(Colors.Transparent, 1) },
+                EndPoint = new RelativePoint(0.5, 0, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.FromArgb(199, 0, 0, 0), 0),
+                    new GradientStop(Color.FromArgb(115, 0, 0, 0), 0.38),
+                    new GradientStop(Colors.Transparent, 0.7),
+                },
             },
         };
         var copy = Action(ToolIcons.Copy, "Copy", "Copy", primary: true);
@@ -81,18 +90,20 @@ internal sealed class LibraryTile : Border
         save.Click += (_, _) => SaveRequested?.Invoke(save);
         edit.Click += (_, _) => EditRequested?.Invoke();
         HoverButtons = [copy, save, edit];
-        actions = new StackPanel
+        // Three equal buttons across the picture, as on the Mac.
+        actions = new Grid
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
-            HorizontalAlignment = HorizontalAlignment.Center,
+            ColumnDefinitions = new ColumnDefinitions("*,*,*"),
+            ColumnSpacing = 5,
             VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(0, 0, 0, 8),
+            Margin = new Thickness(6, 0, 6, 8),
             Opacity = 0,
             IsHitTestVisible = false,
             RenderTransform = Lowered,
             Children = { copy, save, edit },
         };
+        Grid.SetColumn(save, 1);
+        Grid.SetColumn(edit, 2);
 
         var well = new Border
         {
@@ -112,9 +123,9 @@ internal sealed class LibraryTile : Border
                 },
             },
         };
-        var time = Label(entry.Captured.ToLocalTime().ToString("T"), HorizontalAlignment.Left);
+        TimeLabel = Label(taken, HorizontalAlignment.Left);
         var size = Label($"{pixels.Width} × {pixels.Height}", HorizontalAlignment.Right);
-        var labels = new Grid { Margin = new Thickness(10, 0), Children = { time, size } };
+        var labels = new Grid { Margin = new Thickness(10, 0), Children = { TimeLabel, size } };
         Grid.SetRow(labels, 1);
         Child = new Grid { RowDefinitions = new RowDefinitions("*,32"), Children = { well, labels } };
 

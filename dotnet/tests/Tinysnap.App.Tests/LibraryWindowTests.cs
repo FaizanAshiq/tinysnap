@@ -112,7 +112,26 @@ public class LibraryWindowTests
         var peer = ControlAutomationPeer.CreatePeerForElement(window.TileFor(newer)!);
         Assert.Equal(AutomationControlType.ListItem, peer.GetAutomationControlType());
         Assert.True(peer.IsControlElement());
-        Assert.Equal($"Capture at {newer.Captured.ToLocalTime():T}", peer.GetName());
+        Assert.Equal($"Capture at {newer.Captured.ToLocalTime():t}, 400 by 300 pixels", peer.GetName());
+    }
+
+    /// <summary>As on the Mac: the hour and minute under a tile, the toolbar at the window's right,
+    /// and Copy, Save and Edit sharing the picture's width.</summary>
+    [AvaloniaFact]
+    public void TheLibraryIsLaidOutAsOnTheMac()
+    {
+        var (_, window, newer, _) = Open();
+        Assert.Equal((860, 600, 480, 320), (window.Width, window.Height, window.MinWidth, window.MinHeight));
+        var tile = window.TileFor(newer)!;
+        Assert.Equal(newer.Captured.ToLocalTime().ToString("t"), tile.TimeLabel.Text);
+
+        var last = window.ToolbarButtons[^1];
+        var right = last.TranslatePoint(new Avalonia.Point(last.Bounds.Width, 0), window)!.Value.X;
+        Assert.InRange(right, window.Bounds.Width - 12, window.Bounds.Width);
+
+        var widths = tile.HoverButtons.Select(button => button.Bounds.Width).Distinct().ToList();
+        Assert.Single(widths);
+        Assert.All(tile.HoverButtons, button => Assert.Equal(28, button.Bounds.Height));
     }
 
     [AvaloniaFact]

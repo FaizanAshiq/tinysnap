@@ -2,7 +2,7 @@ import AppKit
 import TinysnapCore
 
 /// Borderless panels refuse to become key unless told otherwise, and a pin needs the
-/// keys: Escape, the opacity digits, Command C and Command W.
+/// keys: Escape, the opacity digits, Command C, Command S and Command W.
 final class PinPanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
