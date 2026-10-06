@@ -14,7 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var hotKeys: HotKeyCenter?
     private var takenHotKeys: Set<HotKeyAction> = []
-    private let releases = ReleaseWatch()
+    private lazy var updater = Updater(isIdle: { [unowned self] in isIdle }, quit: { [unowned self] in
+        // Not the relaunch a fresh Screen Recording grant asks for: the update starts the new copy.
+        suppressRelaunchOnQuit = true
+        NSApp.terminate(nil)
+    })
     /// Read here rather than on finishing launching: opening a file launches Tinysnap and
     /// delivers the file first, and an editor built before the read took the defaults,
     /// then wrote them over the remembered styles when it closed.
@@ -55,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async { [weak self] in self?.showTakenHotKeys(notice) }
         }
 
-        releases.start()
+        updater.start()
         Task { await ScreenReader.warmUp() }
         // Off the main thread and at low priority: the first read can take many seconds.
         Task.detached(priority: .utility) { TextReader.warmUp() }
@@ -106,8 +110,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(note("macOS only lets an app read the screen after a restart"))
             menu.addItem(.separator())
         }
-        if let version = releases.available {
-            menu.addItem(NSMenuItem(title: "Update to Tinysnap \(version)...", action: #selector(showRelease), keyEquivalent: ""))
+        if let release = updater.available {
+            menu.addItem(NSMenuItem(title: "Update to Tinysnap \(release.version)...", action: #selector(showRelease), keyEquivalent: ""))
             menu.addItem(.separator())
         }
 
@@ -131,7 +135,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func showRelease() {
-        releases.tell()
+        updater.tell()
+    }
+
+    /// Nothing of Tinysnap's on screen and nothing under way, a capture still being written to the
+    /// library least of all, so a restart to update goes unnoticed and loses nothing.
+    private var isIdle: Bool {
+        editors.isEmpty && pins.isEmpty && overlay == nil && !isFreezing && thumbnail == nil && secondsLeft == nil
+            && rendering.isEmpty && libraryWindow?.window?.isVisible != true && settings?.window?.isVisible != true
     }
 
     private func note(_ text: String) -> NSMenuItem {

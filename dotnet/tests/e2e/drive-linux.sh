@@ -166,6 +166,8 @@ if [ -n "$next" ]; then
   within 10 stopped
   within 30 eval '! pgrep -x Tinysnap >/dev/null'
   before=$(md5sum < "$moved")
+  # The first start looked already, which would put the next look a week away.
+  rm -f "$HOME/.config/Tinysnap/last-update-check"
   TINYSNAP_UPDATE_FEED=$next "$moved" >> "$shots/app.log" 2>&1 &
   check "with nothing open, Tinysnap updates itself, starts again and says so" within 120 shown "^Updated to Tinysnap $next_version$"
   check "the AppImage is replaced by the new version" eval '[ "$(md5sum < "$moved")" != "$before" ]'

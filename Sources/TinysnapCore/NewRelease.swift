@@ -1,11 +1,20 @@
 import Foundation
 
-/// A release newer than this copy, as GitHub's answer for the latest release names it. The Mac
-/// copy is installed by Homebrew, which updates it, so Tinysnap only tells of one.
-public enum NewRelease {
-    /// The latest release's version without its `v`, when it is newer than `current`; nil when it
-    /// is not, or the answer cannot be read, as when GitHub refuses or is down.
-    public static func version(in latest: Data, newerThan current: String) -> String? {
+/// A release newer than this copy, as GitHub's answer for the latest release names it.
+public struct NewRelease: Equatable, Sendable {
+    /// Without its `v`.
+    public let version: String
+    /// The Mac app zipped, when the release carries one: what a copy that updates itself downloads.
+    public let download: URL?
+
+    public init(version: String, download: URL?) {
+        self.version = version
+        self.download = download
+    }
+
+    /// The latest release when it is newer than `current`; nil when it is not, or the answer cannot
+    /// be read, as when GitHub refuses or is down.
+    public static func newer(in latest: Data, than current: String) -> NewRelease? {
         guard let answer = try? JSONSerialization.jsonObject(with: latest) as? [String: Any],
               let tag = answer["tag_name"] as? String else { return nil }
         let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
@@ -14,12 +23,34 @@ public enum NewRelease {
         let length = max(newest.count, mine.count)
         newest += Array(repeating: 0, count: length - newest.count)
         mine += Array(repeating: 0, count: length - mine.count)
-        return mine.lexicographicallyPrecedes(newest) ? version : nil
+        guard mine.lexicographicallyPrecedes(newest) else { return nil }
+        let assets = answer["assets"] as? [[String: Any]] ?? []
+        let zip = assets.first { $0["name"] as? String == "Tinysnap-mac.zip" }?["browser_download_url"] as? String
+        return NewRelease(version: version, download: zip.flatMap(URL.init(string:)))
     }
 
     /// 1.10.0 as [1, 10, 0], so it sorts after 1.9.2, as text it would not.
     private static func numbers(_ version: String) -> [Int]? {
         let parts = version.split(separator: ".").map { Int($0) }
         return parts.isEmpty || parts.contains(nil) ? nil : parts.compactMap { $0 }
+    }
+}
+
+/// How a copy of the Mac app gets a newer version, from where it runs and how it was signed.
+public enum UpdateRoute: Equatable, Sendable {
+    /// A release build where it can replace itself: it downloads the update and installs it.
+    case itself
+    /// Installed by Homebrew, which keeps track of what it installed: told the command.
+    case homebrew
+    /// A release build run from the disk image, or straight from Downloads, which macOS runs from a
+    /// hidden copy no app may write to: offered a move to Applications, from where it updates itself.
+    case move
+    /// Built on this Mac, so it cannot tell a release build from anyone else's: told where to download one.
+    case download
+
+    public static func of(path: String, releaseSigned: Bool, writable: Bool) -> UpdateRoute {
+        if path.contains("/Cellar/tinysnap/") || path.contains("/opt/tinysnap/") { return .homebrew }
+        guard releaseSigned else { return .download }
+        return writable ? .itself : .move
     }
 }
