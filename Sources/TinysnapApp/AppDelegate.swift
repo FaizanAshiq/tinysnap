@@ -532,6 +532,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             onBackdropChange: { [weak self] backdrop in self?.remember(backdrop) },
             onMeasureChange: { [weak self] measure in self?.remember(measure) },
             onShowsLayersChange: { [weak self] shows in self?.remember(showsLayers: shows) },
+            onModeChange: { [weak self] mode in self?.remember(editorMode: mode) },
             onClose: { [weak self] closed in
                 self?.editors.removeAll { $0 === closed }
                 self?.updateDockIcon()
@@ -610,6 +611,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Merged into what is on disk, as the styles are, so Settings is not written over.
     /// Only the next editor follows it; open ones keep the panel as they have it.
+    /// Merged into what is on disk, so Settings is not written over; every open editor and
+    /// Settings follow.
+    private func remember(editorMode: EditorMode) {
+        var current = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? preferences
+        current.editorMode = editorMode
+        preferences = current
+        try? current.save(to: Preferences.defaultFileURL)
+        editors.forEach { $0.preferencesChanged() }
+        settings?.editorModeChanged(editorMode)
+    }
+
     private func remember(showsLayers: Bool) {
         var current = (try? Preferences.load(from: Preferences.defaultFileURL)) ?? preferences
         current.showsLayers = showsLayers

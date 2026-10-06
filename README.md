@@ -67,6 +67,12 @@ A window capture keeps the window's rounded corners transparent and leaves its s
 
 ## Editing
 
+The editor has two toolbars, switched at the right end of it or in Settings. **Essential** shows
+the tools most screenshots need: arrow, box, text, pen, highlighter, blur and crop, with Undo,
+Save and Copy. **Pro** shows every tool, grouped by kind, with reading, framing and sharing at the
+right. Tinysnap starts in Essential for someone new and in Pro for anyone who used it before, and
+in either one every tool below is still on its key.
+
 | Tool | Key | | Tool | Key |
 | --- | --- | --- | --- | --- |
 | Select | `V` | | Text | `T` |

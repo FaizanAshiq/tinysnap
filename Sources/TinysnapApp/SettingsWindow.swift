@@ -18,6 +18,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private var preferences: Preferences
     private let library: Library
     private let afterCapturePopUp = NSPopUpButton()
+    private let toolbarPopUp = NSPopUpButton()
     private let keepLibraryCheckbox = NSButton(checkboxWithTitle: "Keep captures in the library for 30 days", target: nil, action: nil)
     private let librarySizeLabel = NSTextField(labelWithString: "")
     private let libraryProblemLabel = NSTextField(wrappingLabelWithString: "")
@@ -86,6 +87,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         afterCapturePopUp.target = self
         afterCapturePopUp.action = #selector(afterCaptureChanged)
         rows.append(("After a capture", afterCapturePopUp))
+        toolbarPopUp.addItems(withTitles: ["Essential: the everyday tools", "Pro: every tool"])
+        toolbarPopUp.toolTip = "Also switched in any editor, at the right end of its toolbar"
+        toolbarPopUp.target = self
+        toolbarPopUp.action = #selector(toolbarChanged)
+        rows.append(("Editor toolbar", toolbarPopUp))
 
         keepLibraryCheckbox.target = self
         keepLibraryCheckbox.action = #selector(keepLibraryChanged)
@@ -135,7 +141,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         // The column is the window's 460 points less 20 each side, the 130 point labels
         // and the 12 between.
         let controlWidth: CGFloat = 278
-        let fullWidth: [NSView] = Array(recorders.values) + [scalePopUp, afterCapturePopUp, chooseFolder.superview].compactMap { $0 }
+        let fullWidth: [NSView] = Array(recorders.values) + [scalePopUp, afterCapturePopUp, toolbarPopUp, chooseFolder.superview].compactMap { $0 }
         for view in fullWidth {
             view.widthAnchor.constraint(equalToConstant: controlWidth).isActive = true
         }
@@ -177,6 +183,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         menuBarIconCheckbox.state = preferences.showMenuBarIcon ? .on : .off
         dockIconCheckbox.state = preferences.showDockIconWhileCapturing ? .on : .off
         afterCapturePopUp.selectItem(at: preferences.afterCapture == .editor ? 0 : 1)
+        toolbarPopUp.selectItem(at: preferences.editorMode == .essential ? 0 : 1)
         keepLibraryCheckbox.state = preferences.keepLibrary ? .on : .off
         refreshLibrary()
         refreshScreenAccess()
@@ -191,6 +198,17 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let problem = library.problem()
         libraryProblemLabel.stringValue = problem.map { "Captures are not being kept: \($0)" } ?? ""
         libraryProblemLabel.isHidden = problem == nil
+    }
+
+    @objc private func toolbarChanged() {
+        preferences.editorMode = toolbarPopUp.indexOfSelectedItem == 0 ? .essential : .pro
+        persist(editorMode: preferences.editorMode)
+    }
+
+    /// Picked in an editor while this window is open.
+    func editorModeChanged(_ mode: EditorMode) {
+        preferences.editorMode = mode
+        toolbarPopUp.selectItem(at: mode == .essential ? 0 : 1)
     }
 
     @objc private func afterCaptureChanged() {
@@ -289,7 +307,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         ScreenAccess.openSettings()
     }
 
-    private func persist() {
+    /// - Parameter editorMode: The mode just picked here; otherwise the one on disk, which an
+    ///   editor may have switched while this window was open.
+    private func persist(editorMode: EditorMode? = nil) {
         // Editors write the remembered tool styles, possibly while this window is open.
         // Saving the copy taken when it opened would undo them.
         if let onDisk = try? Preferences.load(from: Preferences.defaultFileURL) {
@@ -298,6 +318,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             preferences.backdrop = onDisk.backdrop
             preferences.measure = onDisk.measure
             preferences.showsLayers = onDisk.showsLayers
+            preferences.editorMode = editorMode ?? onDisk.editorMode
         }
         try? preferences.save(to: Preferences.defaultFileURL)
         loadValues(taken: onChange(preferences))
