@@ -82,13 +82,19 @@ final class Updater {
 
     /// The update downloaded and unpacked, when it is signed exactly as this copy; nil otherwise.
     private func prepare(_ zip: URL) async -> URL? {
-        guard let (file, _) = try? await URLSession.shared.download(from: zip) else { return nil }
+        // A test feed's zip is a file already, used where it is and left there.
+        var downloaded: URL?
+        if !zip.isFileURL {
+            guard let (file, _) = try? await URLSession.shared.download(from: zip) else { return nil }
+            downloaded = file
+        }
+        let file = downloaded ?? zip
+        defer { if let downloaded { try? FileManager.default.removeItem(at: downloaded) } }
         let staging = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("com.faizanashiq.tinysnap/Update", isDirectory: true)
         try? FileManager.default.removeItem(at: staging)
         try? FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
         let unpacked = await Task.detached { Self.run("/usr/bin/ditto", ["-x", "-k", file.path, staging.path]) }.value
-        try? FileManager.default.removeItem(at: file)
         let app = staging.appendingPathComponent("Tinysnap.app")
         guard unpacked, Self.signedAsThisCopy(app) else {
             try? FileManager.default.removeItem(at: staging)
