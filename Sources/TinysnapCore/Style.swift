@@ -176,6 +176,13 @@ public enum Palette {
                 CGFloat(value & 0xFF) / 255)
     }
 
+    /// A colour typed as "#RRGGBB", with or without the # and in either case, as "#RRGGBB";
+    /// nil for anything else.
+    public static func hex(typed text: String) -> String? {
+        let hex = "#" + text.trimmingCharacters(in: .whitespaces).drop { $0 == "#" }.uppercased()
+        return components(of: hex) == nil ? nil : hex
+    }
+
     /// How bright a colour looks, 0 to 1, from its sRGB components.
     static func luminance(of color: CGColor) -> CGFloat {
         let parts = color.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil)?

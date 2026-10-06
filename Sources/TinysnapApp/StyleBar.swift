@@ -245,7 +245,7 @@ final class StyleBar: NSVisualEffectView {
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         NotificationCenter.default.addObserver(forName: NSPopover.didCloseNotification, object: popover, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
-                controller.detachColorPanel()
+                controller.closeColorPanel()
                 self?.onCommit?()
             }
         }
@@ -1083,7 +1083,15 @@ final class ColorPaletteController: NSViewController {
             stack.setAccessibilityLabel("Recent colours")
             recentRow = [stack]
         }
-        let column = NSStackView(views: rows + recentRow + [custom])
+        // Return takes it; anything that is not a colour is selected to type over.
+        let field = NSTextField()
+        field.placeholderString = "#RRGGBB"
+        field.setAccessibilityLabel("Hex colour")
+        field.cell?.sendsActionOnEndEditing = false
+        field.target = self
+        field.action = #selector(typedHex(_:))
+        field.widthAnchor.constraint(equalToConstant: 116).isActive = true
+        let column = NSStackView(views: rows + recentRow + [field, custom])
         column.orientation = .vertical
         column.spacing = 10
         column.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
@@ -1121,6 +1129,18 @@ final class ColorPaletteController: NSViewController {
         onPick(hex, false)
     }
 
+    /// A finished choice, as a swatch is, so it closes the palette.
+    @objc private func typedHex(_ sender: NSTextField) {
+        guard let hex = Palette.hex(typed: sender.stringValue) else {
+            NSSound.beep()
+            sender.selectText(nil)
+            return
+        }
+        chosen = hex
+        swatches.forEach { $0.needsDisplay = true }
+        onPick(hex, false)
+    }
+
     @objc private func showColorPanel() {
         let panel = NSColorPanel.shared
         // The colour first, while the panel points nowhere: setting it in code sends the
@@ -1140,13 +1160,16 @@ final class ColorPaletteController: NSViewController {
         onPick(chosen, true)
     }
 
-    /// The colour panel outlives the palette. Left pointing here, it would keep
-    /// restyling whatever became selected after the palette closed.
-    func detachColorPanel() {
+    /// The colour panel goes with the palette, so a click anywhere in the editor puts both
+    /// away, the colour picked last kept: it was applied as it changed. Reported: left
+    /// open, the panel stayed until closed from its corner. It is let go first, or it
+    /// would keep restyling whatever became selected after.
+    func closeColorPanel() {
         guard Self.colorPanelOwner === self else { return }
         Self.colorPanelOwner = nil
         NSColorPanel.shared.setTarget(nil)
         NSColorPanel.shared.setAction(nil)
+        NSColorPanel.shared.orderOut(nil)
     }
 
     /// NSColorPanel does not say who its target is, so the palette that took it last is
