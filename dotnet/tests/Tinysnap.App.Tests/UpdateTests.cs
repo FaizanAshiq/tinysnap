@@ -70,6 +70,29 @@ public class UpdateTests
         Assert.Equal(0, quits);
     }
 
+    /// <summary>Asked for: one look a week, which a restart, as at every login, does not hurry.</summary>
+    [AvaloniaFact]
+    public void TheFirstLookComesSoonAfterLaunchAndTheNextAWeekLater()
+    {
+        var setup = Launch();
+        setup.Controller.StartUpdating(() => { });
+        Assert.Equal(TimeSpan.FromSeconds(10), setup.Time.NewestDue);
+        setup.Time.Elapse();
+        Assert.Equal(TimeSpan.FromDays(7), setup.Time.NewestDue);
+    }
+
+    [AvaloniaFact]
+    public void ALookTwoDaysAgoWaitsOutTheWeekAfterARestart()
+    {
+        var setup = Launch();
+        var stamp = Path.Combine(Path.GetDirectoryName(setup.Controller.Preferences.Path)!, "last-update-check");
+        Directory.CreateDirectory(Path.GetDirectoryName(stamp)!);
+        File.WriteAllText(stamp, DateTimeOffset.UtcNow.AddDays(-2).ToString("O"));
+        setup.Controller.StartUpdating(() => { });
+        Assert.InRange(setup.Time.NewestDue, TimeSpan.FromDays(5) - TimeSpan.FromMinutes(1), TimeSpan.FromDays(5));
+        Assert.Equal(0, ((FakeUpdates)setup.Platform.Updates!).Checks);
+    }
+
     [AvaloniaFact]
     public void TheRestartedCopySaysItWasUpdated()
     {

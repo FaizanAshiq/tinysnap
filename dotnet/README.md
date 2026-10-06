@@ -107,8 +107,9 @@ For Linux, attach from the same run, for each of `linux-x64` and `linux-arm64`,
 `Tinysnap-<runtime>.AppImage`, `releases.<runtime>.json` and `Tinysnap-X.Y.Z-<runtime>-full.nupkg`,
 after the Wayland path has been checked on a real GNOME machine.
 
-Installed copies keep themselves up to date. Ten seconds after starting and every six hours,
-Tinysnap reads the feed for its platform and processor from the latest release, downloads the
+Installed copies keep themselves up to date. Once a week, ten seconds after the first start and
+then a week after the last look, which a restart does not hurry, Tinysnap reads the feed for its
+platform and processor from the latest release, downloads the
 full package, and installs it the first minute nothing of Tinysnap's is open: it quits, Velopack
 puts the new version in place, and it starts again saying "Updated to Tinysnap X". Quit before
 that, and it is installed at the next start. A release without the feed and package files leaves

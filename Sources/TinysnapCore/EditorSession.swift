@@ -128,7 +128,7 @@ public struct EditorSession {
                 let trimmed = display.outputRect.trimmed(toRatio: value).wholePixels
                 if trimmed.width >= 1, trimmed.height >= 1, trimmed != display.outputRect {
                     display.crop = trimmed
-                    history.commit(display)
+                    commit()
                 }
             }
             return
@@ -153,7 +153,7 @@ public struct EditorSession {
         drawn.freehand = before.freehand
         guard drawn != before else { return }
         // A text still being typed is committed when typing ends, as one step.
-        if typingID == nil { history.commit(display, mergeKey: merging ? "style \(id)" : nil) }
+        if typingID == nil { commit(mergeKey: merging ? "style \(id)" : nil) }
     }
 
     // MARK: Measure
@@ -166,7 +166,7 @@ public struct EditorSession {
         for line in MeasureShape.clearTags(lines, width: Tool.measure.points(for: style.size) ?? 2, scale: display.scale) {
             display.annotations.append(Annotation(kind: .measure(from: line.from, to: line.to), style: style, labelAt: line.labelAt))
         }
-        history.commit(display)
+        commit()
         selection = nil
     }
 
@@ -176,7 +176,7 @@ public struct EditorSession {
     /// panel's stream of changes, which undoes as one.
     public mutating func setBackdrop(_ backdrop: Backdrop?, merging: Bool = false) {
         display.backdrop = backdrop
-        history.commit(display, mergeKey: merging ? "backdrop" : nil)
+        commit(mergeKey: merging ? "backdrop" : nil)
     }
 
     // MARK: Size
@@ -185,7 +185,7 @@ public struct EditorSession {
     /// Export setting again.
     public mutating func setResize(_ resize: CGFloat?) {
         display.resize = resize.map(display.clampedResize)
-        history.commit(display)
+        commit()
     }
 
     // MARK: Redact
@@ -216,7 +216,7 @@ public struct EditorSession {
         }.count
         display.annotations.insert(contentsOf: fresh.map { Annotation(kind: .erase($0), style: style) }, at: bottom)
         selection = nil
-        history.commit(display)
+        commit()
         return fresh.count
     }
 
@@ -226,7 +226,7 @@ public struct EditorSession {
     public mutating func setStepStart(_ start: Int) {
         let limits = Document.stepStartLimits
         display.stepStart = min(max(start, limits.lowerBound), limits.upperBound)
-        history.commit(display)
+        commit()
     }
 
     // MARK: Magnifier
@@ -248,7 +248,7 @@ public struct EditorSession {
         let zoomed = min(max(zoom + 0.5 * CGFloat(steps), 1.5), 4)
         lens.kind = .magnifier(center: center, radius: radius, zoom: zoomed)
         display.replace(lens)
-        history.commit(display, mergeKey: "zoom \(id)")
+        commit(mergeKey: "zoom \(id)")
     }
 
     // MARK: Pointer
@@ -322,7 +322,26 @@ public struct EditorSession {
     /// Held keys work the way they do in Photoshop while a shape is drawn: Shift
     /// constrains, Option draws a box from its centre, and Space moves the whole shape,
     /// after which the drag carries on resizing from the new place.
+    /// Records the step, the crop first taking in any shape that now reaches past it.
+    private mutating func commit(mergeKey: String? = nil) {
+        cropFollowShapes()
+        history.commit(display, mergeKey: mergeKey)
+    }
+
+    /// A shape drawn, moved, resized or typed past the crop takes the crop out with it, as one past
+    /// the capture's edge grows the canvas. Measured from the last step, so undo puts it back.
+    private mutating func cropFollowShapes() {
+        display.cropFollowShapes(since: history.document, ratio: style(for: .crop).cropRatio.value)
+    }
+
     public mutating func pointerDragged(to point: CGPoint, modifiers: Modifiers = []) {
+        // Live, so the crop opens out as the shape is dragged past it, and closes again if it comes back.
+        defer {
+            switch phase {
+            case .drawing, .moving, .resizing: cropFollowShapes()
+            case .cropping, .idle, .typing: break
+            }
+        }
         let constrained = modifiers.contains(.shift)
         let delta = { (last: CGPoint) in CGVector(dx: point.x - last.x, dy: point.y - last.y) }
         switch phase {
@@ -386,12 +405,12 @@ public struct EditorSession {
                 selection = nil
                 return
             }
-            history.commit(display)
+            commit()
             selection = id
         case .moving, .resizing, .cropping:
             phase = .idle
             guides = []
-            history.commit(display)
+            commit()
         case .idle, .typing:
             break
         }
@@ -507,6 +526,7 @@ public struct EditorSession {
               case let .text(origin, _) = annotation.kind else { return }
         annotation.kind = .text(origin: origin, string: string)
         display.replace(annotation)
+        cropFollowShapes()
     }
 
     /// Ends typing. Text left empty is removed: a new one leaves no trace in undo, an
@@ -518,7 +538,7 @@ public struct EditorSession {
             display.remove(id)
             selection = nil
         }
-        history.commit(display)
+        commit()
     }
 
     // MARK: Keyboard
@@ -527,13 +547,13 @@ public struct EditorSession {
         guard phase == .idle, let id = selection, selectedAnnotation?.isLocked != true else { return }
         display.remove(id)
         selection = nil
-        history.commit(display)
+        commit()
     }
 
     public mutating func nudge(dx: CGFloat, dy: CGFloat) {
         guard phase == .idle, let annotation = selectedAnnotation, !annotation.isLocked, !annotation.isHidden else { return }
         display.replace(annotation.moved(by: CGVector(dx: dx, dy: dy)))
-        history.commit(display)
+        commit()
     }
 
     public mutating func escape() -> EscapeResult {
@@ -609,7 +629,7 @@ public struct EditorSession {
 
     public mutating func dropLayer() {
         guard phase == .idle else { return }
-        history.commit(display)
+        commit()
     }
 
     public mutating func cancelLayerDrag() {
@@ -640,7 +660,7 @@ public struct EditorSession {
         let copy = Annotation(kind: moved.kind, style: moved.style, labelAt: moved.labelAt)
         display.annotations.insert(copy, at: index + 1)
         selection = copy.id
-        history.commit(display)
+        commit()
     }
 
     private mutating func edit(_ id: Annotation.ID, _ change: (inout Annotation) -> Void) {
@@ -648,7 +668,7 @@ public struct EditorSession {
         guard phase == .idle, var annotation = display.annotation(id) else { return }
         change(&annotation)
         display.replace(annotation)
-        history.commit(display)
+        commit()
     }
 
     // MARK: Images
@@ -673,7 +693,7 @@ public struct EditorSession {
         style.difference = false
         let annotation = Annotation(kind: .image(rect, image), style: style)
         display.annotations.append(annotation)
-        history.commit(display)
+        commit()
         selection = annotation.id
     }
 

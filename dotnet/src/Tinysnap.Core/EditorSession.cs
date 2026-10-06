@@ -139,7 +139,7 @@ public sealed class EditorSession
                 && trimmed != Display.OutputRect)
             {
                 Display = Display with { Crop = trimmed };
-                History.Commit(Display);
+                Commit();
             }
             return;
         }
@@ -165,7 +165,7 @@ public sealed class EditorSession
         // keeps its shape, so a change to nothing else takes no undo step.
         if (annotation.Style with { Freehand = before.Freehand } == before) return;
         // A text still being typed is committed when typing ends, as one step.
-        if (TypingId is null) History.Commit(Display, merging ? $"style {id}" : null);
+        if (TypingId is null) Commit(merging ? $"style {id}" : null);
     }
 
     // Measure
@@ -180,7 +180,7 @@ public sealed class EditorSession
         var kept = MeasureShape.ClearTags(lines, width, Display.Scale)
             .Select(line => Annotation.New(new AnnotationKind.Measure(line.From, line.To), style, line.LabelAt));
         Display = Display with { Annotations = Display.Annotations.AddRange(kept) };
-        History.Commit(Display);
+        Commit();
         Selection = null;
     }
 
@@ -191,7 +191,7 @@ public sealed class EditorSession
     public void SetBackdrop(Backdrop? backdrop, bool merging = false)
     {
         Display = Display with { Backdrop = backdrop };
-        History.Commit(Display, merging ? "backdrop" : null);
+        Commit(merging ? "backdrop" : null);
     }
 
     // Size
@@ -201,7 +201,7 @@ public sealed class EditorSession
     public void SetResize(double? resize)
     {
         Display = Display with { Resize = resize is { } value ? Display.ClampedResize(value) : null };
-        History.Commit(Display);
+        Commit();
     }
 
     // Redact
@@ -229,7 +229,7 @@ public sealed class EditorSession
             Annotations = Display.Annotations.InsertRange(bottom, fresh.Select(box => Annotation.New(new AnnotationKind.Erase(box), style))),
         };
         Selection = null;
-        History.Commit(Display);
+        Commit();
         return fresh.Count;
     }
 
@@ -239,7 +239,7 @@ public sealed class EditorSession
     public void SetStepStart(int start)
     {
         Display = Display with { StepStart = start };
-        History.Commit(Display);
+        Commit();
     }
 
     // Magnifier
@@ -259,7 +259,7 @@ public sealed class EditorSession
             return;
         var zoomed = Math.Min(Math.Max(zoom + 0.5 * steps, 1.5), 4);
         Display = Display.Replacing(lens with { Kind = new AnnotationKind.Magnifier(center, radius, zoomed) });
-        History.Commit(Display, $"zoom {id}");
+        Commit($"zoom {id}");
     }
 
     // Pointer
@@ -340,7 +340,25 @@ public sealed class EditorSession
     /// <summary>Held keys work the way they do in Photoshop while a shape is drawn: Shift
     /// constrains, Option draws a box from its centre, and Space moves the whole shape, after
     /// which the drag carries on resizing from the new place.</summary>
+    /// <summary>Records the step, the crop first taking in any shape that now reaches past it.</summary>
+    private void Commit(string? mergeKey = null)
+    {
+        CropFollowShapes();
+        History.Commit(Display, mergeKey);
+    }
+
+    /// <summary>A shape drawn, moved, resized or typed past the crop takes the crop out with it, as
+    /// one past the capture's edge grows the canvas. Measured from the last step, so undo puts it back.</summary>
+    private void CropFollowShapes() => Display = Display.CropFollowingShapes(History.Document, StyleFor(Tool.Crop).CropRatio.Value());
+
     public void PointerDragged(Point point, Modifiers modifiers = Modifiers.None)
+    {
+        Drag(point, modifiers);
+        // Live, so the crop opens out as the shape is dragged past it, and closes again if it comes back.
+        if (Phase is EditorPhase.Drawing or EditorPhase.Moving or EditorPhase.Resizing) CropFollowShapes();
+    }
+
+    private void Drag(Point point, Modifiers modifiers)
     {
         var constrained = modifiers.HasFlag(Modifiers.Shift);
         Vector Delta(Point last) => new(point.X - last.X, point.Y - last.Y);
@@ -419,13 +437,13 @@ public sealed class EditorSession
                     Selection = null;
                     return;
                 }
-                History.Commit(Display);
+                Commit();
                 Selection = id;
                 break;
             case EditorPhase.Moving or EditorPhase.Resizing or EditorPhase.Cropping:
                 Phase = EditorPhase.Idle;
                 Guides = [];
-                History.Commit(Display);
+                Commit();
                 break;
         }
     }
@@ -548,6 +566,7 @@ public sealed class EditorSession
         if (TypingId is not { } id || Display.Annotation(id) is not { Kind: AnnotationKind.Text(var origin, _) } annotation)
             return;
         Display = Display.Replacing(annotation with { Kind = new AnnotationKind.Text(origin, text) });
+        CropFollowShapes();
     }
 
     /// <summary>Ends typing. Text left empty is removed: a new one leaves no trace in undo, an
@@ -561,7 +580,7 @@ public sealed class EditorSession
             Display = Display.Removing(id);
             Selection = null;
         }
-        History.Commit(Display);
+        Commit();
     }
 
     // Keyboard
@@ -571,14 +590,14 @@ public sealed class EditorSession
         if (!IsIdle || Selection is not { } id || SelectedAnnotation?.IsLocked == true) return;
         Display = Display.Removing(id);
         Selection = null;
-        History.Commit(Display);
+        Commit();
     }
 
     public void Nudge(double dx, double dy)
     {
         if (!IsIdle || SelectedAnnotation is not { IsLocked: false, IsHidden: false } annotation) return;
         Display = Display.Replacing(annotation.Moved(new Vector(dx, dy)));
-        History.Commit(Display);
+        Commit();
     }
 
     public EscapeResult Escape()
@@ -665,7 +684,7 @@ public sealed class EditorSession
 
     public void DropLayer()
     {
-        if (IsIdle) History.Commit(Display);
+        if (IsIdle) Commit();
     }
 
     public void CancelLayerDrag() => Display = History.Document;
@@ -691,7 +710,7 @@ public sealed class EditorSession
         var copy = Annotation.New(moved.Kind, moved.Style, moved.LabelAt);
         Display = Display with { Annotations = Display.Annotations.Insert(index + 1, copy) };
         Selection = copy.Id;
-        History.Commit(Display);
+        Commit();
     }
 
     private void Edit(Guid id, Func<Annotation, Annotation> change)
@@ -699,7 +718,7 @@ public sealed class EditorSession
         FinishTyping();
         if (!IsIdle || Display.Annotation(id) is not { } annotation) return;
         Display = Display.Replacing(change(annotation));
-        History.Commit(Display);
+        Commit();
     }
 
     // Images
@@ -722,7 +741,7 @@ public sealed class EditorSession
         var style = StyleFor(Tool.Image) with { Opacity = 1, Difference = false };
         var annotation = Annotation.New(new AnnotationKind.Image(rect, image), style);
         Display = Display with { Annotations = Display.Annotations.Add(annotation) };
-        History.Commit(Display);
+        Commit();
         Selection = annotation.Id;
     }
 

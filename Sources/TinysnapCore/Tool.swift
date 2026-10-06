@@ -105,6 +105,9 @@ public enum Tool: String, CaseIterable, Codable, Sendable {
     /// The crop only: any shape, or a ratio it keeps.
     public var hasRatio: Bool { self == .crop }
 
+    /// Blur, pixelate and erase: they hide what is under them rather than add anything.
+    public var hidesCapture: Bool { self == .blur || self == .pixelate || self == .erase }
+
     /// Erase only: cover every email, phone number, number or line of text the reader finds.
     public var hasRedact: Bool { self == .erase }
 

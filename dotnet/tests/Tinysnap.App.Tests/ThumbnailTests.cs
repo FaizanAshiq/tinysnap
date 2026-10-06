@@ -25,6 +25,9 @@ internal sealed class FakeTime : TimeProvider
         return timer;
     }
 
+    /// <summary>When the timer made last fires next, or never.</summary>
+    public TimeSpan NewestDue => timers[^1].Due;
+
     /// <summary>Fires every timer that is running, then runs what they posted.</summary>
     public void Elapse()
     {
@@ -35,6 +38,8 @@ internal sealed class FakeTime : TimeProvider
     private sealed class FakeTimer(TimerCallback callback, object? state, TimeSpan due) : ITimer
     {
         private TimeSpan due = due;
+
+        public TimeSpan Due => due;
 
         public bool Change(TimeSpan dueTime, TimeSpan period)
         {

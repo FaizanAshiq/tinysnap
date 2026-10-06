@@ -719,7 +719,9 @@ public sealed class CaptureController
     /// as Quit does, for an update to install.</summary>
     internal void StartUpdating(Action quit)
     {
-        if (platform.Updates is { } updates) updater = new Updater(updates, () => IsIdle, quit, time ?? TimeProvider.System, ui);
+        if (platform.Updates is { } updates)
+            updater = new Updater(updates, () => IsIdle, quit, time ?? TimeProvider.System, ui,
+                                  Path.Combine(Path.GetDirectoryName(preferences.Path)!, "last-update-check"));
     }
 
     /// <summary>Nothing of Tinysnap's on screen and nothing under way, a capture still being written

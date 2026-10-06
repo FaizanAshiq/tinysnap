@@ -167,6 +167,32 @@ public sealed record Document
         }
     }
 
+    /// <summary>The crop, taking in every shape that changed since <paramref name="before"/> and now
+    /// reaches past it, with the margin the canvas gives a shape drawn past the capture's edge, and
+    /// keeping <paramref name="ratio"/> when there is one. Measured from the crop
+    /// <paramref name="before"/> had, so a shape dragged out and back leaves it as it was. A shape
+    /// wholly outside is somewhere the crop leaves out, as one cropped away is, and blur, pixelate and
+    /// erase hide what is under them rather than add anything: neither moves it.</summary>
+    public Document CropFollowingShapes(Document before, double? ratio)
+    {
+        if (before.Crop is not { } crop) return this;
+        var earlier = before.Annotations.GroupBy(a => a.Id).ToDictionary(g => g.Key, g => g.First());
+        var changed = Annotations.Where(a => !earlier.TryGetValue(a.Id, out var was) || was != a).ToList();
+        if (changed.Count == 0) return this;
+        var margin = GrowthMargin * Scale;
+        var grown = crop;
+        foreach (var annotation in changed.Where(a => !a.IsHidden && !a.Tool.HidesCapture()))
+        {
+            var reach = annotation.GrowthBounds(Scale);
+            if (!reach.Intersects(crop) || crop.Contains(reach)) continue;
+            grown = grown.Union(annotation.Bounds(Scale).Inset(-margin, -margin));
+        }
+        if (grown == crop) return this with { Crop = crop };
+        // Grown to the ratio past the canvas's edge, it moves back in rather than lose the ratio.
+        if (ratio is { } value) grown = grown.Expanded(value).ShiftedInto(Extent);
+        return this with { Crop = grown.Intersection(Extent).WholePixels };
+    }
+
     public Annotation? Annotation(Guid id) => Annotations.FirstOrDefault(a => a.Id == id);
 
     /// <summary>Not stored: the start plus the number of shown steps of its kind before this one,
