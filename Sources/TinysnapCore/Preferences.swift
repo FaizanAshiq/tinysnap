@@ -133,6 +133,19 @@ public struct HotKeys: Equatable, Sendable, Codable {
         }
     }
 
+    /// What to tell the person when another app or the system holds some of these shortcuts,
+    /// so they do nothing, and how to get them back; nil when none is taken.
+    public func takenNotice(_ taken: Set<HotKeyAction>) -> (message: String, detail: String)? {
+        let keys = HotKeyAction.allCases.filter(taken.contains).compactMap { self[$0]?.displayString }
+        guard let last = keys.last else { return nil }
+        let one = keys.count == 1
+        let list = one ? last : keys.dropLast().joined(separator: ", ") + " and " + last
+        let them = one ? "it" : "them"
+        let settings = one ? "pick another shortcut in Tinysnap Settings" : "pick other shortcuts in Tinysnap Settings"
+        return ("\(list) \(one ? "is" : "are") already in use",
+                "Another app or the system holds \(them). Free \(them) there, or \(settings).")
+    }
+
     private enum CodingKeys: String, CodingKey {
         case area, window, fullscreen, text, qr, repeatArea, delayed, library
     }

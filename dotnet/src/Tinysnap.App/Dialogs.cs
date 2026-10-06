@@ -11,8 +11,9 @@ public enum CloseChoice { Save, Discard, Cancel }
 /// answer them without a modal window.</summary>
 internal interface IDialogs
 {
-    /// <summary>A notice with OK, over <paramref name="owner"/> when there is one.</summary>
-    Task Tell(Window? owner, string message);
+    /// <summary>A notice with OK, over <paramref name="owner"/> when there is one, and
+    /// <paramref name="detail"/> under it when there is more to say.</summary>
+    Task Tell(Window? owner, string message, string? detail = null);
 
     /// <summary>Save, Discard or Cancel, for closing a capture whose edits would be lost.
     /// <paramref name="libraryFailed"/> says why for a capture the library could not keep.</summary>
@@ -25,9 +26,9 @@ internal interface IDialogs
 
 internal sealed class AvaloniaDialogs : IDialogs
 {
-    public async Task Tell(Window? owner, string message)
+    public async Task Tell(Window? owner, string message, string? detail = null)
     {
-        var dialog = Dialog(message, null, [("OK", 0, true, true)]);
+        var dialog = Dialog(message, detail, [("OK", 0, true, true)]);
         if (owner is null) dialog.Show();
         else await dialog.ShowDialog<int?>(owner);
     }

@@ -58,6 +58,9 @@ public sealed class CaptureController
         Hotkeys = new HotkeyRegistrar(platform.Hotkeys);
         var applied = preferences.Current.HotKeys;
         Hotkeys.Apply(applied);
+        // Said once, at launch: Settings marks a taken shortcut while it is being changed.
+        if (applied.TakenNotice(Hotkeys.Taken, OperatingSystem.IsWindows()) is { } notice)
+            ui.Post(() => _ = services.Dialogs.Tell(null, notice.Message, notice.Detail));
         // Only a change to the hotkeys lets them go and takes them again, not a remembered style.
         preferences.Changed += changed =>
         {

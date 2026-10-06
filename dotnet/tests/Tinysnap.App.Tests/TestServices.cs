@@ -17,9 +17,9 @@ internal sealed class FakeDialogs(CloseChoice answer = CloseChoice.Cancel) : IDi
     public int Asked { get; private set; }
     public List<string> Told { get; } = [];
 
-    public Task Tell(Window? owner, string message)
+    public Task Tell(Window? owner, string message, string? detail = null)
     {
-        Told.Add(message);
+        Told.Add(detail is null ? message : $"{message}\n{detail}");
         return Task.CompletedTask;
     }
 
@@ -44,11 +44,14 @@ internal static class TestServices
 {
     /// <param name="picker">The system's window picker, for a platform that cannot list windows.</param>
     /// <param name="placesWindowsAsAsked">False for a desktop that keeps windows on screen and below its panel, as GNOME does.</param>
-    public static AppSetup Launch(Preferences? preferences = null, Func<Task<Capture?>>? picker = null, bool placesWindowsAsAsked = true)
+    /// <param name="held">Shortcuts another app holds before Tinysnap starts.</param>
+    public static AppSetup Launch(Preferences? preferences = null, Func<Task<Capture?>>? picker = null, bool placesWindowsAsAsked = true,
+                                  HotKeyBinding[]? held = null)
     {
         var retina = Screens.Frozen(new Tinysnap.Core.Rect(0, 0, 400, 300), 2, SkiaSharp.SKColors.Blue);
         var platform = new FakePlatform(new FakeScreenCapture(() => Screens.Desktop(retina), () => new Tinysnap.Core.Point(100, 100),
                                                               pickWindow: picker, placesWindowsAsAsked: placesWindowsAsAsked));
+        ((FakeHotkeys)platform.Hotkeys).HeldElsewhere.UnionWith(held ?? []);
         var library = new LibraryStore(TemporaryFolder());
         var dialogs = new FakeDialogs();
         var time = new FakeTime();

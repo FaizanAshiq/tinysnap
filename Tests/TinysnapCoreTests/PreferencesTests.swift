@@ -84,6 +84,17 @@ struct PreferencesTests {
         #expect(HotKeys.defaults.action(using: HotKeyBinding(keyCode: 19, modifiers: [.command])) == nil)
     }
 
+    /// A shortcut another app holds does nothing, so the person is told which, and how to get it back.
+    @Test func aTakenShortcutSaysWhoHoldsItAndHowToFreeIt() throws {
+        #expect(HotKeys.defaults.takenNotice([]) == nil)
+        let one = try #require(HotKeys.defaults.takenNotice([.fullscreen]))
+        #expect(one.message == "⇧⌘1 is already in use")
+        #expect(one.detail == "Another app or the system holds it. Free it there, or pick another shortcut in Tinysnap Settings.")
+        let three = try #require(HotKeys.defaults.takenNotice([.text, .area, .fullscreen]))
+        #expect(three.message == "⇧⌘2, ⇧⌘1 and ⇧⌘O are already in use")
+        #expect(three.detail == "Another app or the system holds them. Free them there, or pick other shortcuts in Tinysnap Settings.")
+    }
+
     @Test func oneRememberedColourStartsRedAndABadOneFallsBack() throws {
         #expect(Preferences.defaults.colorHex == Palette.red)
         #expect(try Preferences.load(from: temporaryFile(containing: #"{"colorHex": "blue"}"#)).colorHex == Palette.red)
