@@ -17,7 +17,9 @@ namespace Tinysnap.App;
 /// stand-in the Mac runs during development.</summary>
 /// <param name="started">Called once the app is up, for the development launcher.</param>
 /// <param name="files">Pictures the app was opened with, from "Open with", each opened in an editor.</param>
-public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started = null, IReadOnlyList<string>? files = null)
+/// <param name="updatedTo">The version an update just installed, when an update started this run.</param>
+public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started = null, IReadOnlyList<string>? files = null,
+                                string? updatedTo = null)
     : Application
 {
     public IPlatform Platform { get; } = platform;
@@ -61,6 +63,9 @@ public sealed class TinysnapApp(IPlatform platform, Action<TinysnapApp>? started
             if (files is { Count: > 0 }) Captures.OpenFiles(files);
             Tray.Install(this, Platform, Captures, desktop);
             desktop.ShutdownRequested += (_, _) => Platform.Hotkeys.Dispose();
+            // An update quits as Quit does, with nothing open to close.
+            Captures.StartUpdating(() => desktop.Shutdown());
+            if (updatedTo is not null) Captures.SayUpdated(updatedTo);
             // Once the app is idle: the first capture then opens as quickly as the rest.
             Dispatcher.UIThread.Post(Captures.WarmUp, DispatcherPriority.Background);
             started?.Invoke(this);

@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var hotKeys: HotKeyCenter?
     private var takenHotKeys: Set<HotKeyAction> = []
+    private let releases = ReleaseWatch()
     /// Read here rather than on finishing launching: opening a file launches Tinysnap and
     /// delivers the file first, and an editor built before the read took the defaults,
     /// then wrote them over the remembered styles when it closed.
@@ -54,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async { [weak self] in self?.showTakenHotKeys(notice) }
         }
 
+        releases.start()
         Task { await ScreenReader.warmUp() }
         // Off the main thread and at low priority: the first read can take many seconds.
         Task.detached(priority: .utility) { TextReader.warmUp() }
@@ -104,6 +106,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(note("macOS only lets an app read the screen after a restart"))
             menu.addItem(.separator())
         }
+        if let version = releases.available {
+            menu.addItem(NSMenuItem(title: "Update to Tinysnap \(version)...", action: #selector(showRelease), keyEquivalent: ""))
+            menu.addItem(.separator())
+        }
 
         for action in HotKeyAction.allCases {
             var title = action.title
@@ -122,6 +128,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "Quit Tinysnap", action: #selector(quit), keyEquivalent: "q"))
         menu.autoenablesItems = false
         menu.items.forEach { $0.target = self }
+    }
+
+    @objc private func showRelease() {
+        releases.tell()
     }
 
     private func note(_ text: String) -> NSMenuItem {

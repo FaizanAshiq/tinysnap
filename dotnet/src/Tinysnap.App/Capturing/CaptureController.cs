@@ -712,6 +712,30 @@ public sealed class CaptureController
         sweeper = (time ?? TimeProvider.System).CreateTimer(_ => ui.Post(() => Sweep()), null, day, day);
     }
 
+    /// <summary>Held, and its timer with it, for as long as the app runs.</summary>
+    private Updater? updater;
+
+    /// <summary>Keeps Tinysnap up to date where it can update itself; <paramref name="quit"/> ends it,
+    /// as Quit does, for an update to install.</summary>
+    internal void StartUpdating(Action quit)
+    {
+        if (platform.Updates is { } updates) updater = new Updater(updates, () => IsIdle, quit, time ?? TimeProvider.System, ui);
+    }
+
+    /// <summary>Nothing of Tinysnap's on screen and nothing under way, a capture still being written
+    /// to the library least of all, so a restart goes unnoticed and loses nothing.</summary>
+    private bool IsIdle =>
+        Overlay is null && editors.Count == 0 && pins.Count == 0 && Thumbnail is null && SecondsLeft is null && libraryWindow is null
+        && settingsWindow is null && Toast is not { IsGone: false } && rendering.Count == 0;
+
+    /// <summary>The copy an update started says so, briefly.</summary>
+    internal void SayUpdated(string version)
+    {
+        Toast?.Dismiss();
+        Toast = new TextToast($"Updated to Tinysnap {version}", "", null, services.Clipboard, platform.Files, null, time);
+        Toast.Show();
+    }
+
     /// <summary>Everything closed for Quit. Each editor with edits asks first, and Cancel on any
     /// of them keeps the app running with that editor and those after it open. A thumbnail still
     /// showing goes as a time out would.</summary>

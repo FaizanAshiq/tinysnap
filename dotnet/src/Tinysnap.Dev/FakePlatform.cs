@@ -109,6 +109,8 @@ public sealed class FakePlatform(IScreenCapture screen) : IPlatform
 
     public IHotkeys Hotkeys { get; } = new FakeHotkeys();
 
+    public IUpdates? Updates { get; } = new FakeUpdates();
+
     // ponytail: the development build copies to this fake, not the Mac's own clipboard; an
     // Avalonia clipboard stand-in if copying on a Mac is ever wanted.
     public IClipboard Clipboard { get; } = new FakeClipboard();
@@ -155,6 +157,25 @@ public sealed class FakeTextReader : ITextReader
     public IReadOnlyList<TextLine>? Words { get; set; } = [];
 
     public Task<IReadOnlyList<TextLine>?> Lines(SkiaSharp.SKImage image) => Task.FromResult(Words);
+}
+
+/// <summary>Stands in for the releases: a check finds <see cref="Newer"/>, and nothing is ever
+/// installed, so the development build never updates.</summary>
+public sealed class FakeUpdates : IUpdates
+{
+    public string? Newer { get; set; }
+
+    public int Checks { get; private set; }
+
+    public bool WillInstall { get; private set; }
+
+    public Task<string?> Download()
+    {
+        Checks++;
+        return Task.FromResult(Newer);
+    }
+
+    public void InstallOnQuit() => WillInstall = true;
 }
 
 /// <summary>Global hotkeys that go nowhere: what is registered is recorded, a binding in

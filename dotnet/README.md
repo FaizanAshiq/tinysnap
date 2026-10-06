@@ -37,13 +37,14 @@ CI runs every test on Windows and the Core and app tests on macOS. Its `e2e` job
 the x64 `Setup.exe` it just built on a Windows desktop and drives it with real keys and a real
 mouse (`tests/e2e/drive.ps1`): the hotkeys, the area overlay, saving, copying, the library,
 reading text, opening a file with a second launch, pinning, editors fitting a 1024 by 768
-screen, and uninstalling. It keeps a screenshot of each step as the `e2e-screenshots` artifact.
+screen, updating itself to a newer build, and uninstalling. It keeps a screenshot of each step as the `e2e-screenshots` artifact.
 
 On Linux, CI runs the Linux tests on Ubuntu 24.04 under a session bus and an X server, builds an
 AppImage for x64 and ARM64 with Tesseract and fifteen languages inside, runs its self-check with
 no Tesseract on the system, and drives each AppImage end to end on an X11 desktop
 (`tests/e2e/drive-linux.sh`): GNOME's shortcut calls, an area saved, the screen copied, text and
-a QR code read, Open With, a pin, the AppImage moved, and Remove from This Computer. Its
+a QR code read, Open With, a pin, the AppImage moved, the AppImage updating itself to a newer
+build, and Remove from This Computer. Its
 screenshots are the `linux-e2e-linux-x64` and `linux-e2e-linux-arm64` artifacts. A last job runs
 the x64 AppImage on Wayland in a headless GNOME Shell (`tests/e2e/gnome-windows.sh`), with a
 small stand-in for the screenshot portal, which GNOME's own cannot run there: the self-check in
@@ -93,18 +94,26 @@ GitHub release.
 
 1. Run the build on a real Windows machine first: install `Tinysnap-win-x64-Setup.exe` from the
    artifacts and go through the checks above.
-2. Tag and release as the Mac app does, then attach the Windows files from the tag's run:
-   `gh release upload vX.Y.Z Tinysnap-win-x64-Setup.exe Tinysnap-win-x64-Portable.zip Tinysnap-win-arm64-Setup.exe Tinysnap-win-arm64-Portable.zip`.
+2. Tag and release as the Mac app does, then attach the Windows files from the tag's run: for
+   each of `win-x64` and `win-arm64`, `Tinysnap-<runtime>-Setup.exe`, `Tinysnap-<runtime>-Portable.zip`,
+   and the update feed and package, `releases.<runtime>.json` and `Tinysnap-X.Y.Z-<runtime>-full.nupkg`.
 3. Copy `packaging/winget/FaizanAshiq.Tinysnap/<version>` for the new version, fill in each
    installer's `InstallerSha256` (`Get-FileHash .\Tinysnap-win-x64-Setup.exe`), run
    `winget validate` on the folder, and send it to `microsoft/winget-pkgs` with `wingetcreate submit`.
 4. Once winget has it, add the Windows install line (`winget install FaizanAshiq.Tinysnap`) to
    the site's Tinysnap page, `config/tinysnap.ts` in the site repo, by PR.
 
-For Linux, attach `Tinysnap-linux-x64.AppImage` and `Tinysnap-linux-arm64.AppImage` from the
-same run to the release, after the Wayland path has been checked on a real GNOME machine.
+For Linux, attach from the same run, for each of `linux-x64` and `linux-arm64`,
+`Tinysnap-<runtime>.AppImage`, `releases.<runtime>.json` and `Tinysnap-X.Y.Z-<runtime>-full.nupkg`,
+after the Wayland path has been checked on a real GNOME machine.
 
-The app never checks for updates; winget brings new Windows versions, and a new AppImage is a
-new download.
+Installed copies keep themselves up to date. Ten seconds after starting and every six hours,
+Tinysnap reads the feed for its platform and processor from the latest release, downloads the
+full package, and installs it the first minute nothing of Tinysnap's is open: it quits, Velopack
+puts the new version in place, and it starts again saying "Updated to Tinysnap X". Quit before
+that, and it is installed at the next start. A release without the feed and package files leaves
+every copy where it is. CI proves the whole round on Windows and on Linux: each e2e run updates the
+installed copy to the same build packed one version on, served from a folder named in
+`TINYSNAP_UPDATE_FEED`.
 
 Third-party notices are in `THIRD-PARTY-NOTICES.md`.

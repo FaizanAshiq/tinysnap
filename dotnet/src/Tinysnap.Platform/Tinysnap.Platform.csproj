@@ -5,6 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="ZXing.Net" Version="0.16.11" />
   </ItemGroup>
 

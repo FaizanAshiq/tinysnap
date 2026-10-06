@@ -76,11 +76,26 @@ jobs:
           vpk pack --packId Tinysnap --packVersion $version --packDir publish --mainExe Tinysnap \
             --packTitle Tinysnap --packAuthors "Faizan Ashiq" --icon dotnet/src/Tinysnap.App/Assets/Tinysnap.png \
             --categories "Graphics;Utility" --runtime ${{ matrix.runtime }} --channel ${{ matrix.runtime }} --outputDir releases
-          ls -l releases
+          # The same build again one version on, for the end-to-end run to update to.
+          vpk pack --packId Tinysnap --packVersion $(echo $version | awk -F. '{print $1"."$2"."$3+1}') --packDir publish --mainExe Tinysnap \
+            --packTitle Tinysnap --packAuthors "Faizan Ashiq" --icon dotnet/src/Tinysnap.App/Assets/Tinysnap.png \
+            --categories "Graphics;Utility" --runtime ${{ matrix.runtime }} --channel ${{ matrix.runtime }} --outputDir next
+          ls -l releases next
+      # The AppImage, and the feed and package an installed copy updates from, all three released.
       - uses: actions/upload-artifact@v7
         with:
           name: Tinysnap-${{ matrix.runtime }}
-          path: releases/*.AppImage
+          path: |
+            releases/*.AppImage
+            releases/releases.*.json
+            releases/*-full.nupkg
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Tinysnap-${{ matrix.runtime }}-next
+          path: |
+            next/releases.*.json
+            next/*-full.nupkg
           retention-days: 14
 
   # Each AppImage just built, driven like a person would on an X11 desktop: hotkeys as GNOME's
@@ -101,12 +116,16 @@ jobs:
         with:
           name: Tinysnap-${{ matrix.runtime }}
           path: releases
+      - uses: actions/download-artifact@v7
+        with:
+          name: Tinysnap-${{ matrix.runtime }}-next
+          path: next
       - run: |
           sudo apt-get update
           sudo apt-get install -y xvfb openbox x11-utils x11-xserver-utils xdotool xclip imagemagick qrencode libfuse2t64 \
             dconf-gsettings-backend dconf-service gsettings-desktop-schemas gnome-settings-daemon-common gnome-shell-common
           chmod +x releases/*.AppImage
-      - run: dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' bash dotnet/tests/e2e/drive-linux.sh releases/*.AppImage
+      - run: dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' bash dotnet/tests/e2e/drive-linux.sh releases/*.AppImage next
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -169,10 +188,25 @@ jobs:
           vpk pack --packId Tinysnap --packVersion $version --packDir publish --mainExe Tinysnap.exe `
             --packTitle Tinysnap --packAuthors "Faizan Ashiq" --icon dotnet/src/Tinysnap.Windows/Tinysnap.ico `
             --runtime ${{ matrix.runtime }} --channel ${{ matrix.runtime }} --outputDir releases
+          # The same build again one version on, for the end-to-end run to update to.
+          if ('${{ matrix.runtime }}' -eq 'win-x64') {
+            $v = [version]$version
+            vpk pack --packId Tinysnap --packVersion "$($v.Major).$($v.Minor).$($v.Build + 1)" --packDir publish --mainExe Tinysnap.exe `
+              --packTitle Tinysnap --packAuthors "Faizan Ashiq" --icon dotnet/src/Tinysnap.Windows/Tinysnap.ico `
+              --runtime win-x64 --channel win-x64 --outputDir next
+          }
       - uses: actions/upload-artifact@v7
         with:
           name: Tinysnap-${{ matrix.runtime }}
           path: releases/*
+          retention-days: 14
+      - uses: actions/upload-artifact@v7
+        if: matrix.runtime == 'win-x64'
+        with:
+          name: Tinysnap-win-x64-next
+          path: |
+            next/releases.win-x64.json
+            next/*-full.nupkg
           retention-days: 14
 
   # The installer that was just built, installed and driven like a person would: real hotkeys,
@@ -187,9 +221,13 @@ jobs:
         with:
           name: Tinysnap-win-x64
           path: releases
+      - uses: actions/download-artifact@v8
+        with:
+          name: Tinysnap-win-x64-next
+          path: next
       - name: Drive the installed app
         shell: powershell
-        run: dotnet/tests/e2e/drive.ps1 -Setup releases/Tinysnap-win-x64-Setup.exe -Shots shots
+        run: dotnet/tests/e2e/drive.ps1 -Setup releases/Tinysnap-win-x64-Setup.exe -Next next -Shots shots
       - uses: actions/upload-artifact@v7
         if: always()
         with:
