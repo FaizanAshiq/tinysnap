@@ -29,6 +29,10 @@ alone, with no admin prompt. On Linux with GNOME, download `Tinysnap-linux-x64.A
 `-arm64`) from the same release, make it executable and run it. More in
 [dotnet/README.md](dotnet/README.md).
 
+Windows and Linux copies then keep themselves up to date, installing a new version while
+nothing of Tinysnap's is open. On the Mac, Homebrew does the updating: Tinysnap says when a new
+version is out and gives you the `brew upgrade` command.
+
 ## Capturing
 
 | Hotkey | What it does |

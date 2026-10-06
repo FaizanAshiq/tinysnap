@@ -14,6 +14,7 @@ internal sealed class WindowsPlatform(IScreenCapture screen, IHotkeys hotkeys, I
     public IFileActions Files { get; } = new Win32Files();
     public IStartup Startup { get; } = new Win32Startup();
     public ITextReader Text { get; } = new WinRtTextReader();
+    public IUpdates? Updates { get; } = new VelopackUpdates(Environment.GetEnvironmentVariable(VelopackUpdates.FeedVariable));
 
     public event Action<IReadOnlyList<string>>? Reopened
     {
@@ -41,11 +42,13 @@ internal static class Program
     public static void Main(string[] args)
     {
         // First of all: the installer runs the exe to install and uninstall, and those runs end
-        // here. No update is ever checked for; winget brings new versions.
+        // here. A run that an update started says so once the app is up.
+        string? updatedTo = null;
         VelopackApp.Build()
             .OnAfterInstallFastCallback(_ => Installed(new Win32FileTypes()))
             .OnAfterUpdateFastCallback(_ => Installed(new Win32FileTypes()))
             .OnBeforeUninstallFastCallback(_ => Uninstalling(new Win32Startup(), new Win32FileTypes()))
+            .OnRestarted(version => updatedTo = version.ToString())
             .Run();
         if (args is ["--self-check", var report])
         {
@@ -69,7 +72,7 @@ internal static class Program
         using var clipboard = new Win32Clipboard();
         var platform = new WindowsPlatform(new GdiScreenCapture(), hotkeys, clipboard, instance);
         _ = TrayPromotion.PromoteSoon(Environment.ProcessPath!);
-        AppBuilder.Configure(() => new TinysnapApp(platform, files: args))
+        AppBuilder.Configure(() => new TinysnapApp(platform, files: args, updatedTo: updatedTo))
             .UsePlatformDetect()
             .LogToTrace()
             .StartWithClassicDesktopLifetime(args);

@@ -58,6 +58,18 @@ public interface IHotkeys : IDisposable
     void UnregisterAll();
 }
 
+/// <summary>Tinysnap updating itself from its releases.</summary>
+public interface IUpdates
+{
+    /// <summary>Downloads the newest release when it is newer than this copy and returns its
+    /// version; null when there is none, or it could not be had, as when offline.</summary>
+    Task<string?> Download();
+
+    /// <summary>Has the release <see cref="Download"/> fetched installed the moment Tinysnap quits,
+    /// and Tinysnap started again after.</summary>
+    void InstallOnQuit();
+}
+
 public interface IClipboard
 {
     /// <summary>The image as a PNG, which keeps its DPI, and as a bitmap for apps that read only
@@ -118,6 +130,9 @@ public interface IPlatform
     IScreenCapture Screen { get; }
     IHotkeys Hotkeys { get; }
     IClipboard Clipboard { get; }
+
+    /// <summary>Null where Tinysnap cannot update itself.</summary>
+    IUpdates? Updates { get; }
 
     /// <summary>Tinysnap was opened again while it runs, with the files it was opened with, if any,
     /// as "Open with" gives them; the second copy has already quit.</summary>

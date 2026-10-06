@@ -11,6 +11,7 @@ internal sealed class LinuxPlatform(IScreenCapture screen, GnomeShortcuts hotkey
     public IFileActions Files { get; } = files;
     public IStartup Startup { get; } = desktop;
     public ITextReader Text { get; } = new LinuxTextReader();
+    public IUpdates? Updates { get; } = new VelopackUpdates(Environment.GetEnvironmentVariable(VelopackUpdates.FeedVariable));
 
     public event Action<IReadOnlyList<string>>? Reopened
     {

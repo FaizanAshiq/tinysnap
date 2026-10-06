@@ -6,10 +6,13 @@
   Needs an interactive desktop, as CI's Windows runners have, and Windows PowerShell, whose
   clipboard access runs on a single-threaded apartment:
 
-    powershell -File drive.ps1 -Setup Tinysnap-win-x64-Setup.exe -Shots shots
+    powershell -File drive.ps1 -Setup Tinysnap-win-x64-Setup.exe -Next next -Shots shots
+
+  -Next is a folder holding a newer build's feed and package, to update to.
 #>
 param(
     [Parameter(Mandatory)] [string] $Setup,
+    [string] $Next = '',
     [string] $Shots = 'shots'
 )
 
@@ -637,7 +640,7 @@ if ($script:area)
     }
 }
 
-# 8. Uninstalling: the app goes, the captures stay
+# 8. Quitting, the captures kept for after uninstalling
 
 $kept = (LibraryEntries).Count
 Stop-Process -Id $script:app.Id -Force -ErrorAction SilentlyContinue
@@ -648,6 +651,33 @@ if ($pin)
     Check 'the shadow round a pin is see-through' { Opaque $pin $withPin $unpinned }
 }
 Stop-Process -Id $page.Id -Force -ErrorAction SilentlyContinue
+
+# 9. Updating itself: a newer build in a folder stands in for the next release. Started with nothing
+# open, Tinysnap downloads it, quits, and comes back as the new version, saying so.
+
+if ($Next)
+{
+    $nextVersion = (Get-Content (Join-Path $Next 'releases.win-x64.json') -Raw | ConvertFrom-Json).Assets[0].Version
+    $env:TINYSNAP_UPDATE_FEED = (Resolve-Path $Next).Path
+    $old = Start-Process $exe -PassThru
+    $null = $old.Handle
+    $updated = Timed "starting to updated to $nextVersion" {
+        Get-Process Tinysnap -ErrorAction SilentlyContinue | Where-Object Id -ne $old.Id |
+            ForEach-Object { [Desk]::Windows($_.Id) } | Where-Object Title -eq "Updated to Tinysnap $nextVersion" | Select-Object -First 1
+    } 120
+    Remove-Item Env:TINYSNAP_UPDATE_FEED
+    # Found the moment it exists, before its first frame is drawn.
+    Start-Sleep -Milliseconds 700
+    Shot 'updated'
+    Check 'with nothing open, Tinysnap updates itself, starts again and says so' {
+        if (-not $updated) { "no 'Updated to Tinysnap $nextVersion' from a new copy within 2 minutes" }
+    }
+    Check 'the copy that downloaded the update quit for it' { if (-not $old.HasExited) { 'still running' } }
+    Get-Process Tinysnap -ErrorAction SilentlyContinue | Stop-Process -Force
+}
+
+# 10. Uninstalling
+
 Check 'uninstalling removes the app, its Start menu entry and its Open with entries' {
     $update = Start-Process (Join-Path $install 'Update.exe') -ArgumentList '--silent', 'uninstall' -PassThru
     $null = $update.Handle

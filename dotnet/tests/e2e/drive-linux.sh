@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# drive-linux.sh <AppImage>: runs the AppImage CI just built on an X server with a window manager
+# drive-linux.sh <AppImage> [next]: runs the AppImage CI just built on an X server with a window manager
 # and a session bus, and drives it as a person would: hotkeys arrive as the gdbus calls GNOME's
 # shortcuts make, the pointer and keys through xdotool. Each step is checked on the files, the
 # clipboard and GNOME's settings it should change, with a screenshot kept in shots/. Run under
-# dbus-run-session and xvfb-run at 1280 by 800.
+# dbus-run-session and xvfb-run at 1280 by 800. next is a folder holding a newer build's feed and
+# package, to update to.
 set -u
 appimage=$(readlink -f "$1")
+next=${2:+$(readlink -f "$2")}
 shots=$PWD/shots
 mkdir -p "$shots"
 results=$shots/results.txt
@@ -85,15 +87,18 @@ start=$(date +%s%N)
 fonts=$(fc-list | wc -l)
 echo "     fontconfig listed $fonts fonts in $((($(date +%s%N) - start) / 1000000)) ms" >> "$results"
 
-# The desktop: a known colour, a line of text and a QR code to capture.
+# The desktop: a known colour, a line of text and a QR code to capture. The colour is set once
+# openbox has taken the screen: set during its start, on a slow runner, it was lost to black.
 openbox &
-sleep 1
+within 15 eval 'xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q "window id"'
 xsetroot -solid '#3366cc'
 convert -size 900x200 xc:white -font DejaVu-Sans -pointsize 48 -fill black -annotate +40+120 'Tinysnap reads this line' "$shots/line.png"
 qrencode -s 6 -o "$shots/code.png" 'https://example.com/tinysnap'
 display -geometry +60+60 -title line "$shots/line.png" &
 display -geometry +940+440 -title code "$shots/code.png" &
 sleep 2
+import -window root "$shots/desktop.png" 2>/dev/null
+check "the desktop shows the known colour" pixel_is "$shots/desktop.png" 5 795 3366CC
 
 "$appimage" > "$shots/app.log" 2>&1 &
 check "owns its D-Bus name" within 45 running
@@ -152,6 +157,20 @@ cp "$appimage" "$moved"
 "$moved" >> "$shots/app.log" 2>&1 &
 check "the moved AppImage starts" within 45 running
 check "the menu entry follows the moved AppImage" within 10 menu_runs "$moved"
+
+# Updating itself: a newer build in a folder stands in for the next release. Started with nothing
+# open, Tinysnap downloads it, quits, has the AppImage replaced, and comes back saying so.
+if [ -n "$next" ]; then
+  next_version=$(grep -o '"Version":"[^"]*"' "$next"/releases.*.json | head -1 | cut -d'"' -f4)
+  pkill -TERM -x Tinysnap
+  within 10 stopped
+  within 30 eval '! pgrep -x Tinysnap >/dev/null'
+  before=$(md5sum < "$moved")
+  TINYSNAP_UPDATE_FEED=$next "$moved" >> "$shots/app.log" 2>&1 &
+  check "with nothing open, Tinysnap updates itself, starts again and says so" within 120 shown "^Updated to Tinysnap $next_version$"
+  check "the AppImage is replaced by the new version" eval '[ "$(md5sum < "$moved")" != "$before" ]'
+  check "the updated copy is running" within 30 running
+fi
 
 # Remove from This Computer: opened again with no editor, Tinysnap shows Settings.
 "$moved" >> "$shots/app.log" 2>&1

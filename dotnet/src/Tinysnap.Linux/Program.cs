@@ -29,8 +29,10 @@ internal static class Program
 
     public static int Main(string[] args)
     {
-        // First of all, as the AppImage's runtime expects. No update is ever checked for.
-        VelopackApp.Build().Run();
+        // First of all, as the AppImage's runtime expects. A run that an update started says so
+        // once the app is up.
+        string? updatedTo = null;
+        VelopackApp.Build().OnRestarted(version => updatedTo = version.ToString()).Run();
         if (DBusAddress.Session is not { } address)
         {
             Console.Error.WriteLine("Tinysnap needs a desktop session: no session bus was found.");
@@ -82,7 +84,7 @@ internal static class Program
             new LinuxClipboard(() => (holder ??= new Window()).Clipboard), bus, desktop, new LinuxFiles(settings));
         try
         {
-            X11(AppBuilder.Configure(() => new TinysnapApp(platform, Started, args)))
+            X11(AppBuilder.Configure(() => new TinysnapApp(platform, Started, args, updatedTo)))
                 .LogToTrace()
                 .StartWithClassicDesktopLifetime(args);
         }
