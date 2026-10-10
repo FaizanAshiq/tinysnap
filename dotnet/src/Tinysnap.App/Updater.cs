@@ -7,11 +7,14 @@ namespace Tinysnap.App;
 /// and downloads it quietly, then installs it the first minute nothing of Tinysnap's is open, so the
 /// restart, a moment long, is never in the way. Quit before that, and the download is installed when
 /// Tinysnap next starts. The time of the last look is kept on disk, so a restart, as at every login,
-/// does not bring the next one forward.</summary>
+/// does not bring the next one forward. The week is counted by the calendar: a timer stops while the
+/// computer sleeps, so one set a week ahead would run late by every night of sleep, and the date is
+/// checked at least hourly instead.</summary>
 internal sealed class Updater
 {
     private static readonly TimeSpan First = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan Week = TimeSpan.FromDays(7);
+    private static readonly TimeSpan Hour = TimeSpan.FromHours(1);
     private static readonly TimeSpan Retry = TimeSpan.FromMinutes(1);
 
     private readonly IUpdates updates;
@@ -20,6 +23,7 @@ internal sealed class Updater
     private readonly TimeProvider time;
     private readonly string stamp;
     private readonly ITimer timer;
+    private DateTimeOffset last;
     private bool downloaded;
 
     /// <param name="idle">True when a restart would close nothing and lose nothing.</param>
@@ -32,18 +36,34 @@ internal sealed class Updater
         this.quit = quit;
         this.time = time;
         this.stamp = stamp;
-        var due = LastLook() + Week - time.GetUtcNow();
-        timer = time.CreateTimer(_ => ui.Post(() => _ = Tick()), null, due > First ? due : First, Timeout.InfiniteTimeSpan);
+        last = LastLook();
+        var wait = Wait();
+        timer = time.CreateTimer(_ => ui.Post(() => _ = Tick()), null, wait > First ? wait : First, Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>Until the next check whether a week has passed since the last look, at most an hour;
+    /// zero when it has.</summary>
+    private TimeSpan Wait()
+    {
+        var left = last + Week - time.GetUtcNow();
+        return left <= TimeSpan.Zero ? TimeSpan.Zero : left < Hour ? left : Hour;
     }
 
     private async Task Tick()
     {
         if (!downloaded)
         {
-            Remember(time.GetUtcNow());
+            var wait = Wait();
+            if (wait > TimeSpan.Zero)
+            {
+                timer.Change(wait, Timeout.InfiniteTimeSpan);
+                return;
+            }
+            last = time.GetUtcNow();
+            Remember(last);
             if (!(downloaded = await updates.Download() is not null))
             {
-                timer.Change(Week, Timeout.InfiniteTimeSpan);
+                timer.Change(Hour, Timeout.InfiniteTimeSpan);
                 return;
             }
         }

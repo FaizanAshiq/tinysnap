@@ -18,6 +18,11 @@ internal sealed class FakeTime : TimeProvider
 {
     private readonly List<FakeTimer> timers = [];
 
+    /// <summary>Time the computer spent asleep: it moves the clock on, and no timer counts it.</summary>
+    public TimeSpan Slept { get; set; }
+
+    public override DateTimeOffset GetUtcNow() => base.GetUtcNow() + Slept;
+
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {
         var timer = new FakeTimer(callback, state, dueTime);

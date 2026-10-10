@@ -56,29 +56,45 @@ public class UpdateTests
         Assert.Equal(0, quits);
     }
 
+    /// <summary>A week on by the calendar, even one spent mostly asleep, which no timer counts.</summary>
     [AvaloniaFact]
-    public void WithNothingNewerItLooksAgainLater()
+    public void WithNothingNewerItLooksAgainAWeekLater()
     {
         var setup = Launch();
         var updates = (FakeUpdates)setup.Platform.Updates!;
         var quits = 0;
         setup.Controller.StartUpdating(() => quits++);
         setup.Time.Elapse();
+        setup.Time.Slept = TimeSpan.FromDays(7);
         setup.Time.Elapse();
         Assert.Equal(2, updates.Checks);
         Assert.False(updates.WillInstall);
         Assert.Equal(0, quits);
     }
 
-    /// <summary>Asked for: one look a week, which a restart, as at every login, does not hurry.</summary>
     [AvaloniaFact]
-    public void TheFirstLookComesSoonAfterLaunchAndTheNextAWeekLater()
+    public void ACheckBeforeTheWeekIsUpDoesNotLook()
+    {
+        var setup = Launch();
+        var updates = (FakeUpdates)setup.Platform.Updates!;
+        setup.Controller.StartUpdating(() => { });
+        setup.Time.Elapse();
+        setup.Time.Slept = TimeSpan.FromDays(6);
+        setup.Time.Elapse();
+        Assert.Equal(1, updates.Checks);
+    }
+
+    /// <summary>Asked for: one look a week, which a restart, as at every login, does not hurry. A timer
+    /// stops while the computer sleeps, so one set a week ahead would run late by every night of
+    /// sleep: the date is checked at least hourly instead.</summary>
+    [AvaloniaFact]
+    public void TheFirstLookComesSoonAfterLaunchThenTheDateIsCheckedHourly()
     {
         var setup = Launch();
         setup.Controller.StartUpdating(() => { });
         Assert.Equal(TimeSpan.FromSeconds(10), setup.Time.NewestDue);
         setup.Time.Elapse();
-        Assert.Equal(TimeSpan.FromDays(7), setup.Time.NewestDue);
+        Assert.Equal(TimeSpan.FromHours(1), setup.Time.NewestDue);
     }
 
     [AvaloniaFact]
@@ -89,7 +105,20 @@ public class UpdateTests
         Directory.CreateDirectory(Path.GetDirectoryName(stamp)!);
         File.WriteAllText(stamp, DateTimeOffset.UtcNow.AddDays(-2).ToString("O"));
         setup.Controller.StartUpdating(() => { });
-        Assert.InRange(setup.Time.NewestDue, TimeSpan.FromDays(5) - TimeSpan.FromMinutes(1), TimeSpan.FromDays(5));
+        Assert.Equal(TimeSpan.FromHours(1), setup.Time.NewestDue);
+        setup.Time.Elapse();
+        Assert.Equal(0, ((FakeUpdates)setup.Platform.Updates!).Checks);
+    }
+
+    [AvaloniaFact]
+    public void HalfAnHourBeforeTheWeekIsUpItChecksInHalfAnHour()
+    {
+        var setup = Launch();
+        var stamp = Path.Combine(Path.GetDirectoryName(setup.Controller.Preferences.Path)!, "last-update-check");
+        Directory.CreateDirectory(Path.GetDirectoryName(stamp)!);
+        File.WriteAllText(stamp, DateTimeOffset.UtcNow.AddDays(-7).AddMinutes(30).ToString("O"));
+        setup.Controller.StartUpdating(() => { });
+        Assert.InRange(setup.Time.NewestDue, TimeSpan.FromMinutes(29), TimeSpan.FromMinutes(30));
         Assert.Equal(0, ((FakeUpdates)setup.Platform.Updates!).Checks);
     }
 

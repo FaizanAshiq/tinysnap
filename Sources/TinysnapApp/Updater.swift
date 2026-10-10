@@ -15,7 +15,6 @@ final class Updater {
     /// Where updates come from instead of GitHub: a folder holding `latest.json`, shaped as GitHub's
     /// answer, so the end-to-end test can update to a build of its own.
     private static let feedVariable = "TINYSNAP_UPDATE_FEED"
-    private static let week: TimeInterval = 7 * 86_400
     private static let lastLookKey = "TinysnapLastUpdateCheck"
     /// The version last told of, so each is told once rather than at every launch.
     private static let toldKey = "TinysnapToldRelease"
@@ -47,8 +46,21 @@ final class Updater {
             TextCopy.say("Updated to Tinysnap \(current)", on: nil)
         }
         if route == .move { offerMove() }
-        let last = UserDefaults.standard.double(forKey: Self.lastLookKey)
-        schedule(in: max(10, last + Self.week - Date().timeIntervalSince1970)) { await $0.look() }
+        schedule(in: max(10, wait)) { await $0.lookIfDue() }
+    }
+
+    /// Until the next check whether a week has passed since the last look, at most an hour.
+    private var wait: TimeInterval {
+        UpdateSchedule.wait(lastLook: UserDefaults.standard.double(forKey: Self.lastLookKey), now: Date().timeIntervalSince1970)
+    }
+
+    private func lookIfDue() async {
+        let wait = self.wait
+        guard wait == 0 else {
+            schedule(in: wait) { await $0.lookIfDue() }
+            return
+        }
+        await look()
     }
 
     private func schedule(in seconds: TimeInterval, _ work: @escaping @MainActor (Updater) async -> Void) {
@@ -63,7 +75,7 @@ final class Updater {
 
     private func look() async {
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastLookKey)
-        schedule(in: Self.week) { await $0.look() }
+        schedule(in: UpdateSchedule.hour) { await $0.lookIfDue() }
         let source = ProcessInfo.processInfo.environment[Self.feedVariable].map {
             URL(fileURLWithPath: $0).appendingPathComponent("latest.json")
         } ?? Self.latest
@@ -121,6 +133,7 @@ final class Updater {
             """
         guard Self.launch(swap, [Bundle.main.bundlePath, app.path]) else {
             UserDefaults.standard.removeObject(forKey: Self.updatedKey)
+            schedule(in: UpdateSchedule.hour) { await $0.lookIfDue() }
             return
         }
         quit()

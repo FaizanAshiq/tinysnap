@@ -65,3 +65,28 @@ struct UpdateRouteTests {
         #expect(UpdateRoute.of(path: "/Applications/Tinysnap.app", releaseSigned: false, writable: true) == .download)
     }
 }
+
+/// One look a week by the calendar. A timer stops while the Mac sleeps, so the wait is checked
+/// against the date of the last look at least once an hour rather than left to one long timer.
+struct UpdateScheduleTests {
+    private let day: TimeInterval = 86_400
+
+    @Test func aLookIsDueAWeekAfterTheLastOne() {
+        #expect(UpdateSchedule.wait(lastLook: 0, now: 1_000 * day) == 0)
+        #expect(UpdateSchedule.wait(lastLook: 100 * day, now: 107 * day) == 0)
+        #expect(UpdateSchedule.wait(lastLook: 100 * day, now: 120 * day) == 0)
+    }
+
+    /// Two days after a look, it waits an hour and checks the date again, not five days.
+    @Test func beforeThenItWaitsAnHourAtMost() {
+        #expect(UpdateSchedule.wait(lastLook: 100 * day, now: 102 * day) == 3_600)
+        #expect(UpdateSchedule.wait(lastLook: 100 * day, now: 107 * day - 1_800) == 1_800)
+    }
+
+    /// Asleep for most of the week: the first check after waking finds the look due.
+    @Test func timeSpentAsleepCountsTowardsTheWeek() {
+        let lastLook = 100 * day
+        #expect(UpdateSchedule.wait(lastLook: lastLook, now: lastLook + 3_600) == 3_600)
+        #expect(UpdateSchedule.wait(lastLook: lastLook, now: lastLook + 3_600 + 7 * day) == 0)
+    }
+}

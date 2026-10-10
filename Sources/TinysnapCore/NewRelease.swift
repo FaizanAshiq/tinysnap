@@ -54,3 +54,16 @@ public enum UpdateRoute: Equatable, Sendable {
         return writable ? .itself : .move
     }
 }
+
+/// When to look for a newer release: once a week, by the calendar.
+public enum UpdateSchedule {
+    public static let week: TimeInterval = 7 * 86_400
+    public static let hour: TimeInterval = 3_600
+
+    /// Seconds to wait before checking whether a look is due, zero when it is. A timer stops while
+    /// the Mac sleeps, so one set a week ahead would run late by every night of sleep; the wait is
+    /// never more than an hour, and each check compares the date with the last look's.
+    public static func wait(lastLook: TimeInterval, now: TimeInterval) -> TimeInterval {
+        min(max(0, lastLook + week - now), hour)
+    }
+}
