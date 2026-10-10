@@ -108,7 +108,8 @@ For Linux, attach from the same run, for each of `linux-x64` and `linux-arm64`,
 after the Wayland path has been checked on a real GNOME machine.
 
 Installed copies keep themselves up to date. Once a week, ten seconds after the first start and
-then a week after the last look, which a restart does not hurry, Tinysnap reads the feed for its
+then a week after the last look by the calendar, which a restart does not hurry and sleep does not
+hold back (the date is checked hourly, since a timer stops while the computer sleeps), Tinysnap reads the feed for its
 platform and processor from the latest release, downloads the
 full package, and installs it the first minute nothing of Tinysnap's is open: it quits, Velopack
 puts the new version in place, and it starts again saying "Updated to Tinysnap X". Quit before
