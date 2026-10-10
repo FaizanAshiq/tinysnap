@@ -9,7 +9,7 @@ public class ReleaseTests
     public void TheExeCarriesTheMacVersion()
     {
         var info = FileVersionInfo.GetVersionInfo(typeof(WindowsPlatform).Assembly.Location);
-        Assert.StartsWith("1.5.2", info.ProductVersion);
+        Assert.StartsWith("1.5.3", info.ProductVersion);
         Assert.Equal("Tinysnap", info.ProductName);
         Assert.Equal("Tinysnap.dll", Path.GetFileName(typeof(WindowsPlatform).Assembly.Location));
     }
