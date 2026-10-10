@@ -60,6 +60,12 @@ struct UpdateRouteTests {
         #expect(UpdateRoute.of(path: "/private/var/folders/x/AppTranslocation/1/d/Tinysnap.app", releaseSigned: true, writable: false) == .move)
     }
 
+    /// Already in Applications, on an account that may not change it: moving there again would
+    /// fail at every start, so it is told where to download the new version instead.
+    @Test func aReleaseBuildInApplicationsItCannotChangeIsTold() {
+        #expect(UpdateRoute.of(path: "/Applications/Tinysnap.app", releaseSigned: true, writable: false) == .download)
+    }
+
     /// Built on this Mac, it cannot tell a release build from anyone else's, so it is told where to get one.
     @Test func aCopyBuiltHereIsToldWhereToDownload() {
         #expect(UpdateRoute.of(path: "/Applications/Tinysnap.app", releaseSigned: false, writable: true) == .download)
