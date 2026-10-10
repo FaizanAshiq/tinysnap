@@ -5,8 +5,10 @@ import TinysnapCore
 /// Keeps the Mac app up to date. Once a week it asks GitHub for the latest release. A release build
 /// somewhere it can write downloads the update, checks it is signed exactly as itself, and installs
 /// it the first minute nothing of Tinysnap's is open: it quits, the new version takes its place, and
-/// it starts again saying so. A Homebrew copy is told the command, a copy built on this Mac where to
-/// download one, and a release build run from the disk image is offered a move to Applications.
+/// it starts again saying so. A copy that cannot install it names the new version in its menu, never
+/// in a message of its own: there, a Homebrew copy gives the command and a copy built on this Mac
+/// says where to download one. A release build run from the disk image is offered a move to
+/// Applications.
 @MainActor
 final class Updater {
     static let command = "brew upgrade faizanashiq/tap/tinysnap"
@@ -16,8 +18,6 @@ final class Updater {
     /// answer, so the end-to-end test can update to a build of its own.
     private static let feedVariable = "TINYSNAP_UPDATE_FEED"
     private static let lastLookKey = "TinysnapLastUpdateCheck"
-    /// The version last told of, so each is told once rather than at every launch.
-    private static let toldKey = "TinysnapToldRelease"
     /// Set just before quitting to install, so the new copy says what it was updated to.
     private static let updatedKey = "TinysnapUpdatedTo"
 
@@ -98,9 +98,6 @@ final class Updater {
             return
         }
         available = release
-        guard UserDefaults.standard.string(forKey: Self.toldKey) != release.version else { return }
-        UserDefaults.standard.set(release.version, forKey: Self.toldKey)
-        tell()
     }
 
     /// The update downloaded and unpacked, when it is signed exactly as this copy; nil otherwise.

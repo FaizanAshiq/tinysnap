@@ -39,9 +39,9 @@ alone, with no admin prompt. On Linux with GNOME, download `Tinysnap-linux-x64.A
 
 Every copy then keeps itself up to date. Once a week Tinysnap asks GitHub whether a newer
 version is out. The Mac download, Windows and Linux install it themselves the first moment
-nothing of Tinysnap's is open, and say so when they start again. A copy Homebrew installed tells
-you instead and gives you the `brew upgrade` command, since Homebrew keeps track of what it
-installed. A copy you built yourself tells you where to download the new one.
+nothing of Tinysnap's is open, and say so when they start again. A copy Homebrew installed shows
+the new version in its menu bar menu instead, with the `brew upgrade` command, since Homebrew keeps
+track of what it installed. A copy you built yourself shows it there too, with where to download it.
 
 ## Capturing
 
