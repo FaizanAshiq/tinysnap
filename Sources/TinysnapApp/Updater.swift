@@ -178,7 +178,7 @@ final class Updater {
         alert.addButton(withTitle: "Not Now").keyEquivalent = "\u{1b}"
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let destination = URL(fileURLWithPath: "/Applications/Tinysnap.app")
+        let destination = URL(fileURLWithPath: UpdateRoute.applications)
         do {
             // An earlier copy goes to the Bin, where it can still be had back.
             if FileManager.default.fileExists(atPath: destination.path) {

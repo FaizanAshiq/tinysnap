@@ -45,13 +45,17 @@ public enum UpdateRoute: Equatable, Sendable {
     /// A release build run from the disk image, or straight from Downloads, which macOS runs from a
     /// hidden copy no app may write to: offered a move to Applications, from where it updates itself.
     case move
-    /// Built on this Mac, so it cannot tell a release build from anyone else's: told where to download one.
+    /// Built on this Mac, so it cannot tell a release build from anyone else's, or in Applications
+    /// where this account may not write: told where to download one.
     case download
+
+    public static let applications = "/Applications/Tinysnap.app"
 
     public static func of(path: String, releaseSigned: Bool, writable: Bool) -> UpdateRoute {
         if path.contains("/Cellar/tinysnap/") || path.contains("/opt/tinysnap/") { return .homebrew }
         guard releaseSigned else { return .download }
-        return writable ? .itself : .move
+        if writable { return .itself }
+        return path == applications ? .download : .move
     }
 }
 
