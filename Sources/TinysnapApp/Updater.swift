@@ -40,7 +40,18 @@ final class Updater {
         self.quit = quit
     }
 
+    /// Where an update is unpacked and checked before it takes this copy's place.
+    private static var staging: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("com.faizanashiq.tinysnap/Update", isDirectory: true)
+    }
+
     func start() {
+        // An update downloaded and never installed, as Tinysnap quit first: the next look comes at
+        // once rather than a week on, and installs it.
+        if FileManager.default.fileExists(atPath: Self.staging.appendingPathComponent("Tinysnap.app").path) {
+            UserDefaults.standard.removeObject(forKey: Self.lastLookKey)
+        }
         if UserDefaults.standard.string(forKey: Self.updatedKey) == current {
             UserDefaults.standard.removeObject(forKey: Self.updatedKey)
             TextCopy.say("Updated to Tinysnap \(current)", on: nil)
@@ -102,8 +113,7 @@ final class Updater {
         }
         let file = downloaded ?? zip
         defer { if let downloaded { try? FileManager.default.removeItem(at: downloaded) } }
-        let staging = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("com.faizanashiq.tinysnap/Update", isDirectory: true)
+        let staging = Self.staging
         try? FileManager.default.removeItem(at: staging)
         try? FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
         let unpacked = await Task.detached { Self.run("/usr/bin/ditto", ["-x", "-k", file.path, staging.path]) }.value
