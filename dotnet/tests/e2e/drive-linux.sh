@@ -126,6 +126,17 @@ check "Copy leaves the whole screen on the clipboard" size_is "$shots/clipboard.
 check "the copy holds the screen's own pixels" pixel_is "$shots/clipboard.png" 5 795 3366CC
 check "the library keeps both captures" captures_kept 2
 
+# The whole screen again, from the area overlay with Ctrl+A.
+call area
+check "the area hotkey covers the screen with the overlay again" within 10 overlay_up
+sleep 0.5
+xdotool key ctrl+a
+check "Ctrl+A on the overlay opens an editor" within 15 shown "^Capture at"
+press "^Capture at" ctrl+c
+check "Copy closes that editor" within 10 gone "^Capture at"
+xclip -selection clipboard -t image/png -o > "$shots/select-all.png" 2>/dev/null
+check "Ctrl+A took the whole screen" size_is "$shots/select-all.png" 1280x800
+
 # Text and a QR code, read off the screen.
 call text
 sleep 1.5
