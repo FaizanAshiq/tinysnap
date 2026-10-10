@@ -125,6 +125,23 @@ public class CaptureFlowTests
         Assert.Equal(SKColors.Blue, Pixel(capture, 150, 75));
     }
 
+    /// <summary>Ctrl+A on the overlay opens the whole monitor at its own pixels, every one of them,
+    /// on a 1.5x monitor too.</summary>
+    [AvaloniaFact]
+    public void CtrlAOnTheOverlayOpensTheWholeMonitor()
+    {
+        var plain = Screens.Frozen(new CoreRect(0, 0, 1920, 1080), 1, SKColors.Red);
+        var scaled = Screens.Frozen(new CoreRect(1920, 0, 2880, 1620), 1.5, SKColors.Blue);
+        var controller = Controller(Screens.Desktop(plain, scaled), new CorePoint(2500, 500));
+        controller.CaptureArea();
+        controller.Overlay!.Windows[1].KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, "a");
+        var capture = Opened(controller);
+        Assert.Equal(new Tinysnap.Core.Size(2880, 1620), capture.PixelSize);
+        Assert.Equal(1.5, capture.Scale);
+        Assert.Equal(SKColors.Blue, Pixel(capture, 2870, 1610));
+        Assert.Null(controller.Overlay);
+    }
+
     [AvaloniaFact]
     public void AMonitorLeftOfThePrimaryCapturesFromItsOwnImage()
     {

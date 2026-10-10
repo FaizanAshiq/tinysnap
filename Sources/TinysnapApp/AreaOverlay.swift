@@ -15,7 +15,7 @@ enum AreaResult {
 }
 
 /// One window per display, each showing that display's frozen image. The user drags a
-/// box, or presses space and clicks a window.
+/// box, presses Command A for the whole display, or presses space and clicks a window.
 @MainActor
 final class AreaOverlayController {
     private var windows: [OverlayWindow] = []
@@ -48,6 +48,7 @@ final class AreaOverlayController {
             selection.autoresizingMask = [.width, .height]
             selection.onFinish = { [weak self] result in self?.finish(result) }
             selection.onToggleWindowMode = { [weak self] in self?.toggleWindowMode() }
+            selection.onSelectAll = { [weak self] in self?.selectAll() }
             base.addSubview(selection)
 
             window.contentView = base
@@ -79,6 +80,14 @@ final class AreaOverlayController {
     private func toggleWindowMode() {
         let on = !(selectionViews.first?.windowMode ?? false)
         selectionViews.forEach { $0.windowMode = on }
+    }
+
+    /// Command A: the whole display under the pointer, as a box dragged from corner to corner
+    /// would be. The keys stay with the display that first had them, so the pointer says which.
+    private func selectAll() {
+        let mouse = NSEvent.mouseLocation
+        let window = windows.first { $0.frame.contains(mouse) } ?? windows.first
+        (window?.contentView?.subviews.first as? AreaSelectionView)?.selectWholeDisplay()
     }
 
     /// Up but unfocused, the overlay would cover every screen and hear nothing, so
@@ -113,6 +122,7 @@ final class AreaOverlayController {
 final class AreaSelectionView: NSView {
     var onFinish: ((AreaResult) -> Void)?
     var onToggleWindowMode: (() -> Void)?
+    var onSelectAll: (() -> Void)?
     var windowMode = false {
         didSet {
             anchor = nil
@@ -273,6 +283,16 @@ final class AreaSelectionView: NSView {
         case 126: nudge(dx: 0, dy: -1)
         default: super.keyDown(with: event)
         }
+    }
+
+    /// Command A reaches the overlay as the Edit menu's Select All.
+    override func selectAll(_ sender: Any?) {
+        onSelectAll?()
+    }
+
+    /// The whole display, as a box dragged from corner to corner would be.
+    func selectWholeDisplay() {
+        onFinish?(.area(display, CGRect(origin: .zero, size: display.frame.size)))
     }
 
     /// Arrow keys move the corner being dragged by one point.

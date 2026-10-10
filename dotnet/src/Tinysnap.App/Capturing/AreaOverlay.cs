@@ -17,7 +17,7 @@ internal abstract record AreaResult
 }
 
 /// <summary>One overlay window per monitor, each showing that monitor frozen. The person drags
-/// a box, or presses Space and clicks a window; Esc cancels. Window mode is shared, so Space
+/// a box, presses Ctrl+A for the whole monitor, or presses Space and clicks a window; Esc cancels. Window mode is shared, so Space
 /// on one monitor lights windows on all of them.</summary>
 internal sealed class AreaOverlay
 {
@@ -69,6 +69,14 @@ internal sealed class AreaOverlay
         }
         WindowMode = !WindowMode;
         foreach (var window in Windows) window.WindowModeChanged();
+    }
+
+    /// <summary>Ctrl+A: the whole monitor under the pointer, as a box dragged from corner to corner
+    /// would be. The keys stay with the overlay that first had them, so the pointer says which.</summary>
+    internal void SelectAll(OverlayWindow heard)
+    {
+        var window = Windows.FirstOrDefault(w => w.HasPointer) ?? heard;
+        Finish(new AreaResult.Area(window.Screen, new Rect(0, 0, window.Width, window.Height)));
     }
 
     internal void Finish(AreaResult result)

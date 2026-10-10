@@ -565,6 +565,30 @@ Check 'Esc closes the overlay Print Screen opened, so it has the keyboard' {
 }
 [Desk]::LetGo()
 
+# Ctrl+A on the overlay takes the whole screen, as a box from corner to corner would.
+Press 0x2C
+$all = Until { Overlay } 10
+if ($all) { Start-Sleep -Milliseconds 300; Press $Ctrl 0x41 }
+$editor = Until { Editors | Select-Object -First 1 }
+Check 'Ctrl+A on the overlay opens the whole screen in an editor' {
+    if (-not $all) { return 'no overlay' }
+    if (-not $editor) { 'no editor' }
+}
+if ($editor)
+{
+    Start-Sleep -Milliseconds 500
+    Shot 'select-all-editor'
+    Front $editor
+    $whole = SaveFront
+    Check 'the capture Ctrl+A took is the size of the screen' {
+        if (-not $whole) { return "nothing new in $saves" }
+        $size = PngSize $whole
+        if ($size -ne ('{0}x{1}' -f $screen.Width, $screen.Height)) { "saved $size" }
+    }
+    [void](Until { (Editors).Count -eq 0 } 5)
+}
+[Desk]::LetGo()
+
 # 5b. A window: Capture Window, a click on the window, just that window saved
 
 Press $Ctrl $Shift 0x57

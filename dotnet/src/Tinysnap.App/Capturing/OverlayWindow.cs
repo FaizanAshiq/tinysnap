@@ -49,6 +49,9 @@ internal sealed class OverlayWindow : Window
     /// being picked. Null when the pointer is on another monitor.</summary>
     internal Point? Crosshair => owner.WindowMode || selection.Selection is not null ? null : pointer;
 
+    /// <summary>The pointer is over this overlay's monitor.</summary>
+    internal bool HasPointer => pointer is not null;
+
     /// <summary>The pointer where it is as the overlay opens, in the desktop's pixels, so the guide
     /// lines are there before it moves.</summary>
     internal void PointerAt(CorePoint pixel)
@@ -125,6 +128,9 @@ internal sealed class OverlayWindow : Window
         {
             case Key.Escape:
                 owner.Finish(new AreaResult.Cancelled());
+                break;
+            case Key.A when (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta)) != 0:
+                owner.SelectAll(this);
                 break;
             case Key.Space when selection.IsDragging:
                 spaceHeld = true;

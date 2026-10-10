@@ -61,6 +61,7 @@ bar icon.
 | `Option` | Draw the box out from its centre |
 | `Space` while dragging | Move the whole box |
 | Arrow keys | Nudge the corner being dragged by 1 pt |
+| `Command+A` | Take the whole screen under the pointer |
 | `Esc` | Cancel |
 
 A window capture keeps the window's rounded corners transparent and leaves its shadow out.

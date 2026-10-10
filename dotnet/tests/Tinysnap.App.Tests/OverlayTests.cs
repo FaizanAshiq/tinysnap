@@ -81,6 +81,35 @@ public class OverlayTests
         Assert.IsType<AreaResult.Cancelled>(Assert.Single(results));
     }
 
+    /// <summary>Ctrl+A takes the whole monitor, as a box dragged from corner to corner would; A alone
+    /// does nothing.</summary>
+    [AvaloniaFact]
+    public void CtrlATakesTheWholeMonitor()
+    {
+        var (overlay, results) = Show(Screens.Desktop(Retina));
+        overlay.Windows[0].KeyPress(Key.A, RawInputModifiers.None, PhysicalKey.A, "a");
+        Assert.Empty(results);
+        overlay.Windows[0].KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, "a");
+        var area = Assert.IsType<AreaResult.Area>(Assert.Single(results));
+        Assert.Same(Retina, area.Screen);
+        Assert.Equal(new CoreRect(0, 0, 800, 600), area.Points);
+    }
+
+    /// <summary>The keys stay with the overlay that first had them, so Ctrl+A goes by the pointer: the
+    /// monitor it is over is the one taken.</summary>
+    [AvaloniaFact]
+    public void CtrlATakesTheMonitorUnderThePointer()
+    {
+        var plain = Screens.Frozen(new CoreRect(1600, 0, 1920, 1080), 1);
+        var results = new List<AreaResult>();
+        var overlay = new AreaOverlay(Screens.Desktop(Retina, plain), results.Add, pointer: new Tinysnap.Core.Point(2000, 500));
+        overlay.Show();
+        overlay.Windows[0].KeyPress(Key.A, RawInputModifiers.Control, PhysicalKey.A, "a");
+        var area = Assert.IsType<AreaResult.Area>(Assert.Single(results));
+        Assert.Same(plain, area.Screen);
+        Assert.Equal(new CoreRect(0, 0, 1920, 1080), area.Points);
+    }
+
     [AvaloniaFact]
     public void SpaceThenAClickPicksTheFrontmostWindowUnderThePointer()
     {
