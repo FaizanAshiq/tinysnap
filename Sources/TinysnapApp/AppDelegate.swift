@@ -683,17 +683,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// System Settings' Quit and Reopen does not reliably bring a menu bar only app
-    /// back, so this starts a fresh copy first, then stands down.
+    /// back, so this quits and has a fresh copy opened once this one is gone.
     @objc private func restart() {
-        // Asked before the fresh copy starts, or cancelling would leave two running.
+        // Asked before anything is set to open, or cancelling would bring a second copy up later.
         guard confirmQuit() else { return }
         suppressRelaunchOnQuit = true
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, _ in
-            DispatchQueue.main.async { NSApp.terminate(nil) }
-        }
+        if Updater.launch(Self.openOnceGone, [Bundle.main.bundlePath]) { NSApp.terminate(nil) }
     }
+
+    /// Opens Tinysnap once this copy has quit, unless something already opened it. Never
+    /// while this copy runs: hotkeys are held exclusively, so a copy started alongside found
+    /// them taken and captured nothing from the keyboard.
+    private static let openOnceGone =
+        #"while kill -0 "$1" 2>/dev/null; do sleep 0.2; done; sleep 1; pgrep -qf "$2/Contents/MacOS/" || open "$2""#
 
     /// True when it is fine to quit: nothing unsaved, or the person saved or discarded
     /// it. Every way out comes through here, Quit, Command Q, logout and Restart,
@@ -729,21 +731,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Something other than our own Quit is ending this run, and the screen became
     /// readable while it ran: that is System Settings' Quit and Reopen, whose reopen
-    /// half often leaves a menu bar app gone. Bring a fresh copy up first.
+    /// half often leaves a menu bar app gone. A fresh copy opens once this one is gone.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard confirmQuit() else {
             suppressRelaunchOnQuit = false
             return .terminateCancel
         }
         guard !suppressRelaunchOnQuit, ScreenAccess.isGranted, !couldReadScreenAtLaunch else { return .terminateNow }
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, _ in
-            DispatchQueue.main.async { NSApp.reply(toApplicationShouldTerminate: true) }
-        }
-        // Quitting still has to happen if the launch never reports back.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { NSApp.reply(toApplicationShouldTerminate: true) }
-        return .terminateLater
+        _ = Updater.launch(Self.openOnceGone, [Bundle.main.bundlePath])
+        return .terminateNow
     }
 }
 
